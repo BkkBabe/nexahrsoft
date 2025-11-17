@@ -6,10 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Building2 } from "lucide-react";
+import type { CompanySettings } from "@shared/schema";
 
 export default function UserLoginPage() {
+  const { data: companySettings } = useQuery<CompanySettings>({
+    queryKey: ["/api/company/settings"],
+  });
   const [activeTab, setActiveTab] = useState("login");
   
   // Registration form state
@@ -136,11 +141,20 @@ export default function UserLoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-center mb-4">
-            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Building2 className="h-6 w-6 text-primary" />
-            </div>
+            {companySettings?.logoUrl ? (
+              <img
+                src={companySettings.logoUrl}
+                alt={companySettings.companyName}
+                className="h-20 w-20 object-contain"
+                data-testid="img-company-logo"
+              />
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Building2 className="h-6 w-6 text-primary" />
+              </div>
+            )}
           </div>
-          <CardTitle className="text-2xl text-center">NexaHR HRMS</CardTitle>
+          <CardTitle className="text-2xl text-center">{companySettings?.companyName || "NexaHR"} HRMS</CardTitle>
           <CardDescription className="text-center">
             Access your HR portal
           </CardDescription>

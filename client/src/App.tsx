@@ -18,10 +18,12 @@ import ApprovalsPage from "@/pages/ApprovalsPage";
 import HRAdminPage from "@/pages/HRAdminPage";
 import AdminLoginPage from "@/pages/AdminLoginPage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
+import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import UserLoginPage from "@/pages/UserLoginPage";
 import PendingApprovalPage from "@/pages/PendingApprovalPage";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
+import type { CompanySettings } from "@shared/schema";
 
 interface SessionData {
   authenticated: boolean;
@@ -36,6 +38,11 @@ interface SessionData {
 
 function AuthenticatedApp({ session }: { session: SessionData }) {
   const [location, setLocation] = useLocation();
+
+  // Fetch company settings
+  const { data: companySettings } = useQuery<CompanySettings>({
+    queryKey: ["/api/company/settings"],
+  });
 
   useEffect(() => {
     // Redirect unapproved users to pending approval page
@@ -67,7 +74,8 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
           <AppHeader
             userName={user.name}
             userRole={userRole}
-            companyName="NexaHR"
+            companyName={companySettings?.companyName || "NexaHR"}
+            companyLogo={companySettings?.logoUrl || undefined}
             notificationCount={0}
           />
           <div className="flex items-center gap-2 px-4 py-2 border-b">
@@ -99,7 +107,7 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
   );
 }
 
-function AdminDashboardProtected() {
+function AdminProtected({ children }: { children: React.ReactNode }) {
   const { data: session, isLoading } = useQuery<SessionData>({
     queryKey: ["/api/auth/session"],
   });
@@ -126,7 +134,7 @@ function AdminDashboardProtected() {
     return null;
   }
 
-  return <AdminDashboardPage />;
+  return <>{children}</>;
 }
 
 function Router() {
@@ -158,7 +166,10 @@ function Router() {
     <Switch>
       <Route path="/admin/login" component={AdminLoginPage} />
       <Route path="/admin/dashboard">
-        {() => <AdminDashboardProtected />}
+        {() => <AdminProtected><AdminDashboardPage /></AdminProtected>}
+      </Route>
+      <Route path="/admin/settings">
+        {() => <AdminProtected><AdminSettingsPage /></AdminProtected>}
       </Route>
       {session?.authenticated ? (
         <Route>

@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Users, CheckCircle, Clock, LogOut } from "lucide-react";
+import { Users, CheckCircle, Clock, LogOut, Settings } from "lucide-react";
 import { useLocation } from "wouter";
+import { Link } from "wouter";
 import type { User } from "@shared/schema";
 
 export default function AdminDashboardPage() {
@@ -62,14 +63,22 @@ export default function AdminDashboardPage() {
             </h1>
             <p className="text-muted-foreground">Manage user access and approvals</p>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => logoutMutation.mutate()}
-            data-testid="button-logout"
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/admin/settings">
+              <Button variant="outline" data-testid="button-settings">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              onClick={() => logoutMutation.mutate()}
+              data-testid="button-logout"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-4">
