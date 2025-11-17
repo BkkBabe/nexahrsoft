@@ -10,7 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Building2 } from "lucide-react";
 
 export default function UserLoginPage() {
-  const [activeTab, setActiveTab] = useState("register");
+  const [activeTab, setActiveTab] = useState("login");
   
   // Registration form state
   const [name, setName] = useState("");
