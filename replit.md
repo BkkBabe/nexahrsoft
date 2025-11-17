@@ -1,0 +1,149 @@
+# NexaHR HRMS Platform
+
+## Overview
+
+NexaHR is a cloud-native, all-in-one Human Resource Management System (HRMS) designed for enterprise use. The platform provides comprehensive HR functionality including time & attendance tracking, leave management, claims processing, payroll, and employee self-service capabilities. The MVP focuses on core HR functions with mobile attendance tracking, web-based administration, and role-based access control.
+
+The application follows a Material Design-inspired enterprise dashboard approach, prioritizing data clarity, efficient workflows, and professional aesthetics suitable for business users across HR administrators, line managers, and employees.
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend Architecture
+
+**Framework & Tooling:**
+- React 18+ with TypeScript for type-safe component development
+- Vite as the build tool and development server
+- Wouter for lightweight client-side routing
+- TanStack Query (React Query) for server state management and API caching
+
+**UI Component System:**
+- shadcn/ui component library built on Radix UI primitives
+- Tailwind CSS for utility-first styling with custom design tokens
+- CSS variables-based theming system supporting light/dark modes
+- Responsive design with mobile-first approach (breakpoints: mobile, md: tablet, lg: desktop)
+
+**State Management:**
+- Session-based authentication state managed via API queries
+- React Query for async server state
+- React Context for theme preferences (ThemeProvider)
+- Local component state for UI interactions
+
+**Design System:**
+- Typography: Inter/Roboto font stack with systematic size hierarchy
+- Spacing: Tailwind primitives (2, 4, 6, 8, 12, 16 units)
+- Grid system: 12-column layout with 4-column sidebar, 8-column main content
+- Custom color system with HSL-based palette supporting semantic tokens
+
+### Backend Architecture
+
+**Server Framework:**
+- Express.js with TypeScript
+- Session-based authentication using express-session
+- RESTful API design pattern
+- Middleware stack for request logging, JSON parsing, and session management
+
+**Authentication & Authorization:**
+- Dual authentication system:
+  - Admin login: Hardcoded credentials (username/password) for administrative access
+  - User registration: Email-based registration with admin approval workflow
+- Session-based state management with secure HTTP-only cookies
+- Role-based access control (admin vs. user roles)
+- User approval workflow where new registrations require admin confirmation
+
+**Data Layer:**
+- Drizzle ORM for type-safe database queries
+- Schema-first approach with Zod validation
+- In-memory storage implementation (MemStorage) for development/MVP
+- Designed for PostgreSQL database integration (Neon serverless configuration present)
+
+**API Structure:**
+- `/api/admin/*` - Admin authentication and user management endpoints
+- `/api/auth/*` - User authentication and session management
+- RESTful conventions with proper HTTP status codes
+- Request validation using Zod schemas
+
+### Database Schema
+
+**Users Table:**
+- Primary entity for all system users (admin, managers, employees)
+- Fields: id (UUID), email (unique), name, authId (for OAuth integration), role, isApproved (approval flag), createdAt
+- Support for both direct registration and OAuth authentication (Replit Auth)
+- Approval-based access control for new user registrations
+
+**Current State:**
+- Single table schema focusing on user management
+- Extensible design anticipating additional tables for:
+  - Attendance records
+  - Leave requests
+  - Claims submissions
+  - Payroll data
+  - Employee profiles and organizational structure
+
+### Key Architectural Patterns
+
+**Separation of Concerns:**
+- `client/` - Frontend React application
+- `server/` - Backend Express API
+- `shared/` - Shared TypeScript types and schemas (Drizzle schema, validation)
+- Clear boundary between client and server with typed API contracts
+
+**Type Safety:**
+- End-to-end TypeScript with strict mode enabled
+- Shared schema definitions between frontend and backend
+- Zod schemas for runtime validation
+- Drizzle ORM for type-safe database operations
+
+**Development Workflow:**
+- Hot module replacement (HMR) via Vite in development
+- Separate build processes for client (Vite) and server (esbuild)
+- Path aliases for clean imports (@/, @shared/, @assets/)
+
+**Security Considerations:**
+- HTTP-only session cookies
+- CSRF protection readiness (session configuration)
+- Environment-based configuration (production vs. development)
+- Secure cookie settings in production mode
+
+## External Dependencies
+
+### Core Framework Dependencies
+- **@neondatabase/serverless** - PostgreSQL serverless client for Neon database
+- **drizzle-orm** & **drizzle-kit** - Type-safe ORM and migration tooling
+- **express** & **express-session** - Server framework and session management
+- **connect-pg-simple** - PostgreSQL session store for express-session
+- **ws** - WebSocket support for Neon serverless connections
+
+### Frontend UI Libraries
+- **@radix-ui/react-*** - Comprehensive suite of accessible, unstyled UI primitives (accordion, dialog, dropdown, popover, toast, etc.)
+- **@tanstack/react-query** - Async state management and data fetching
+- **wouter** - Lightweight routing library
+- **tailwindcss** - Utility-first CSS framework
+- **class-variance-authority** & **clsx** - Dynamic class name utilities
+- **lucide-react** - Icon library
+- **date-fns** - Date manipulation utilities
+
+### Development Tools
+- **Vite** - Build tool and development server with React plugin
+- **TypeScript** - Type system and compiler
+- **@replit/vite-plugin-*** - Replit-specific development tooling (error overlay, cartographer, dev banner)
+
+### Form & Validation
+- **react-hook-form** - Form state management
+- **@hookform/resolvers** - Validation resolver for react-hook-form
+- **zod** - Schema validation library
+- **drizzle-zod** - Zod schema generation from Drizzle schemas
+
+### Planned Integrations
+- Replit Auth (OAuth authentication) - Infrastructure present via authId field
+- Accounting system integration - Mentioned in project requirements for Phase 2
+- Geolocation services - For mobile attendance tracking with location verification
+- Photo capture APIs - For attendance verification
+
+### Database
+- **PostgreSQL** (via Neon) - Primary database with serverless architecture
+- Connection pooling via @neondatabase/serverless Pool
+- Migration support through Drizzle Kit
