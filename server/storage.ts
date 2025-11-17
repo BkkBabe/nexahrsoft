@@ -1,4 +1,4 @@
-import { type User, type InsertUser } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 // modify the interface with any CRUD methods
@@ -13,13 +13,23 @@ export interface IStorage {
   createUser(user: Partial<User>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   approveUser(id: string): Promise<User | undefined>;
+  getCompanySettings(): Promise<CompanySettings>;
+  updateCompanySettings(settings: Partial<CompanySettings>): Promise<CompanySettings>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
+  private companySettings: CompanySettings;
 
   constructor() {
     this.users = new Map();
+    this.companySettings = {
+      id: randomUUID(),
+      companyName: "NexaHR",
+      logoUrl: null,
+      faviconUrl: null,
+      updatedAt: new Date(),
+    };
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -80,6 +90,19 @@ export class MemStorage implements IStorage {
       return updatedUser;
     }
     return undefined;
+  }
+
+  async getCompanySettings(): Promise<CompanySettings> {
+    return this.companySettings;
+  }
+
+  async updateCompanySettings(settings: Partial<CompanySettings>): Promise<CompanySettings> {
+    this.companySettings = {
+      ...this.companySettings,
+      ...settings,
+      updatedAt: new Date(),
+    };
+    return this.companySettings;
   }
 }
 
