@@ -5,14 +5,11 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
-// Session configuration
-const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
-
+// Session configuration - dynamically set secure based on request
 // Log environment for debugging
 console.log('Environment check:', {
   NODE_ENV: process.env.NODE_ENV,
   REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT,
-  isProduction,
   hostname: process.env.REPL_SLUG,
 });
 
@@ -21,10 +18,11 @@ app.use(
     secret: process.env.SESSION_SECRET || "nexa-hr-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
+    proxy: true, // Trust the X-Forwarded-Proto header from Replit's proxy
     cookie: {
-      // secure: true when deployed (REPLIT_DEPLOYMENT) or in production
-      // For custom domains on HTTPS, this MUST be true
-      secure: isProduction,
+      // secure: 'auto' will automatically use true for HTTPS and false for HTTP
+      // This works correctly with Replit's reverse proxy
+      secure: 'auto',
       httpOnly: true,
       // 'lax' allows cookies in first-party context (works in new tabs)
       // This is correct for apps accessed directly (not in iframes)
