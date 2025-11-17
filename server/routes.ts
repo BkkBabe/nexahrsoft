@@ -2,43 +2,12 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { Issuer, generators } from "openid-client";
 
 // Admin credentials
 const ADMIN_CREDENTIALS = {
   username: "nexaadmin",
   password: "nexa123!",
 };
-
-// OIDC Configuration
-let oidcClient: any = null;
-async function getOIDCClient() {
-  if (oidcClient) return oidcClient;
-  
-  try {
-    const issuerUrl = process.env.ISSUER_URL || "https://replit.com/.well-known/openid-configuration";
-    const clientId = process.env.CLIENT_ID || "";
-    const clientSecret = process.env.CLIENT_SECRET || "";
-    
-    if (!clientId) {
-      console.log("OIDC not configured: CLIENT_ID missing");
-      return null;
-    }
-    
-    const issuer = await Issuer.discover(issuerUrl);
-    oidcClient = new issuer.Client({
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uris: [`https://${process.env.REPLIT_DOMAINS}/auth/callback`],
-      response_types: ['code'],
-    });
-    
-    return oidcClient;
-  } catch (error) {
-    console.error("Failed to initialize OIDC client:", error);
-    return null;
-  }
-}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Admin login
@@ -112,82 +81,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // OAuth login initiation
-  app.get("/auth/login", async (req: Request, res: Response) => {
+  // User registration endpoint (for email-based signup)
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const client = await getOIDCClient();
-      if (!client) {
-        return res.status(500).json({ message: "OAuth not configured" });
-      }
-
-      const codeVerifier = generators.codeVerifier();
-      const codeChallenge = generators.codeChallenge(codeVerifier);
-      
-      req.session.codeVerifier = codeVerifier;
-      
-      const authUrl = client.authorizationUrl({
-        scope: 'openid profile email',
-        code_challenge: codeChallenge,
-        code_challenge_method: 'S256',
+      const schema = z.object({
+        email: z.string().email(),
+        name: z.string().min(1),
       });
-      
-      res.redirect(authUrl);
-    } catch (error) {
-      console.error("OAuth login error:", error);
-      res.status(500).json({ message: "Failed to initiate login" });
-    }
-  });
 
-  // OAuth callback
-  app.get("/auth/callback", async (req: Request, res: Response) => {
-    try {
-      const client = await getOIDCClient();
-      if (!client) {
-        return res.redirect("/?error=oauth_not_configured");
+      const { email, name } = schema.parse(req.body);
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists" });
       }
 
-      const params = client.callbackParams(req);
-      const codeVerifier = req.session.codeVerifier;
-      
-      if (!codeVerifier) {
-        return res.redirect("/?error=invalid_session");
-      }
+      // Create new user (pending approval)
+      const user = await storage.createUser({
+        email,
+        name,
+        authId: null,
+        role: "user",
+        isApproved: false,
+      });
 
-      const tokenSet = await client.callback(
-        `https://${process.env.REPLIT_DOMAINS}/auth/callback`,
-        params,
-        { code_verifier: codeVerifier }
-      );
-
-      const userInfo = await client.userinfo(tokenSet.access_token);
-      
-      // Check if user exists
-      let user = await storage.getUserByAuthId(userInfo.sub);
-      
-      if (!user) {
-        // Create new user (pending approval)
-        user = await storage.createUser({
-          email: userInfo.email,
-          name: userInfo.name || userInfo.email,
-          authId: userInfo.sub,
-          role: "user",
-          isApproved: false,
-        });
-      }
-      
       // Set session
       req.session.userId = user.id;
       req.session.isAdmin = false;
-      
-      // Redirect based on approval status
-      if (user.isApproved) {
-        res.redirect("/dashboard");
-      } else {
-        res.redirect("/pending-approval");
-      }
+
+      res.json({ success: true, user: { id: user.id, email: user.email, name: user.name, isApproved: user.isApproved } });
     } catch (error) {
-      console.error("OAuth callback error:", error);
-      res.redirect("/?error=auth_failed");
+      console.error("Registration error:", error);
+      res.status(400).json({ message: "Registration failed" });
+    }
+  });
+
+  // TODO: Add Google OAuth login routes
+  // This will be implemented later using openid-client v6 or passport-google-oauth20
+
+  // Admin middleware - check if user is admin
+  const requireAdmin = (req: Request, res: Response, next: any) => {
+    if (!req.session.isAdmin) {
+      return res.status(403).json({ message: "Unauthorized - Admin access required" });
+    }
+    next();
+  };
+
+  // Get all users (admin only)
+  app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json({ users });
+    } catch (error) {
+      console.error("Get users error:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Approve user (admin only)
+  app.post("/api/admin/users/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.approveUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({ success: true, user });
+    } catch (error) {
+      console.error("Approve user error:", error);
+      res.status(500).json({ message: "Failed to approve user" });
     }
   });
 
