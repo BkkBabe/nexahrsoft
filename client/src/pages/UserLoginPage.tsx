@@ -79,21 +79,28 @@ export default function UserLoginPage() {
     e.preventDefault();
     setIsLoggingIn(true);
 
+    console.log('Login attempt started');
+    
     try {
-      await apiRequest("POST", "/api/auth/login", {
+      const response = await apiRequest("POST", "/api/auth/login", {
         usernameOrEmail: loginUsernameOrEmail,
         password: loginPassword,
       });
+      
+      console.log('Login response received:', response.status);
 
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
 
+      console.log('About to redirect to dashboard');
+      
       // Use window.location for full page reload to ensure session is recognized
       // This avoids race conditions with React Query cache updates
       window.location.href = "/dashboard";
     } catch (error: any) {
+      console.error('Login error:', error);
       if (error.message.includes("401")) {
         toast({
           title: "Login Failed",
