@@ -6,20 +6,22 @@ import { setupVite, serveStatic, log } from "./vite";
 const app = express();
 
 // Session configuration
+const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "nexa-hr-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      // secure should be true in production for HTTPS
-      secure: process.env.NODE_ENV === "production",
+      // secure: true when deployed (REPLIT_DEPLOYMENT) or in production
+      secure: isProduction,
       httpOnly: true,
       // 'lax' allows cookies in first-party context (works in new tabs)
       // This is correct for apps accessed directly (not in iframes)
       sameSite: 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      // Ensure cookies work across subdomains if needed
+      // Ensure cookies work across all paths
       path: '/',
     },
   })

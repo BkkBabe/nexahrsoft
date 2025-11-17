@@ -85,21 +85,14 @@ export default function UserLoginPage() {
         password: loginPassword,
       });
 
-      // Invalidate session query to refetch auth state
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
-      
-      // Wait for query to refetch
-      await queryClient.refetchQueries({ queryKey: ["/api/auth/session"] });
-
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
-      
-      // Small delay to ensure UI updates before redirect
-      setTimeout(() => {
-        setLocation("/dashboard");
-      }, 100);
+
+      // Use window.location for full page reload to ensure session is recognized
+      // This avoids race conditions with React Query cache updates
+      window.location.href = "/dashboard";
     } catch (error: any) {
       if (error.message.includes("401")) {
         toast({

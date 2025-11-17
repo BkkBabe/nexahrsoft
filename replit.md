@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
-### November 17, 2025 - Username/Password Authentication Implementation
+### November 17, 2025 - Authentication & Deployment Fixes
 - **Schema Updates**: Added username, passwordHash, and mobileNumber fields to users table
 - **Registration System**: 
   - Comprehensive registration form with Full Name, Username, Email, Mobile Number, Password, Confirm Password
@@ -23,13 +23,18 @@ Preferred communication style: Simple, everyday language.
   - Login accepts either username or email as identifier
   - Password verification using bcrypt.compare()
   - Returns 401 for invalid credentials, 403 for unapproved accounts
+  - **Fixed**: Login redirect now uses window.location.href to avoid race conditions
 - **Security Implementation**:
   - Fixed critical vulnerability: Sessions only created for approved users
   - Unapproved users cannot access protected routes
   - Registration does not create session for pending accounts
   - Login checks approval status BEFORE creating session
+  - **Fixed**: Secure cookies now properly enabled for published apps (REPLIT_DEPLOYMENT check)
+- **Session Management**:
+  - Cookie configuration: `sameSite: 'lax'`, `httpOnly: true`, `secure: true` in production
+  - Logout properly invalidates session cache before redirecting
+  - Session cookies work correctly in published deployments
 - **Default User Seeding**: nexauser/nexa123! (pre-approved) automatically created on server startup
-- **Session Management**: Query cache invalidation on successful login to update auth state
 - **Storage Layer**: Added getUserByUsername() and getUserByEmailOrUsername() methods
 
 ## System Architecture
