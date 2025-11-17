@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Building2 } from "lucide-react";
 
 export default function UserLoginPage() {
@@ -45,12 +45,15 @@ export default function UserLoginPage() {
       const data = await response.json();
 
       if (data.user.isApproved) {
+        // Only invalidate session if user is approved (has a session)
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
         toast({
           title: "Registration Successful!",
           description: "Welcome to NexaHR!",
         });
         setLocation("/dashboard");
       } else {
+        // Unapproved users don't get a session, so just show the pending message
         toast({
           title: "Registration Submitted",
           description: "Your account is pending admin approval",
@@ -82,6 +85,9 @@ export default function UserLoginPage() {
         password: loginPassword,
       });
 
+      // Invalidate session query to refetch auth state
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+
       toast({
         title: "Login Successful",
         description: "Welcome back!",
@@ -100,6 +106,7 @@ export default function UserLoginPage() {
           description: "Your account is awaiting admin approval",
           variant: "destructive",
         });
+        // No session is created for unapproved users, so no need to invalidate
         setLocation("/pending-approval");
       } else {
         toast({

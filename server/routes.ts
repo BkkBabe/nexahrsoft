@@ -146,9 +146,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isApproved: false,
       });
 
-      // Set session
-      req.session.userId = user.id;
-      req.session.isAdmin = false;
+      // Do NOT set session for unapproved users - they must wait for admin approval
+      // Only set session if user is pre-approved (shouldn't happen in normal registration)
+      if (user.isApproved) {
+        req.session.userId = user.id;
+        req.session.isAdmin = false;
+      }
 
       res.json({ 
         success: true, 
@@ -188,14 +191,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      // Check if user is approved
+      // Check if user is approved BEFORE setting session
       if (!user.isApproved) {
-        req.session.userId = user.id;
-        req.session.isAdmin = false;
+        // Do NOT set session for unapproved users
         return res.status(403).json({ message: "Account pending approval" });
       }
 
-      // Set session
+      // Only set session for approved users
       req.session.userId = user.id;
       req.session.isAdmin = false;
 
