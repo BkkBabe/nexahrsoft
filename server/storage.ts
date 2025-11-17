@@ -1,5 +1,8 @@
 import { type User, type InsertUser, type CompanySettings } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { db } from "./db";
+import { users, companySettings } from "@shared/schema";
+import { eq, or } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -106,4 +109,95 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// PostgreSQL-backed storage implementation
+export class PgStorage implements IStorage {
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByEmailOrUsername(emailOrUsername: string, username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      or(
+        eq(users.email, emailOrUsername),
+        eq(users.username, username)
+      )
+    );
+    return user;
+  }
+
+  async getUserByAuthId(authId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.authId, authId));
+    return user;
+  }
+
+  async createUser(insertUser: Partial<User>): Promise<User> {
+    const [user] = await db.insert(users).values({
+      name: insertUser.name!,
+      email: insertUser.email!,
+      username: insertUser.username ?? null,
+      passwordHash: insertUser.passwordHash ?? null,
+      mobileNumber: insertUser.mobileNumber ?? null,
+      authId: insertUser.authId ?? null,
+      role: insertUser.role ?? "user",
+      isApproved: insertUser.isApproved ?? false,
+    }).returning();
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  async approveUser(id: string): Promise<User | undefined> {
+    const [user] = await db.update(users)
+      .set({ isApproved: true })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async getCompanySettings(): Promise<CompanySettings> {
+    const [settings] = await db.select().from(companySettings).limit(1);
+    
+    if (!settings) {
+      // Create default settings if none exist
+      const [newSettings] = await db.insert(companySettings).values({
+        companyName: "NexaHR",
+        logoUrl: null,
+        faviconUrl: null,
+      }).returning();
+      return newSettings;
+    }
+    
+    return settings;
+  }
+
+  async updateCompanySettings(updates: Partial<CompanySettings>): Promise<CompanySettings> {
+    // Get or create settings first
+    let settings = await this.getCompanySettings();
+    
+    // Update the settings
+    const [updated] = await db.update(companySettings)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(companySettings.id, settings.id))
+      .returning();
+    
+    return updated;
+  }
+}
+
+export const storage = new PgStorage();

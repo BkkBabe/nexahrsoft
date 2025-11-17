@@ -24,6 +24,8 @@ export default function AdminSettingsPage() {
     mutationFn: async (file: File) => {
       const uploadUrlRes = await apiRequest("POST", "/api/company/upload-logo", {
         filename: file.name,
+        contentType: file.type,
+        size: file.size,
       });
       const { uploadURL } = await uploadUrlRes.json();
 
@@ -65,6 +67,8 @@ export default function AdminSettingsPage() {
     mutationFn: async (file: File) => {
       const uploadUrlRes = await apiRequest("POST", "/api/company/upload-favicon", {
         filename: file.name,
+        contentType: file.type,
+        size: file.size,
       });
       const { uploadURL } = await uploadUrlRes.json();
 

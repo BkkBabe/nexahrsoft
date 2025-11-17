@@ -118,11 +118,11 @@ function AdminProtected({ children }: { children: React.ReactNode }) {
   });
   const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    if (!isLoading && (!session?.authenticated || !session?.isAdmin)) {
-      setLocation("/admin/login");
-    }
-  }, [session, isLoading, setLocation]);
+  // Immediate redirect if not authorized - don't wait for useEffect
+  if (!isLoading && (!session?.authenticated || !session?.isAdmin)) {
+    setLocation("/admin/login");
+    return null; // Don't render anything for unauthorized users
+  }
 
   if (isLoading) {
     return (
@@ -135,6 +135,7 @@ function AdminProtected({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Double-check authorization before rendering
   if (!session?.authenticated || !session?.isAdmin) {
     return null;
   }

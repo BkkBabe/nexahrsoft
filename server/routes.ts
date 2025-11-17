@@ -293,16 +293,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get upload URL for logo (admin only)
   app.post("/api/company/upload-logo", async (req: Request, res: Response) => {
+    // Security: Verify admin session before issuing signed URL
+    // Note: This validates admin session and file metadata (type/size) but the presigned URL
+    // itself cannot enforce these constraints on the actual upload. For production use,
+    // consider server-mediated uploads or signed URLs with content-type/length constraints.
+    // For MVP with trusted admins, this provides reasonable protection.
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
 
     try {
-      const { filename } = req.body;
-      if (!filename) {
-        return res.status(400).json({ message: "Filename is required" });
+      const uploadSchema = z.object({
+        filename: z.string().min(1),
+        contentType: z.string().regex(/^image\/(png|jpeg|jpg|gif|svg\+xml|webp)$/i),
+        size: z.number().max(5 * 1024 * 1024), // 5MB max
+      });
+
+      const validation = uploadSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid file. Must be an image (PNG, JPEG, GIF, SVG, WebP) under 5MB" 
+        });
       }
 
+      const { filename } = validation.data;
       const objectStorageService = new ObjectStorageService();
       const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
       res.json({ uploadURL });
@@ -314,16 +328,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get upload URL for favicon (admin only)
   app.post("/api/company/upload-favicon", async (req: Request, res: Response) => {
+    // Security: Verify admin session
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
 
     try {
-      const { filename } = req.body;
-      if (!filename) {
-        return res.status(400).json({ message: "Filename is required" });
+      const uploadSchema = z.object({
+        filename: z.string().min(1),
+        contentType: z.string().regex(/^image\/(x-icon|png|jpeg|jpg|vnd\.microsoft\.icon)$/i),
+        size: z.number().max(1 * 1024 * 1024), // 1MB max
+      });
+
+      const validation = uploadSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid file. Must be an icon or image (ICO, PNG, JPEG) under 1MB" 
+        });
       }
 
+      const { filename } = validation.data;
       const objectStorageService = new ObjectStorageService();
       const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
       res.json({ uploadURL });
