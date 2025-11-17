@@ -10,6 +10,28 @@ The application follows a Material Design-inspired enterprise dashboard approach
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+### November 17, 2025 - Username/Password Authentication Implementation
+- **Schema Updates**: Added username, passwordHash, and mobileNumber fields to users table
+- **Registration System**: 
+  - Comprehensive registration form with Full Name, Username, Email, Mobile Number, Password, Confirm Password
+  - Password validation (minimum 8 characters) and matching confirmation
+  - Bcrypt password hashing (10 rounds) for secure storage
+  - Zod schema validation for all input fields
+- **Login System**:
+  - Login accepts either username or email as identifier
+  - Password verification using bcrypt.compare()
+  - Returns 401 for invalid credentials, 403 for unapproved accounts
+- **Security Implementation**:
+  - Fixed critical vulnerability: Sessions only created for approved users
+  - Unapproved users cannot access protected routes
+  - Registration does not create session for pending accounts
+  - Login checks approval status BEFORE creating session
+- **Default User Seeding**: nexauser/nexa123! (pre-approved) automatically created on server startup
+- **Session Management**: Query cache invalidation on successful login to update auth state
+- **Storage Layer**: Added getUserByUsername() and getUserByEmailOrUsername() methods
+
 ## System Architecture
 
 ### Frontend Architecture
@@ -48,11 +70,16 @@ Preferred communication style: Simple, everyday language.
 
 **Authentication & Authorization:**
 - Dual authentication system:
-  - Admin login: Hardcoded credentials (username/password) for administrative access
-  - User registration: Email-based registration with admin approval workflow
+  - Admin login: Hardcoded credentials (nexaadmin/nexa123!) for administrative access
+  - User authentication: Username/email + password with bcrypt hashing (10 rounds)
 - Session-based state management with secure HTTP-only cookies
 - Role-based access control (admin vs. user roles)
+- **Security Model**: Sessions only created for approved users
+  - New registrations: No session until admin approval
+  - Login attempts: Approval check before session creation (returns 403 for unapproved)
+  - Prevents unapproved users from accessing protected routes
 - User approval workflow where new registrations require admin confirmation
+- Default test user: nexauser/nexa123! (pre-approved, seeded on startup)
 
 **Data Layer:**
 - Drizzle ORM for type-safe database queries
@@ -70,9 +97,19 @@ Preferred communication style: Simple, everyday language.
 
 **Users Table:**
 - Primary entity for all system users (admin, managers, employees)
-- Fields: id (UUID), email (unique), name, authId (for OAuth integration), role, isApproved (approval flag), createdAt
-- Support for both direct registration and OAuth authentication (Replit Auth)
-- Approval-based access control for new user registrations
+- Fields:
+  - id (varchar, UUID via gen_random_uuid())
+  - email (text, unique, required)
+  - username (text, unique, nullable) - For password-based login
+  - name (text, required) - Full name
+  - password_hash (text, nullable) - Bcrypt hashed password (10 rounds)
+  - mobile_number (text, nullable) - User's mobile phone
+  - auth_id (text, unique, nullable) - For OAuth integration (Replit Auth)
+  - role (text, default: 'user') - Role-based access control
+  - is_approved (boolean, default: false) - Admin approval flag
+  - created_at (timestamp, default: now())
+- Support for both password-based and OAuth authentication
+- Approval-based access control: new registrations default to unapproved state
 
 **Current State:**
 - Single table schema focusing on user management
