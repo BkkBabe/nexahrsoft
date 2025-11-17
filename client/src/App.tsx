@@ -1,6 +1,6 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -16,66 +16,120 @@ import IncomeTaxPage from "@/pages/IncomeTaxPage";
 import RewardsPage from "@/pages/RewardsPage";
 import ApprovalsPage from "@/pages/ApprovalsPage";
 import HRAdminPage from "@/pages/HRAdminPage";
+import AdminLoginPage from "@/pages/AdminLoginPage";
+import AdminDashboardPage from "@/pages/AdminDashboardPage";
+import UserLoginPage from "@/pages/UserLoginPage";
+import PendingApprovalPage from "@/pages/PendingApprovalPage";
 import NotFound from "@/pages/not-found";
+import { useEffect } from "react";
 
-//todo: remove mock functionality - this will be replaced with real user data from authentication
-const mockUser = {
-  name: "Faith Jr. Negapatan",
-  role: "hr_admin" as const,
-  company: "3SI PTE. LTD.",
-  notificationCount: 5,
-};
-
-function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/attendance" component={AttendancePage} />
-      <Route path="/leave" component={LeavePage} />
-      <Route path="/claims" component={ClaimsPage} />
-      <Route path="/payslip" component={PayslipPage} />
-      <Route path="/income-tax" component={IncomeTaxPage} />
-      <Route path="/rewards" component={RewardsPage} />
-      <Route path="/approvals" component={ApprovalsPage} />
-      <Route path="/admin/employees" component={HRAdminPage} />
-      <Route path="/admin/payroll" component={HRAdminPage} />
-      <Route path="/admin/reports" component={HRAdminPage} />
-      <Route component={NotFound} />
-    </Switch>
-  );
+interface SessionData {
+  authenticated: boolean;
+  isAdmin?: boolean;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    isApproved?: boolean;
+  };
 }
 
-export default function App() {
+function AuthenticatedApp({ session }: { session: SessionData }) {
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    // Redirect unapproved users to pending approval page
+    if (session.authenticated && !session.isAdmin && !session.user?.isApproved) {
+      if (location !== "/pending-approval") {
+        setLocation("/pending-approval");
+      }
+    }
+  }, [session, location, setLocation]);
+
+  const user = session.user || { name: "User", email: "", id: "" };
+  const userRole = session.isAdmin ? ("hr_admin" as const) : ("employee" as const);
+
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar userRole={userRole} />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <AppHeader
+            userName={user.name}
+            userRole={userRole}
+            companyName="NexaHR"
+            notificationCount={0}
+          />
+          <div className="flex items-center gap-2 px-4 py-2 border-b">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          </div>
+          <main className="flex-1 overflow-auto">
+            <div className="container mx-auto p-6 max-w-7xl">
+              <Switch>
+                <Route path="/pending-approval" component={PendingApprovalPage} />
+                <Route path="/dashboard" component={Dashboard} />
+                <Route path="/attendance" component={AttendancePage} />
+                <Route path="/leave" component={LeavePage} />
+                <Route path="/claims" component={ClaimsPage} />
+                <Route path="/payslip" component={PayslipPage} />
+                <Route path="/income-tax" component={IncomeTaxPage} />
+                <Route path="/rewards" component={RewardsPage} />
+                <Route path="/approvals" component={ApprovalsPage} />
+                <Route path="/admin/employees" component={HRAdminPage} />
+                <Route path="/admin/payroll" component={HRAdminPage} />
+                <Route path="/admin/reports" component={HRAdminPage} />
+                <Route component={NotFound} />
+              </Switch>
+            </div>
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function Router() {
+  const { data: session, isLoading } = useQuery<SessionData>({
+    queryKey: ["/api/auth/session"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Switch>
+      <Route path="/admin/login" component={AdminLoginPage} />
+      <Route path="/admin/dashboard" component={AdminDashboardPage} />
+      {session?.authenticated ? (
+        <Route>
+          {() => <AuthenticatedApp session={session} />}
+        </Route>
+      ) : (
+        <Route path="/" component={UserLoginPage} />
+      )}
+    </Switch>
+  );
+}
+
+export default function App() {
+  return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar userRole={mockUser.role} />
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <AppHeader
-                  userName={mockUser.name}
-                  userRole={mockUser.role}
-                  companyName={mockUser.company}
-                  notificationCount={mockUser.notificationCount}
-                />
-                <div className="flex items-center gap-2 px-4 py-2 border-b">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                </div>
-                <main className="flex-1 overflow-auto">
-                  <div className="container mx-auto p-6 max-w-7xl">
-                    <Router />
-                  </div>
-                </main>
-              </div>
-            </div>
-          </SidebarProvider>
+          <Router />
           <Toaster />
         </ThemeProvider>
       </TooltipProvider>
