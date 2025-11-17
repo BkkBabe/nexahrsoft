@@ -7,8 +7,10 @@ import { randomUUID } from "crypto";
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmailOrUsername(emailOrUsername: string, username: string): Promise<User | undefined>;
   getUserByAuthId(authId: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  createUser(user: Partial<User>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   approveUser(id: string): Promise<User | undefined>;
 }
@@ -30,18 +32,33 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.username === username,
+    );
+  }
+
+  async getUserByEmailOrUsername(emailOrUsername: string, username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.email === emailOrUsername || user.username === username,
+    );
+  }
+
   async getUserByAuthId(authId: string): Promise<User | undefined> {
     return Array.from(this.users.values()).find(
       (user) => user.authId === authId,
     );
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async createUser(insertUser: Partial<User>): Promise<User> {
     const id = randomUUID();
     const user: User = { 
       id,
-      name: insertUser.name,
-      email: insertUser.email,
+      name: insertUser.name!,
+      email: insertUser.email!,
+      username: insertUser.username ?? null,
+      passwordHash: insertUser.passwordHash ?? null,
+      mobileNumber: insertUser.mobileNumber ?? null,
       authId: insertUser.authId ?? null,
       role: insertUser.role ?? "user",
       isApproved: insertUser.isApproved ?? false,

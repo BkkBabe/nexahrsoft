@@ -2,6 +2,8 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
+import { registerUserSchema, loginUserSchema } from "@shared/schema";
 
 // Admin credentials
 const ADMIN_CREDENTIALS = {
@@ -9,7 +11,43 @@ const ADMIN_CREDENTIALS = {
   password: "nexa123!",
 };
 
+// Default user credentials (for development/testing)
+const DEFAULT_USER = {
+  username: "nexauser",
+  password: "nexa123!",
+  email: "nexauser@nexahr.com",
+  name: "Nexa User",
+  mobileNumber: "+1234567890",
+};
+
+// Seed default user (call this on server startup)
+async function seedDefaultUser() {
+  try {
+    // Check if default user already exists
+    const existingUser = await storage.getUserByUsername(DEFAULT_USER.username);
+    if (!existingUser) {
+      console.log("Seeding default user...");
+      const passwordHash = await bcrypt.hash(DEFAULT_USER.password, 10);
+      await storage.createUser({
+        username: DEFAULT_USER.username,
+        email: DEFAULT_USER.email,
+        name: DEFAULT_USER.name,
+        passwordHash,
+        mobileNumber: DEFAULT_USER.mobileNumber,
+        role: "user",
+        isApproved: true, // Default user is pre-approved
+      });
+      console.log("Default user created successfully!");
+    }
+  } catch (error) {
+    console.error("Error seeding default user:", error);
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Seed default user on startup
+  await seedDefaultUser();
+
   // Admin login
   app.post("/api/admin/login", async (req: Request, res: Response) => {
     try {
@@ -81,26 +119,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // User registration endpoint (for email-based signup)
+  // User registration endpoint (with password)
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const schema = z.object({
-        email: z.string().email(),
-        name: z.string().min(1),
-      });
-
-      const { email, name } = schema.parse(req.body);
+      const validatedData = registerUserSchema.parse(req.body);
+      const { name, username, email, password, mobileNumber } = validatedData;
 
       // Check if user already exists
-      const existingUser = await storage.getUserByEmail(email);
+      const existingUser = await storage.getUserByEmailOrUsername(email, username);
       if (existingUser) {
-        return res.status(400).json({ message: "User already exists" });
+        return res.status(400).json({ message: "User with this email or username already exists" });
       }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
 
       // Create new user (pending approval)
       const user = await storage.createUser({
         email,
+        username,
         name,
+        passwordHash,
+        mobileNumber,
         authId: null,
         role: "user",
         isApproved: false,
@@ -110,15 +150,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.session.userId = user.id;
       req.session.isAdmin = false;
 
-      res.json({ success: true, user: { id: user.id, email: user.email, name: user.name, isApproved: user.isApproved } });
+      res.json({ 
+        success: true, 
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          username: user.username,
+          name: user.name, 
+          isApproved: user.isApproved 
+        } 
+      });
     } catch (error) {
       console.error("Registration error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
       res.status(400).json({ message: "Registration failed" });
     }
   });
 
-  // TODO: Add Google OAuth login routes
-  // This will be implemented later using openid-client v6 or passport-google-oauth20
+  // User login endpoint
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const validatedData = loginUserSchema.parse(req.body);
+      const { usernameOrEmail, password } = validatedData;
+
+      // Find user by username or email
+      const user = await storage.getUserByEmailOrUsername(usernameOrEmail, usernameOrEmail);
+      
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Check password
+      const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Check if user is approved
+      if (!user.isApproved) {
+        req.session.userId = user.id;
+        req.session.isAdmin = false;
+        return res.status(403).json({ message: "Account pending approval" });
+      }
+
+      // Set session
+      req.session.userId = user.id;
+      req.session.isAdmin = false;
+
+      res.json({ 
+        success: true, 
+        user: { 
+          id: user.id, 
+          email: user.email,
+          username: user.username, 
+          name: user.name,
+          isApproved: user.isApproved 
+        } 
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(400).json({ message: "Login failed" });
+    }
+  });
+
+  // Google OAuth login route (using Replit Auth)
+  app.get("/api/login", (req, res) => {
+    // This will be handled by Replit Auth in future implementation
+    // For now, redirect to Google OAuth placeholder
+    res.redirect("https://replit.com/oidc");
+  });
 
   // Admin middleware - check if user is admin
   const requireAdmin = (req: Request, res: Response, next: any) => {

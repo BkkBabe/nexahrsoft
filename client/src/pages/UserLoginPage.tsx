@@ -3,30 +3,51 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { Building2 } from "lucide-react";
 
 export default function UserLoginPage() {
+  const [activeTab, setActiveTab] = useState("register");
+  
+  // Registration form state
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [mobileNumber, setMobileNumber] = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Login form state
+  const [loginUsernameOrEmail, setLoginUsernameOrEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setIsRegistering(true);
 
     try {
-      const response = await apiRequest("POST", "/api/auth/register", { name, email });
+      const response = await apiRequest("POST", "/api/auth/register", {
+        name,
+        username,
+        email,
+        password,
+        confirmPassword,
+        mobileNumber,
+      });
       const data = await response.json();
 
       if (data.user.isApproved) {
         toast({
-          title: "Welcome Back!",
-          description: "Redirecting to dashboard...",
+          title: "Registration Successful!",
+          description: "Welcome to NexaHR!",
         });
         setLocation("/dashboard");
       } else {
@@ -42,13 +63,58 @@ export default function UserLoginPage() {
         : "Failed to register. Please try again.";
       
       toast({
-        title: "Error",
+        title: "Registration Failed",
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setIsRegistering(false);
     }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+
+    try {
+      await apiRequest("POST", "/api/auth/login", {
+        usernameOrEmail: loginUsernameOrEmail,
+        password: loginPassword,
+      });
+
+      toast({
+        title: "Login Successful",
+        description: "Welcome back!",
+      });
+      setLocation("/dashboard");
+    } catch (error: any) {
+      if (error.message.includes("401")) {
+        toast({
+          title: "Login Failed",
+          description: "Invalid credentials",
+          variant: "destructive",
+        });
+      } else if (error.message.includes("403")) {
+        toast({
+          title: "Account Pending",
+          description: "Your account is awaiting admin approval",
+          variant: "destructive",
+        });
+        setLocation("/pending-approval");
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to login. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleGoogleLogin = () => {
+    window.location.href = "/api/login";
   };
 
   return (
@@ -62,58 +128,154 @@ export default function UserLoginPage() {
           </div>
           <CardTitle className="text-2xl text-center">NexaHR HRMS</CardTitle>
           <CardDescription className="text-center">
-            Register to access your HR portal
+            Access your HR portal
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your full name"
-                required
-                data-testid="input-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                required
-                data-testid="input-email"
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading}
-              data-testid="button-register"
-            >
-              {isLoading ? "Registering..." : "Register"}
-            </Button>
-          </form>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="register" data-testid="tab-register">Register</TabsTrigger>
+              <TabsTrigger value="login" data-testid="tab-login">Login</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="register" className="space-y-4">
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="John Doe"
+                    required
+                    data-testid="input-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="johndoe"
+                    required
+                    minLength={3}
+                    data-testid="input-username"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="john@example.com"
+                    required
+                    data-testid="input-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mobile">Mobile Number</Label>
+                  <Input
+                    id="mobile"
+                    type="tel"
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value)}
+                    placeholder="+1234567890"
+                    required
+                    data-testid="input-mobile"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Minimum 8 characters"
+                    required
+                    minLength={8}
+                    data-testid="input-password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter password"
+                    required
+                    data-testid="input-confirm-password"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isRegistering}
+                  data-testid="button-register"
+                >
+                  {isRegistering ? "Registering..." : "Register"}
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="login" className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="loginUsernameOrEmail">Username or Email</Label>
+                  <Input
+                    id="loginUsernameOrEmail"
+                    type="text"
+                    value={loginUsernameOrEmail}
+                    onChange={(e) => setLoginUsernameOrEmail(e.target.value)}
+                    placeholder="Enter username or email"
+                    required
+                    data-testid="input-login-username"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="loginPassword">Password</Label>
+                  <Input
+                    id="loginPassword"
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter password"
+                    required
+                    data-testid="input-login-password"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isLoggingIn}
+                  data-testid="button-login"
+                >
+                  {isLoggingIn ? "Logging in..." : "Login"}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Coming Soon</span>
+              <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
             </div>
           </div>
 
           <Button
             variant="outline"
             className="w-full"
-            disabled
+            onClick={handleGoogleLogin}
             data-testid="button-google-login"
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
@@ -134,7 +296,7 @@ export default function UserLoginPage() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            Continue with Google (Coming Soon)
+            Continue with Google
           </Button>
 
           <div className="text-center text-sm text-muted-foreground">
