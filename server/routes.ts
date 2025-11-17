@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { registerUserSchema, loginUserSchema } from "@shared/schema";
+import { ObjectStorageService } from "./objectStorage";
 
 // Admin credentials
 const ADMIN_CREDENTIALS = {
@@ -276,6 +277,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Approve user error:", error);
       res.status(500).json({ message: "Failed to approve user" });
+    }
+  });
+
+  // Company settings routes
+  app.get("/api/company/settings", async (req: Request, res: Response) => {
+    try {
+      const settings = await storage.getCompanySettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Get company settings error:", error);
+      res.status(500).json({ message: "Failed to get company settings" });
+    }
+  });
+
+  // Get upload URL for logo (admin only)
+  app.post("/api/company/upload-logo", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { filename } = req.body;
+      if (!filename) {
+        return res.status(400).json({ message: "Filename is required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Get logo upload URL error:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Get upload URL for favicon (admin only)
+  app.post("/api/company/upload-favicon", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { filename } = req.body;
+      if (!filename) {
+        return res.status(400).json({ message: "Filename is required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Get favicon upload URL error:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Update company settings (admin only)
+  app.put("/api/company/settings", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { logoUrl, faviconUrl, companyName } = req.body;
+      const objectStorageService = new ObjectStorageService();
+      
+      const updates: any = {};
+      if (companyName) updates.companyName = companyName;
+      if (logoUrl) {
+        updates.logoUrl = objectStorageService.normalizePublicAssetPath(logoUrl);
+      }
+      if (faviconUrl) {
+        updates.faviconUrl = objectStorageService.normalizePublicAssetPath(faviconUrl);
+      }
+
+      const updatedSettings = await storage.updateCompanySettings(updates);
+      res.json(updatedSettings);
+    } catch (error) {
+      console.error("Update company settings error:", error);
+      res.status(500).json({ message: "Failed to update company settings" });
+    }
+  });
+
+  // Serve public objects
+  app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
+    const filePath = req.params.filePath;
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const file = await objectStorageService.searchPublicObject(filePath);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error searching for public object:", error);
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
