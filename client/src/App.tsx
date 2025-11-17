@@ -44,6 +44,11 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
         setLocation("/pending-approval");
       }
     }
+    
+    // Redirect authenticated users from root to dashboard
+    if (session.authenticated && location === "/" && session.user?.isApproved) {
+      setLocation("/dashboard");
+    }
   }, [session, location, setLocation]);
 
   const user = session.user || { name: "User", email: "", id: "" };
@@ -72,6 +77,7 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
             <div className="container mx-auto p-6 max-w-7xl">
               <Switch>
                 <Route path="/pending-approval" component={PendingApprovalPage} />
+                <Route path="/" component={Dashboard} />
                 <Route path="/dashboard" component={Dashboard} />
                 <Route path="/attendance" component={AttendancePage} />
                 <Route path="/leave" component={LeavePage} />
@@ -93,6 +99,36 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
   );
 }
 
+function AdminDashboardProtected() {
+  const { data: session, isLoading } = useQuery<SessionData>({
+    queryKey: ["/api/auth/session"],
+  });
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && (!session?.authenticated || !session?.isAdmin)) {
+      setLocation("/admin/login");
+    }
+  }, [session, isLoading, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session?.authenticated || !session?.isAdmin) {
+    return null;
+  }
+
+  return <AdminDashboardPage />;
+}
+
 function Router() {
   const { data: session, isLoading } = useQuery<SessionData>({
     queryKey: ["/api/auth/session"],
@@ -112,13 +148,15 @@ function Router() {
   return (
     <Switch>
       <Route path="/admin/login" component={AdminLoginPage} />
-      <Route path="/admin/dashboard" component={AdminDashboardPage} />
+      <Route path="/admin/dashboard">
+        {() => <AdminDashboardProtected />}
+      </Route>
       {session?.authenticated ? (
         <Route>
           {() => <AuthenticatedApp session={session} />}
         </Route>
       ) : (
-        <Route path="/" component={UserLoginPage} />
+        <Route component={UserLoginPage} />
       )}
     </Switch>
   );
