@@ -9,9 +9,45 @@ import { format } from "date-fns";
 
 //todo: remove mock functionality
 const mockAttendanceHistory = [
-  { date: "2024-01-15", checkIn: "08:45 AM", checkOut: "05:30 PM", status: "present", photo: null },
-  { date: "2024-01-14", checkIn: "09:00 AM", checkOut: "05:45 PM", status: "present", photo: null },
-  { date: "2024-01-13", checkIn: "08:50 AM", checkOut: "05:20 PM", status: "present", photo: null },
+  { 
+    date: "2024-01-15", 
+    checkIn: "08:45 AM", 
+    checkOut: "05:30 PM", 
+    status: "present", 
+    photo: null,
+    location: {
+      latitude: 1.3521,
+      longitude: 103.8198,
+      accuracy: 25,
+      address: "Singapore Office, 1 Marina Boulevard, Singapore 018989"
+    }
+  },
+  { 
+    date: "2024-01-14", 
+    checkIn: "09:00 AM", 
+    checkOut: "05:45 PM", 
+    status: "present", 
+    photo: null,
+    location: {
+      latitude: 1.3521,
+      longitude: 103.8198,
+      accuracy: 30,
+      address: "Singapore Office, 1 Marina Boulevard, Singapore 018989"
+    }
+  },
+  { 
+    date: "2024-01-13", 
+    checkIn: "08:50 AM", 
+    checkOut: "05:20 PM", 
+    status: "present", 
+    photo: null,
+    location: {
+      latitude: 1.3521,
+      longitude: 103.8198,
+      accuracy: 20,
+      address: "Singapore Office, 1 Marina Boulevard, Singapore 018989"
+    }
+  },
 ];
 
 interface LocationData {
@@ -19,6 +55,15 @@ interface LocationData {
   longitude: number;
   accuracy: number;
   address?: string;
+}
+
+interface AttendanceRecord {
+  date: string;
+  checkIn: string;
+  checkOut: string | null;
+  status: string;
+  photo: string | null;
+  location: LocationData;
 }
 
 export default function AttendancePage() {
@@ -34,6 +79,7 @@ export default function AttendancePage() {
     location: LocationData;
     time: Date;
   } | null>(null);
+  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>(mockAttendanceHistory);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -160,18 +206,34 @@ export default function AttendancePage() {
   // Confirm clock in with photo and location
   const handleConfirmClockIn = () => {
     if (capturedPhoto && location) {
-      setClockInData({
+      const now = new Date();
+      const newClockInData = {
         photo: capturedPhoto,
         location: location,
-        time: new Date(),
-      });
+        time: now,
+      };
+      
+      setClockInData(newClockInData);
       setIsClockedIn(true);
       setShowCamera(false);
       stopCamera();
       setCapturedPhoto(null);
+      
+      // Add to attendance history
+      const newRecord: AttendanceRecord = {
+        date: format(now, "yyyy-MM-dd"),
+        checkIn: format(now, "hh:mm a"),
+        checkOut: null,
+        status: "present",
+        photo: capturedPhoto,
+        location: location,
+      };
+      
+      setAttendanceHistory(prev => [newRecord, ...prev]);
+      
       toast({
         title: "Clocked In Successfully",
-        description: `You clocked in at ${format(new Date(), "hh:mm a")}`,
+        description: `You clocked in at ${format(now, "hh:mm a")}`,
       });
     } else if (!capturedPhoto) {
       toast({
@@ -406,23 +468,47 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {mockAttendanceHistory.map((record, index) => (
+            {attendanceHistory.map((record, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-3 rounded-md bg-muted/50"
+                className="p-4 rounded-md bg-muted/50 space-y-2"
                 data-testid={`row-attendance-${index}`}
               >
-                <div className="flex-1">
-                  <p className="font-medium" data-testid={`text-date-${index}`}>
-                    {format(new Date(record.date), "EEE, MMM dd, yyyy")}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {record.checkIn} - {record.checkOut}
-                  </p>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    {record.photo && (
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={record.photo} alt="Check-in photo" />
+                        <AvatarFallback>📸</AvatarFallback>
+                      </Avatar>
+                    )}
+                    <div className="flex-1">
+                      <p className="font-medium" data-testid={`text-date-${index}`}>
+                        {format(new Date(record.date), "EEE, MMM dd, yyyy")}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {record.checkIn} {record.checkOut ? `- ${record.checkOut}` : '(In Progress)'}
+                      </p>
+                      {record.location && (
+                        <div className="flex items-start gap-1 mt-2 text-sm">
+                          <MapPin className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-primary" />
+                          <div className="flex-1">
+                            <p className="text-muted-foreground text-xs" data-testid={`text-location-${index}`}>
+                              {record.location.address || 
+                                `${record.location.latitude.toFixed(6)}, ${record.location.longitude.toFixed(6)}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Accuracy: ±{Math.round(record.location.accuracy)}m
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant="default" data-testid={`badge-status-${index}`}>
+                    {record.status === "present" ? "Present" : record.status}
+                  </Badge>
                 </div>
-                <Badge variant="default" data-testid={`badge-status-${index}`}>
-                  Present
-                </Badge>
               </div>
             ))}
           </div>
