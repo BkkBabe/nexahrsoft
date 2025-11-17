@@ -12,6 +12,24 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### November 17, 2025 - Logo/Favicon Upload & Database Migration
+- **Company Branding System**:
+  - Admin settings page (/admin/settings) for uploading company logo and favicon
+  - Replit Object Storage integration (Google Cloud Storage backend) for public asset storage
+  - Presigned URL workflow for direct-to-storage uploads with client-side validation
+  - File validation: max 5MB for logos, 1MB for favicons; image types only
+  - Logo displays across app: login page, header, sidebar, dynamic favicon updates
+- **Database Migration**:
+  - **Switched from MemStorage to PostgreSQL (PgStorage)** for persistent data storage
+  - company_settings table: stores companyName, logoUrl, faviconUrl
+  - All user data and settings now persist across server restarts
+  - Default settings automatically created on first access
+- **Security Hardening**:
+  - Admin-only API endpoints with req.session.isAdmin verification
+  - Non-admin users receive 403 Forbidden for upload/update operations
+  - AdminProtected component prevents client-side access to admin routes
+  - Verified via end-to-end security testing
+
 ### November 17, 2025 - Authentication & Deployment Fixes
 - **Schema Updates**: Added username, passwordHash, and mobileNumber fields to users table
 - **Registration System**: 
@@ -89,8 +107,8 @@ Preferred communication style: Simple, everyday language.
 **Data Layer:**
 - Drizzle ORM for type-safe database queries
 - Schema-first approach with Zod validation
-- In-memory storage implementation (MemStorage) for development/MVP
-- Designed for PostgreSQL database integration (Neon serverless configuration present)
+- PostgreSQL-backed storage (PgStorage) for persistent data across restarts
+- Neon serverless PostgreSQL database with connection pooling
 
 **API Structure:**
 - `/api/admin/*` - Admin authentication and user management endpoints
@@ -116,8 +134,20 @@ Preferred communication style: Simple, everyday language.
 - Support for both password-based and OAuth authentication
 - Approval-based access control: new registrations default to unapproved state
 
+**Company Settings Table:**
+- Stores company branding and configuration
+- Fields:
+  - id (varchar, UUID via gen_random_uuid())
+  - company_name (text, nullable) - Organization name
+  - logo_url (text, nullable) - Public URL to company logo in object storage
+  - favicon_url (text, nullable) - Public URL to favicon in object storage
+  - updated_at (timestamp, default: now())
+- Singleton pattern: only one settings record exists
+- Default settings created automatically on first access
+
 **Current State:**
-- Single table schema focusing on user management
+- Two-table schema: users and company_settings
+- All data persists in PostgreSQL database
 - Extensible design anticipating additional tables for:
   - Attendance records
   - Leave requests
