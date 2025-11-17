@@ -145,6 +145,15 @@ function Router() {
     );
   }
 
+  // Redirect unauthenticated users trying to access protected routes
+  const [location, setLocation] = useLocation();
+  
+  useEffect(() => {
+    if (!session?.authenticated && location !== "/" && location !== "/admin/login" && !location.startsWith("/admin")) {
+      setLocation("/");
+    }
+  }, [session, location, setLocation]);
+
   return (
     <Switch>
       <Route path="/admin/login" component={AdminLoginPage} />
@@ -156,7 +165,10 @@ function Router() {
           {() => <AuthenticatedApp session={session} />}
         </Route>
       ) : (
-        <Route component={UserLoginPage} />
+        <>
+          <Route path="/" component={UserLoginPage} />
+          <Route component={UserLoginPage} />
+        </>
       )}
     </Switch>
   );
