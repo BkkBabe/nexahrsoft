@@ -87,12 +87,19 @@ export default function UserLoginPage() {
 
       // Invalidate session query to refetch auth state
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+      
+      // Wait for query to refetch
+      await queryClient.refetchQueries({ queryKey: ["/api/auth/session"] });
 
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
-      setLocation("/dashboard");
+      
+      // Small delay to ensure UI updates before redirect
+      setTimeout(() => {
+        setLocation("/dashboard");
+      }, 100);
     } catch (error: any) {
       if (error.message.includes("401")) {
         toast({
