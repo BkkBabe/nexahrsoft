@@ -12,10 +12,15 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
+      // secure should be true in production for HTTPS
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
-      sameSite: 'lax', // Required for Chrome compatibility
+      // 'lax' allows cookies in first-party context (works in new tabs)
+      // This is correct for apps accessed directly (not in iframes)
+      sameSite: 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      // Ensure cookies work across subdomains if needed
+      path: '/',
     },
   })
 );

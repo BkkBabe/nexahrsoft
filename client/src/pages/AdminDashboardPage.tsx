@@ -41,7 +41,10 @@ export default function AdminDashboardPage() {
     mutationFn: async () => {
       return await apiRequest("POST", "/api/admin/logout");
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Clear session cache
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+      // Redirect to admin login page
       setLocation("/admin/login");
     },
   });

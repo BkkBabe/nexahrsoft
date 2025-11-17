@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 
 interface AppHeaderProps {
@@ -41,7 +41,10 @@ export function AppHeader({
     mutationFn: async () => {
       return await apiRequest("POST", "/api/auth/logout");
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Clear session cache
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+      // Redirect to login page
       setLocation("/");
     },
   });

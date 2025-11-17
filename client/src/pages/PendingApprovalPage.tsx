@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Clock, RefreshCw, LogOut } from "lucide-react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function PendingApprovalPage() {
   const [, setLocation] = useLocation();
@@ -12,7 +12,10 @@ export default function PendingApprovalPage() {
     mutationFn: async () => {
       return await apiRequest("POST", "/api/auth/logout");
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Clear session cache
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+      // Redirect to login page
       setLocation("/");
     },
   });
