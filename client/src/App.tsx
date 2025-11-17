@@ -133,6 +133,15 @@ function Router() {
   const { data: session, isLoading } = useQuery<SessionData>({
     queryKey: ["/api/auth/session"],
   });
+  
+  // Hooks must be called before any conditional returns
+  const [location, setLocation] = useLocation();
+  
+  useEffect(() => {
+    if (!isLoading && !session?.authenticated && location !== "/" && location !== "/admin/login" && !location.startsWith("/admin")) {
+      setLocation("/");
+    }
+  }, [session, location, setLocation, isLoading]);
 
   if (isLoading) {
     return (
@@ -144,15 +153,6 @@ function Router() {
       </div>
     );
   }
-
-  // Redirect unauthenticated users trying to access protected routes
-  const [location, setLocation] = useLocation();
-  
-  useEffect(() => {
-    if (!session?.authenticated && location !== "/" && location !== "/admin/login" && !location.startsWith("/admin")) {
-      setLocation("/");
-    }
-  }, [session, location, setLocation]);
 
   return (
     <Switch>
