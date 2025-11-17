@@ -82,6 +82,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get current session
   app.get("/api/auth/session", async (req: Request, res: Response) => {
+    // Debug logging
+    console.log('Session check:', {
+      hasSession: !!req.session,
+      sessionId: req.sessionID,
+      userId: req.session?.userId,
+      cookie: req.session?.cookie,
+    });
+
     if (req.session.userId) {
       if (req.session.isAdmin) {
         return res.json({
@@ -200,6 +208,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Only set session for approved users
       req.session.userId = user.id;
       req.session.isAdmin = false;
+
+      // Debug logging
+      console.log('Login successful, session created:', {
+        userId: req.session.userId,
+        sessionId: req.sessionID,
+        cookie: req.session.cookie,
+        headers: req.headers,
+      });
 
       res.json({ 
         success: true, 

@@ -8,6 +8,14 @@ const app = express();
 // Session configuration
 const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
 
+// Log environment for debugging
+console.log('Environment check:', {
+  NODE_ENV: process.env.NODE_ENV,
+  REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT,
+  isProduction,
+  hostname: process.env.REPL_SLUG,
+});
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "nexa-hr-secret-key-change-in-production",
@@ -15,6 +23,7 @@ app.use(
     saveUninitialized: false,
     cookie: {
       // secure: true when deployed (REPLIT_DEPLOYMENT) or in production
+      // For custom domains on HTTPS, this MUST be true
       secure: isProduction,
       httpOnly: true,
       // 'lax' allows cookies in first-party context (works in new tabs)
