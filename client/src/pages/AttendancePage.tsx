@@ -188,6 +188,15 @@ export default function AttendancePage() {
     }
   };
 
+  // Handle retake photo
+  const handleRetake = async () => {
+    setCapturedPhoto(null);
+    // Restart camera if it's not running
+    if (!stream) {
+      await startCamera();
+    }
+  };
+
   // Cancel and close camera
   const handleCancel = () => {
     setShowCamera(false);
@@ -280,7 +289,7 @@ export default function AttendancePage() {
                         <Button
                           size="icon"
                           variant="secondary"
-                          onClick={() => setCapturedPhoto(null)}
+                          onClick={handleRetake}
                           data-testid="button-retake"
                         >
                           <X className="h-4 w-4" />
@@ -346,7 +355,7 @@ export default function AttendancePage() {
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => setCapturedPhoto(null)}
+                        onClick={handleRetake}
                         data-testid="button-retake-photo"
                       >
                         Retake
@@ -366,6 +375,23 @@ export default function AttendancePage() {
                 <Clock className="mr-2 h-5 w-5" />
                 {isClockedIn ? "Clock Out" : "Clock In"}
               </Button>
+            )}
+
+            {/* Show current location when not clocked in and not showing camera */}
+            {!isClockedIn && !showCamera && location && (
+              <div className="w-full max-w-md bg-muted/50 p-3 rounded-lg">
+                <div className="flex items-start gap-2 text-sm">
+                  <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
+                  <div className="flex-1 text-left">
+                    <p className="font-medium" data-testid="text-current-location">
+                      {location.address || `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Accuracy: ±{Math.round(location.accuracy)}m
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </CardContent>
