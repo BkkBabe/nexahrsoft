@@ -7,6 +7,7 @@ import {
   Users,
   BarChart3,
   CheckSquare,
+  Building2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -23,9 +24,11 @@ import { Link, useLocation } from "wouter";
 
 interface AppSidebarProps {
   userRole: "employee" | "manager" | "hr_admin";
+  companyName?: string;
+  companyLogo?: string;
 }
 
-export function AppSidebar({ userRole }: AppSidebarProps) {
+export function AppSidebar({ userRole, companyName = "NexaHR", companyLogo }: AppSidebarProps) {
   const [location] = useLocation();
 
   const employeeItems = [
@@ -49,7 +52,19 @@ export function AppSidebar({ userRole }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <h2 className="text-lg font-semibold">NexaHR</h2>
+        <div className="flex items-center gap-3">
+          {companyLogo ? (
+            <img
+              src={companyLogo}
+              alt={companyName}
+              className="h-8 w-8 object-contain"
+              data-testid="img-sidebar-logo"
+            />
+          ) : (
+            <Building2 className="h-6 w-6" />
+          )}
+          <h2 className="text-lg font-semibold">{companyName}</h2>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

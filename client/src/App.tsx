@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { FaviconUpdater } from "@/components/FaviconUpdater";
 import Dashboard from "@/pages/Dashboard";
 import AttendancePage from "@/pages/AttendancePage";
 import LeavePage from "@/pages/LeavePage";
@@ -69,7 +70,11 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
-        <AppSidebar userRole={userRole} />
+        <AppSidebar
+          userRole={userRole}
+          companyName={companySettings?.companyName || "NexaHR"}
+          companyLogo={companySettings?.logoUrl || undefined}
+        />
         <div className="flex flex-col flex-1 overflow-hidden">
           <AppHeader
             userName={user.name}
@@ -190,6 +195,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
+          <FaviconUpdater />
           <Router />
           <Toaster />
         </ThemeProvider>
