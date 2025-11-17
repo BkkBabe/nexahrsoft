@@ -6,8 +6,11 @@ import { randomUUID } from "crypto";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByAuthId(authId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  approveUser(id: string): Promise<User | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -21,17 +24,45 @@ export class MemStorage implements IStorage {
     return this.users.get(id);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
+  async getUserByEmail(email: string): Promise<User | undefined> {
     return Array.from(this.users.values()).find(
-      (user) => user.username === username,
+      (user) => user.email === email,
+    );
+  }
+
+  async getUserByAuthId(authId: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.authId === authId,
     );
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      id,
+      name: insertUser.name,
+      email: insertUser.email,
+      authId: insertUser.authId ?? null,
+      role: insertUser.role ?? "user",
+      isApproved: insertUser.isApproved ?? false,
+      createdAt: new Date(),
+    };
     this.users.set(id, user);
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
+  async approveUser(id: string): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (user) {
+      const updatedUser = { ...user, isApproved: true };
+      this.users.set(id, updatedUser);
+      return updatedUser;
+    }
+    return undefined;
   }
 }
 
