@@ -1,8 +1,19 @@
-import { Bell, Settings } from "lucide-react";
+import { Bell, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./ThemeToggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 
 interface AppHeaderProps {
   userName: string;
@@ -19,11 +30,21 @@ export function AppHeader({
   companyLogo,
   notificationCount = 0,
 }: AppHeaderProps) {
+  const [, setLocation] = useLocation();
   const initials = userName
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase();
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/auth/logout");
+    },
+    onSuccess: () => {
+      setLocation("/");
+    },
+  });
 
   return (
     <div className="bg-primary text-primary-foreground px-4 py-6 md:px-6">
@@ -77,11 +98,34 @@ export function AppHeader({
               </Badge>
             )}
           </div>
-          <Avatar className="h-10 w-10" data-testid="avatar-user">
-            <AvatarFallback className="bg-primary-foreground text-primary">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full" data-testid="button-user-menu">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-primary-foreground text-primary">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{userName}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{userRole}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => logoutMutation.mutate()}
+                className="cursor-pointer"
+                data-testid="button-logout"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>

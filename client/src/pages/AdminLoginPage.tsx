@@ -95,6 +95,12 @@ export default function AdminLoginPage() {
               {isLoading ? "Logging in..." : "Login"}
             </Button>
           </form>
+
+          <div className="text-center text-sm text-muted-foreground mt-4">
+            <a href="/" className="underline underline-offset-4 hover:text-primary" data-testid="link-user-login">
+              User Login
+            </a>
+          </div>
         </CardContent>
       </Card>
     </div>
