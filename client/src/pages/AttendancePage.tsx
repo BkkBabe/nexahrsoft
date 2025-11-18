@@ -87,7 +87,8 @@ export default function AttendancePage() {
         description: "Your attendance has been recorded",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/attendance/today'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/attendance/records'] });
+      // Invalidate all attendance records queries (including parameterized ones)
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/records'], exact: false });
     },
     onError: (error: any) => {
       toast({
@@ -107,7 +108,8 @@ export default function AttendancePage() {
         description: "Your attendance has been updated",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/attendance/today'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/attendance/records'] });
+      // Invalidate all attendance records queries (including parameterized ones)
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/records'], exact: false });
     },
     onError: (error: any) => {
       toast({

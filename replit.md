@@ -12,6 +12,59 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### November 18, 2025 - Attendance Management System
+- **Mobile Dashboard Layout**:
+  - Updated dashboard grid to 3 columns (grid-cols-3) for mobile-optimized 2 rows x 3 columns layout on iPhone 13
+  - MenuCard component responsive design with smaller padding (p-3 vs p-6) and icons (w-10 h-10 vs w-16 h-16) on mobile
+  - Menu items: Attendance, Leave, Claims, Payslip, Income Tax, Rewards
+- **Database Schema - Attendance**:
+  - Created attendanceRecords table with id, userId (foreign key), date, clockInTime, clockOutTime, createdAt
+  - Added attendanceBufferMinutes field to companySettings table (default: 15 minutes)
+  - Proper insert/select schemas with Zod validation
+- **Storage Layer - Attendance CRUD**:
+  - clockIn(): Creates attendance record for current day
+  - clockOut(): Updates existing record with clock out time
+  - getTodayAttendance(): Fetches current day's attendance for user
+  - getAttendanceRecordsByUserAndDateRange(): Retrieves records with date range filtering
+  - getAllAttendanceRecordsByDateRange(): Admin function to fetch all users' attendance
+  - updateAttendanceBufferMinutes(): Updates company buffer setting
+- **API Endpoints - User Attendance**:
+  - POST /api/attendance/clock-in - Clock in with buffer validation
+  - POST /api/attendance/clock-out - Clock out with automatic hours calculation
+  - GET /api/attendance/today - Get today's attendance record
+  - GET /api/attendance/records?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD - Fetch attendance history
+- **API Endpoints - Admin**:
+  - GET /api/admin/attendance/records?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD - View all users' attendance
+  - PUT /api/admin/attendance/buffer - Update attendance buffer minutes
+- **User Attendance Page (/attendance)**:
+  - Clock in/out buttons with real-time status tracking
+  - Today's attendance display with clock in/out times
+  - Hours calculation rounded to nearest 0.5 hour
+  - Daily/weekly/monthly attendance history with period filters
+  - Responsive table with date, clock in/out times, and total hours
+- **Admin Settings Page - Buffer Configuration**:
+  - Attendance buffer minutes setting with validation
+  - Form with save functionality and success/error toasts
+  - Loading states during updates
+- **Admin Attendance Reports Page (/admin/attendance)**:
+  - Overview card with total users, records, active users, and selected period
+  - Daily/weekly/monthly tabs for period filtering
+  - User attendance details with expandable records
+  - Total hours per user calculated to 0.5 hour precision
+  - Individual day breakdowns with date, clock in/out times, hours worked
+- **Hours Calculation**:
+  - Consistent calculation function across all components
+  - Formula: (clockOutTime - clockInTime) in hours
+  - Rounding: Math.round(hours * 2) / 2 for nearest 0.5 hour
+  - Displayed as X.X hrs format (e.g., 8.5 hrs, 7.0 hrs)
+- **Routing**:
+  - Added /admin/attendance route with AdminProtected wrapper
+  - Proper integration in App.tsx routing structure
+- **Bug Fixes**:
+  - Fixed query parameter serialization in queryClient.ts to properly handle parameterized query keys
+  - Updated query invalidations to use exact: false for matching parameterized queries
+  - Resolved issue where weekly/monthly attendance records weren't displaying after clock in/out
+
 ### November 17, 2025 - Logo/Favicon Upload & Database Migration
 - **Company Branding System**:
   - Admin settings page (/admin/settings) for uploading company logo and favicon
