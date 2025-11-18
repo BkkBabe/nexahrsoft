@@ -145,7 +145,7 @@ export default function UserLoginPage() {
               <img
                 src={companySettings.logoUrl}
                 alt={companySettings.companyName}
-                className="h-20 w-20 object-contain"
+                className="h-20 w-20 object-contain rounded-full"
                 data-testid="img-company-logo"
               />
             ) : (

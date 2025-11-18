@@ -57,7 +57,7 @@ export function AppSidebar({ userRole, companyName = "NexaHR", companyLogo }: Ap
             <img
               src={companyLogo}
               alt={companyName}
-              className="h-8 w-8 object-contain"
+              className="h-8 w-8 object-contain rounded-full"
               data-testid="img-sidebar-logo"
             />
           ) : (

@@ -54,11 +54,11 @@ export function AppHeader({
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           {companyLogo && (
-            <div className="bg-white rounded-md p-2 w-20 h-20 flex items-center justify-center">
+            <div className="bg-white rounded-full p-2 w-20 h-20 flex items-center justify-center">
               <img
                 src={companyLogo}
                 alt={companyName}
-                className="w-full h-full object-contain"
+                className="w-full h-full object-contain rounded-full"
               />
             </div>
           )}

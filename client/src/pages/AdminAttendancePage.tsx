@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, Clock, Users } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft } from "lucide-react";
+import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
 
 // Helper function to calculate hours worked (to nearest 0.5 hour)
@@ -89,13 +91,21 @@ export default function AdminAttendancePage() {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-semibold mb-2" data-testid="text-admin-attendance-title">
-          Attendance Reports
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          View and manage employee attendance records
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-semibold mb-2" data-testid="text-admin-attendance-title">
+            Attendance Reports
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            View and manage employee attendance records
+          </p>
+        </div>
+        <Link href="/admin/dashboard">
+          <Button variant="outline" data-testid="button-back-dashboard">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </Link>
       </div>
 
       {/* Overview Card */}
