@@ -26,7 +26,10 @@ export default function AdminLoginPage() {
         title: "Login Successful",
         description: "Welcome, Admin!",
       });
-      setLocation("/admin/dashboard");
+      
+      // Use window.location for full page reload to ensure session is recognized
+      // This avoids race conditions with React Query cache updates
+      window.location.href = "/admin/dashboard";
     } catch (error: any) {
       if (error.message.includes("401")) {
         toast({
