@@ -19,10 +19,10 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl md:text-3xl font-semibold mb-6" data-testid="text-dashboard-title">
+        <h2 className="text-2xl md:text-3xl font-semibold mb-3 md:mb-6" data-testid="text-dashboard-title">
           What do you want to do today?
         </h2>
-        <div className="grid grid-cols-3 gap-3 md:gap-6">
+        <div className="grid grid-cols-3 gap-2 md:gap-6">
           {menuItems.map((item) => (
             <MenuCard
               key={item.title}
