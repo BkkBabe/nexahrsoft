@@ -386,7 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== ATTENDANCE ENDPOINTS ====================
   
-  // Clock in
+  // Clock in (supports multiple clock-ins per day)
   app.post("/api/attendance/clock-in", async (req: Request, res: Response) => {
     if (!req.session?.userId || req.session.isAdmin) {
       return res.status(401).json({ message: "User authentication required" });
@@ -396,19 +396,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId;
       const now = new Date();
       const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      const { photoUrl, latitude, longitude, override } = req.body;
       
-      // Check if already clocked in today
-      const existingRecord = await storage.getTodayAttendanceRecord(userId, date);
-      if (existingRecord) {
-        return res.status(400).json({ message: "Already clocked in today" });
+      // Get all records for today to check for recent clock-ins
+      const todayRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, date, date);
+      
+      // Check if there's a recent clock-in (within 5 minutes) and user hasn't confirmed override
+      if (!override) {
+        const recentClockIn = todayRecords.find(record => {
+          const clockInTime = new Date(record.clockInTime);
+          const diffMinutes = (now.getTime() - clockInTime.getTime()) / (1000 * 60);
+          return diffMinutes < 5;
+        });
+        
+        if (recentClockIn) {
+          return res.status(400).json({ 
+            message: "You clocked in less than 5 minutes ago. Do you want to continue?",
+            requiresConfirmation: true
+          });
+        }
       }
 
-      // Create attendance record
+      // Create new attendance record (allows multiple per day)
       const record = await storage.createAttendanceRecord({
         userId,
         date,
         clockInTime: now,
         clockOutTime: null,
+        photoUrl: photoUrl || null,
+        latitude: latitude || null,
+        longitude: longitude || null,
       });
 
       res.json({ success: true, record });
@@ -418,7 +435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Clock out
+  // Clock out (clocks out the most recent uncompleted record)
   app.post("/api/attendance/clock-out", async (req: Request, res: Response) => {
     if (!req.session?.userId || req.session.isAdmin) {
       return res.status(401).json({ message: "User authentication required" });
@@ -429,18 +446,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const now = new Date();
       const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
       
-      // Get today's record
-      const record = await storage.getTodayAttendanceRecord(userId, date);
-      if (!record) {
-        return res.status(400).json({ message: "No clock-in record found for today" });
-      }
-
-      if (record.clockOutTime) {
-        return res.status(400).json({ message: "Already clocked out today" });
+      // Get all today's records
+      const todayRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, date, date);
+      
+      // Find the most recent record without clock-out time
+      const openRecord = todayRecords
+        .filter(r => !r.clockOutTime)
+        .sort((a, b) => new Date(b.clockInTime).getTime() - new Date(a.clockInTime).getTime())[0];
+      
+      if (!openRecord) {
+        return res.status(400).json({ message: "No active clock-in found. Please clock in first." });
       }
 
       // Update with clock out time
-      const updated = await storage.updateAttendanceRecord(record.id, {
+      const updated = await storage.updateAttendanceRecord(openRecord.id, {
         clockOutTime: now,
       });
 
@@ -451,7 +470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get today's attendance record
+  // Get today's attendance records (returns all records for today)
   app.get("/api/attendance/today", async (req: Request, res: Response) => {
     if (!req.session?.userId || req.session.isAdmin) {
       return res.status(401).json({ message: "User authentication required" });
@@ -461,11 +480,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId;
       const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
       
-      const record = await storage.getTodayAttendanceRecord(userId, date);
-      res.json({ record: record || null });
+      const records = await storage.getAttendanceRecordsByUserAndDateRange(userId, date, date);
+      res.json({ records });
     } catch (error) {
       console.error("Get today attendance error:", error);
-      res.status(500).json({ message: "Failed to get attendance record" });
+      res.status(500).json({ message: "Failed to get attendance records" });
     }
   });
 
