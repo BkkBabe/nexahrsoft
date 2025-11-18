@@ -2,7 +2,7 @@ import { type User, type InsertUser, type CompanySettings, type AttendanceRecord
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, companySettings, attendanceRecords, userSessions, loginChallenges } from "@shared/schema";
-import { eq, or, and, gte, lte, desc, isNull } from "drizzle-orm";
+import { eq, or, and, gte, lte, desc, isNull, not } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -365,7 +365,7 @@ export class PgStorage implements IStorage {
     ];
     
     if (exceptSessionId) {
-      conditions.push(eq(userSessions.sessionId, exceptSessionId).not());
+      conditions.push(not(eq(userSessions.sessionId, exceptSessionId)));
     }
     
     await db.update(userSessions)

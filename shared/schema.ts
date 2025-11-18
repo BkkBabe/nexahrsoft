@@ -31,6 +31,9 @@ export const attendanceRecords = pgTable("attendance_records", {
   date: text("date").notNull(), // Format: YYYY-MM-DD for easy querying
   clockInTime: timestamp("clock_in_time").notNull(),
   clockOutTime: timestamp("clock_out_time"), // Nullable - user might still be clocked in
+  photoUrl: text("photo_url"), // URL to attendance photo in object storage
+  latitude: text("latitude"), // GPS latitude
+  longitude: text("longitude"), // GPS longitude
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
