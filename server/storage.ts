@@ -1,8 +1,8 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords } from "@shared/schema";
-import { eq, or, and, gte, lte, desc } from "drizzle-orm";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges } from "@shared/schema";
+import { eq, or, and, gte, lte, desc, isNull } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -25,6 +25,19 @@ export interface IStorage {
   getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined>;
   getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
+  
+  // Session tracking methods
+  createUserSession(session: InsertUserSession): Promise<UserSession>;
+  getActiveSessions(userId: string): Promise<UserSession[]>;
+  revokeSession(sessionId: string): Promise<void>;
+  revokeAllUserSessions(userId: string, exceptSessionId?: string): Promise<void>;
+  updateSessionLastSeen(sessionId: string): Promise<void>;
+  
+  // Login challenge methods
+  createLoginChallenge(challenge: InsertLoginChallenge): Promise<LoginChallenge>;
+  getLoginChallenge(challengeToken: string): Promise<LoginChallenge | undefined>;
+  useLoginChallenge(challengeId: string): Promise<void>;
+  cleanupExpiredChallenges(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -135,6 +148,43 @@ export class MemStorage implements IStorage {
 
   async getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
     throw new Error("MemStorage attendance not implemented");
+  }
+
+  // Session tracking methods - stub implementations for MemStorage
+  async createUserSession(session: InsertUserSession): Promise<UserSession> {
+    throw new Error("MemStorage session tracking not implemented");
+  }
+
+  async getActiveSessions(userId: string): Promise<UserSession[]> {
+    throw new Error("MemStorage session tracking not implemented");
+  }
+
+  async revokeSession(sessionId: string): Promise<void> {
+    throw new Error("MemStorage session tracking not implemented");
+  }
+
+  async revokeAllUserSessions(userId: string, exceptSessionId?: string): Promise<void> {
+    throw new Error("MemStorage session tracking not implemented");
+  }
+
+  async updateSessionLastSeen(sessionId: string): Promise<void> {
+    throw new Error("MemStorage session tracking not implemented");
+  }
+
+  async createLoginChallenge(challenge: InsertLoginChallenge): Promise<LoginChallenge> {
+    throw new Error("MemStorage login challenge not implemented");
+  }
+
+  async getLoginChallenge(challengeToken: string): Promise<LoginChallenge | undefined> {
+    throw new Error("MemStorage login challenge not implemented");
+  }
+
+  async useLoginChallenge(challengeId: string): Promise<void> {
+    throw new Error("MemStorage login challenge not implemented");
+  }
+
+  async cleanupExpiredChallenges(): Promise<void> {
+    throw new Error("MemStorage login challenge not implemented");
   }
 }
 
@@ -280,6 +330,81 @@ export class PgStorage implements IStorage {
         )
       )
       .orderBy(desc(attendanceRecords.date));
+  }
+
+  // Session tracking methods
+  async createUserSession(session: InsertUserSession): Promise<UserSession> {
+    const [userSession] = await db.insert(userSessions)
+      .values(session)
+      .returning();
+    return userSession;
+  }
+
+  async getActiveSessions(userId: string): Promise<UserSession[]> {
+    return await db.select()
+      .from(userSessions)
+      .where(
+        and(
+          eq(userSessions.userId, userId),
+          isNull(userSessions.revokedAt)
+        )
+      )
+      .orderBy(desc(userSessions.createdAt));
+  }
+
+  async revokeSession(sessionId: string): Promise<void> {
+    await db.update(userSessions)
+      .set({ revokedAt: new Date() })
+      .where(eq(userSessions.sessionId, sessionId));
+  }
+
+  async revokeAllUserSessions(userId: string, exceptSessionId?: string): Promise<void> {
+    const conditions = [
+      eq(userSessions.userId, userId),
+      isNull(userSessions.revokedAt)
+    ];
+    
+    if (exceptSessionId) {
+      conditions.push(eq(userSessions.sessionId, exceptSessionId).not());
+    }
+    
+    await db.update(userSessions)
+      .set({ revokedAt: new Date() })
+      .where(and(...conditions));
+  }
+
+  async updateSessionLastSeen(sessionId: string): Promise<void> {
+    await db.update(userSessions)
+      .set({ lastSeen: new Date() })
+      .where(eq(userSessions.sessionId, sessionId));
+  }
+
+  // Login challenge methods
+  async createLoginChallenge(challenge: InsertLoginChallenge): Promise<LoginChallenge> {
+    const [loginChallenge] = await db.insert(loginChallenges)
+      .values(challenge)
+      .returning();
+    return loginChallenge;
+  }
+
+  async getLoginChallenge(challengeToken: string): Promise<LoginChallenge | undefined> {
+    const [challenge] = await db.select()
+      .from(loginChallenges)
+      .where(eq(loginChallenges.challengeToken, challengeToken))
+      .limit(1);
+    return challenge;
+  }
+
+  async useLoginChallenge(challengeId: string): Promise<void> {
+    await db.update(loginChallenges)
+      .set({ usedAt: new Date() })
+      .where(eq(loginChallenges.id, challengeId));
+  }
+
+  async cleanupExpiredChallenges(): Promise<void> {
+    const now = new Date();
+    await db.delete(loginChallenges)
+      .where(lte(loginChallenges.expiresAt, now));
   }
 }
 
