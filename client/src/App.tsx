@@ -20,6 +20,7 @@ import HRAdminPage from "@/pages/HRAdminPage";
 import AdminLoginPage from "@/pages/AdminLoginPage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
+import AdminAttendancePage from "@/pages/AdminAttendancePage";
 import UserLoginPage from "@/pages/UserLoginPage";
 import PendingApprovalPage from "@/pages/PendingApprovalPage";
 import NotFound from "@/pages/not-found";
@@ -176,6 +177,9 @@ function Router() {
       </Route>
       <Route path="/admin/settings">
         {() => <AdminProtected><AdminSettingsPage /></AdminProtected>}
+      </Route>
+      <Route path="/admin/attendance">
+        {() => <AdminProtected><AdminAttendancePage /></AdminProtected>}
       </Route>
       {session?.authenticated ? (
         <Route>

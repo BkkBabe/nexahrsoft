@@ -1,8 +1,8 @@
-import { type User, type InsertUser, type CompanySettings } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings } from "@shared/schema";
-import { eq, or } from "drizzle-orm";
+import { users, companySettings, attendanceRecords } from "@shared/schema";
+import { eq, or, and, gte, lte, desc } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -18,6 +18,13 @@ export interface IStorage {
   approveUser(id: string): Promise<User | undefined>;
   getCompanySettings(): Promise<CompanySettings>;
   updateCompanySettings(settings: Partial<CompanySettings>): Promise<CompanySettings>;
+  
+  // Attendance methods
+  createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord>;
+  updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined>;
+  getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined>;
+  getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
+  getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -31,6 +38,7 @@ export class MemStorage implements IStorage {
       companyName: "NexaHR",
       logoUrl: null,
       faviconUrl: null,
+      attendanceBufferMinutes: 15,
       updatedAt: new Date(),
     };
   }
@@ -106,6 +114,27 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     return this.companySettings;
+  }
+
+  // Attendance methods - stub implementations for MemStorage
+  async createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
+    throw new Error("MemStorage attendance not implemented");
   }
 }
 
@@ -197,6 +226,60 @@ export class PgStorage implements IStorage {
       .returning();
     
     return updated;
+  }
+
+  // Attendance methods
+  async createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord> {
+    const [attendanceRecord] = await db.insert(attendanceRecords)
+      .values(record)
+      .returning();
+    return attendanceRecord;
+  }
+
+  async updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined> {
+    const [updated] = await db.update(attendanceRecords)
+      .set(updates)
+      .where(eq(attendanceRecords.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined> {
+    const [record] = await db.select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.userId, userId),
+          eq(attendanceRecords.date, date)
+        )
+      )
+      .limit(1);
+    return record;
+  }
+
+  async getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]> {
+    return await db.select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.userId, userId),
+          gte(attendanceRecords.date, startDate),
+          lte(attendanceRecords.date, endDate)
+        )
+      )
+      .orderBy(desc(attendanceRecords.date));
+  }
+
+  async getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
+    return await db.select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          gte(attendanceRecords.date, startDate),
+          lte(attendanceRecords.date, endDate)
+        )
+      )
+      .orderBy(desc(attendanceRecords.date));
   }
 }
 

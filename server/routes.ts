@@ -384,6 +384,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== ATTENDANCE ENDPOINTS ====================
+  
+  // Clock in
+  app.post("/api/attendance/clock-in", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const now = new Date();
+      const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Check if already clocked in today
+      const existingRecord = await storage.getTodayAttendanceRecord(userId, date);
+      if (existingRecord) {
+        return res.status(400).json({ message: "Already clocked in today" });
+      }
+
+      // Create attendance record
+      const record = await storage.createAttendanceRecord({
+        userId,
+        date,
+        clockInTime: now,
+        clockOutTime: null,
+      });
+
+      res.json({ success: true, record });
+    } catch (error) {
+      console.error("Clock in error:", error);
+      res.status(500).json({ message: "Failed to clock in" });
+    }
+  });
+
+  // Clock out
+  app.post("/api/attendance/clock-out", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const now = new Date();
+      const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Get today's record
+      const record = await storage.getTodayAttendanceRecord(userId, date);
+      if (!record) {
+        return res.status(400).json({ message: "No clock-in record found for today" });
+      }
+
+      if (record.clockOutTime) {
+        return res.status(400).json({ message: "Already clocked out today" });
+      }
+
+      // Update with clock out time
+      const updated = await storage.updateAttendanceRecord(record.id, {
+        clockOutTime: now,
+      });
+
+      res.json({ success: true, record: updated });
+    } catch (error) {
+      console.error("Clock out error:", error);
+      res.status(500).json({ message: "Failed to clock out" });
+    }
+  });
+
+  // Get today's attendance record
+  app.get("/api/attendance/today", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      const record = await storage.getTodayAttendanceRecord(userId, date);
+      res.json({ record: record || null });
+    } catch (error) {
+      console.error("Get today attendance error:", error);
+      res.status(500).json({ message: "Failed to get attendance record" });
+    }
+  });
+
+  // Get attendance records with date range
+  app.get("/api/attendance/records", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+      
+      // Default to current month if no dates provided
+      const now = new Date();
+      const defaultStartDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const defaultEndDate = now.toISOString().split('T')[0];
+      
+      const records = await storage.getAttendanceRecordsByUserAndDateRange(
+        userId,
+        startDate || defaultStartDate,
+        endDate || defaultEndDate
+      );
+      
+      res.json({ records });
+    } catch (error) {
+      console.error("Get attendance records error:", error);
+      res.status(500).json({ message: "Failed to get attendance records" });
+    }
+  });
+
+  // Admin: Get all users' attendance records
+  app.get("/api/admin/attendance/records", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+      
+      // Default to current month if no dates provided
+      const now = new Date();
+      const defaultStartDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const defaultEndDate = now.toISOString().split('T')[0];
+      
+      const records = await storage.getAllUsersAttendanceByDateRange(
+        startDate || defaultStartDate,
+        endDate || defaultEndDate
+      );
+      
+      res.json({ records });
+    } catch (error) {
+      console.error("Get all attendance records error:", error);
+      res.status(500).json({ message: "Failed to get attendance records" });
+    }
+  });
+
+  // Admin: Update attendance buffer settings
+  app.put("/api/admin/attendance/buffer", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const schema = z.object({
+        attendanceBufferMinutes: z.number().min(0).max(120), // Max 2 hours buffer
+      });
+
+      const { attendanceBufferMinutes } = schema.parse(req.body);
+      const updatedSettings = await storage.updateCompanySettings({ attendanceBufferMinutes });
+      
+      res.json({ success: true, settings: updatedSettings });
+    } catch (error) {
+      console.error("Update attendance buffer error:", error);
+      res.status(500).json({ message: "Failed to update attendance buffer" });
+    }
+  });
+
   // Serve public objects
   app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
     const filePath = req.params.filePath;

@@ -1,517 +1,274 @@
-import { useState, useRef, useEffect } from "react";
-import { Clock, MapPin, Camera, Calendar, X } from "lucide-react";
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Clock, Calendar, TrendingUp } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { AttendanceRecord } from "@shared/schema";
 
-//todo: remove mock functionality
-const mockAttendanceHistory = [
-  { 
-    date: "2024-01-15", 
-    checkIn: "08:45 AM", 
-    checkOut: "05:30 PM", 
-    status: "present", 
-    photo: null,
-    location: {
-      latitude: 1.3521,
-      longitude: 103.8198,
-      accuracy: 25,
-      address: "Singapore Office, 1 Marina Boulevard, Singapore 018989"
-    }
-  },
-  { 
-    date: "2024-01-14", 
-    checkIn: "09:00 AM", 
-    checkOut: "05:45 PM", 
-    status: "present", 
-    photo: null,
-    location: {
-      latitude: 1.3521,
-      longitude: 103.8198,
-      accuracy: 30,
-      address: "Singapore Office, 1 Marina Boulevard, Singapore 018989"
-    }
-  },
-  { 
-    date: "2024-01-13", 
-    checkIn: "08:50 AM", 
-    checkOut: "05:20 PM", 
-    status: "present", 
-    photo: null,
-    location: {
-      latitude: 1.3521,
-      longitude: 103.8198,
-      accuracy: 20,
-      address: "Singapore Office, 1 Marina Boulevard, Singapore 018989"
-    }
-  },
-];
-
-interface LocationData {
-  latitude: number;
-  longitude: number;
-  accuracy: number;
-  address?: string;
+// Helper function to calculate hours worked (to nearest 0.5 hour)
+function calculateHours(clockInTime: Date | string, clockOutTime: Date | string | null): number {
+  if (!clockOutTime) return 0;
+  
+  const clockIn = new Date(clockInTime);
+  const clockOut = new Date(clockOutTime);
+  const diffMs = clockOut.getTime() - clockIn.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  
+  // Round to nearest 0.5 hour
+  return Math.round(diffHours * 2) / 2;
 }
 
-interface AttendanceRecord {
-  date: string;
-  checkIn: string;
-  checkOut: string | null;
-  status: string;
-  photo: string | null;
-  location: LocationData;
+// Helper function to format time
+function formatTime(date: Date | string | null): string {
+  if (!date) return "-";
+  const d = new Date(date);
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Helper function to format date
+function formatDate(date: Date | string): string {
+  const d = new Date(date);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Helper to get date range for period
+function getDateRange(period: 'daily' | 'weekly' | 'monthly'): { startDate: string; endDate: string } {
+  const now = new Date();
+  const endDate = now.toISOString().split('T')[0];
+  let startDate: string;
+
+  if (period === 'daily') {
+    startDate = endDate;
+  } else if (period === 'weekly') {
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    startDate = weekAgo.toISOString().split('T')[0];
+  } else {
+    // monthly
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    startDate = monthStart.toISOString().split('T')[0];
+  }
+
+  return { startDate, endDate };
 }
 
 export default function AttendancePage() {
-  const [isClockedIn, setIsClockedIn] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
-  const [location, setLocation] = useState<LocationData | null>(null);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-  const [clockInData, setClockInData] = useState<{
-    photo: string;
-    location: LocationData;
-    time: Date;
-  } | null>(null);
-  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>(mockAttendanceHistory);
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
+  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
-  // Update time every second
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Fetch today's attendance
+  const { data: todayData, isLoading: todayLoading } = useQuery<{ record: AttendanceRecord | null }>({
+    queryKey: ['/api/attendance/today'],
+  });
 
-  // Get user location
-  const getUserLocation = async (): Promise<LocationData | null> => {
-    setIsLoadingLocation(true);
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error("Geolocation is not supported by your browser"));
-        }
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        });
-      });
+  // Fetch attendance records based on period
+  const { startDate, endDate } = getDateRange(selectedPeriod);
+  const { data: recordsData, isLoading: recordsLoading } = useQuery<{ records: AttendanceRecord[] }>({
+    queryKey: ['/api/attendance/records', { startDate, endDate }],
+  });
 
-      const locationData: LocationData = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-      };
+  const todayRecord = todayData?.record;
+  const records = recordsData?.records || [];
 
-      // Try to get address from reverse geocoding (using a free API)
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${locationData.latitude}&lon=${locationData.longitude}`
-        );
-        const data = await response.json();
-        locationData.address = data.display_name || "Unknown location";
-      } catch (error) {
-        console.error("Failed to get address:", error);
-        locationData.address = `${locationData.latitude.toFixed(6)}, ${locationData.longitude.toFixed(6)}`;
-      }
+  // Calculate total hours for selected period
+  const totalHours = records.reduce((sum, record) => {
+    return sum + calculateHours(record.clockInTime, record.clockOutTime);
+  }, 0);
 
-      setLocation(locationData);
-      setIsLoadingLocation(false);
-      return locationData;
-    } catch (error) {
-      console.error("Error getting location:", error);
-      setIsLoadingLocation(false);
+  // Clock in mutation
+  const clockInMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/attendance/clock-in", {}),
+    onSuccess: () => {
       toast({
-        title: "Location Error",
-        description: error instanceof Error ? error.message : "Failed to get your location. Please enable location permissions.",
+        title: "Clocked In",
+        description: "Your attendance has been recorded",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/today'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/records'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Clock In Failed",
+        description: error.message || "Failed to clock in",
         variant: "destructive",
       });
-      return null;
-    }
-  };
+    },
+  });
 
-  // Start camera
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 },
-        audio: false,
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (error) {
-      console.error("Error accessing camera:", error);
-      toast({
-        title: "Camera Error",
-        description: "Failed to access camera. Please allow camera permissions.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Stop camera
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-  };
-
-  // Handle clock in button
-  const handleClockAction = async () => {
-    if (!isClockedIn) {
-      setShowCamera(true);
-      await startCamera();
-      await getUserLocation();
-    } else {
-      // Clock out
-      setIsClockedIn(false);
-      setClockInData(null);
+  // Clock out mutation
+  const clockOutMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/attendance/clock-out", {}),
+    onSuccess: () => {
       toast({
         title: "Clocked Out",
-        description: `You clocked out at ${format(new Date(), "hh:mm a")}`,
+        description: "Your attendance has been updated",
       });
-    }
-  };
-
-  // Capture photo from video
-  const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(video, 0, 0);
-        const photoData = canvas.toDataURL("image/jpeg");
-        setCapturedPhoto(photoData);
-      }
-    }
-  };
-
-  // Confirm clock in with photo and location
-  const handleConfirmClockIn = () => {
-    if (capturedPhoto && location) {
-      const now = new Date();
-      const newClockInData = {
-        photo: capturedPhoto,
-        location: location,
-        time: now,
-      };
-      
-      setClockInData(newClockInData);
-      setIsClockedIn(true);
-      setShowCamera(false);
-      stopCamera();
-      setCapturedPhoto(null);
-      
-      // Add to attendance history
-      const newRecord: AttendanceRecord = {
-        date: format(now, "yyyy-MM-dd"),
-        checkIn: format(now, "hh:mm a"),
-        checkOut: null,
-        status: "present",
-        photo: capturedPhoto,
-        location: location,
-      };
-      
-      setAttendanceHistory(prev => [newRecord, ...prev]);
-      
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/today'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/records'] });
+    },
+    onError: (error: any) => {
       toast({
-        title: "Clocked In Successfully",
-        description: `You clocked in at ${format(now, "hh:mm a")}`,
-      });
-    } else if (!capturedPhoto) {
-      toast({
-        title: "Photo Required",
-        description: "Please capture your photo to clock in",
+        title: "Clock Out Failed",
+        description: error.message || "Failed to clock out",
         variant: "destructive",
       });
-    } else if (!location) {
-      toast({
-        title: "Location Required",
-        description: "Please enable location to clock in",
-        variant: "destructive",
-      });
-    }
+    },
+  });
+
+  const handleClockIn = () => {
+    clockInMutation.mutate();
   };
 
-  // Handle retake photo
-  const handleRetake = async () => {
-    setCapturedPhoto(null);
-    // Restart camera if it's not running
-    if (!stream) {
-      await startCamera();
-    }
+  const handleClockOut = () => {
+    clockOutMutation.mutate();
   };
 
-  // Cancel and close camera
-  const handleCancel = () => {
-    setShowCamera(false);
-    stopCamera();
-    setCapturedPhoto(null);
-    setLocation(null);
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
-  }, []);
+  const dailyHours = todayRecord ? calculateHours(todayRecord.clockInTime, todayRecord.clockOutTime) : 0;
+  const isClockedIn = todayRecord && !todayRecord.clockOutTime;
+  const isClockedOut = todayRecord && todayRecord.clockOutTime;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       <div>
-        <h2 className="text-2xl font-semibold mb-2" data-testid="text-page-title">
+        <h1 className="text-2xl md:text-3xl font-semibold mb-2" data-testid="text-attendance-title">
           Attendance
-        </h2>
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Track your daily attendance and view history
+          Track your daily attendance and view your work hours
         </p>
       </div>
 
-      <Card>
-        <CardContent className="p-8">
-          <div className="flex flex-col items-center text-center space-y-6">
-            <div className="text-4xl font-bold font-mono" data-testid="text-current-time">
-              {format(currentTime, "hh:mm:ss a")}
-            </div>
-            <div className="text-sm text-muted-foreground" data-testid="text-current-date">
-              {format(currentTime, "EEEE, MMMM dd, yyyy")}
-            </div>
-
-            {isClockedIn && clockInData && (
-              <div className="space-y-4 w-full max-w-md">
-                <Badge variant="default" className="text-sm px-4 py-1" data-testid="badge-status">
-                  Clocked In at {format(clockInData.time, "hh:mm a")}
-                </Badge>
-                <div className="flex items-center justify-center gap-4">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage src={clockInData.photo} alt="Clock-in photo" />
-                    <AvatarFallback>Photo</AvatarFallback>
-                  </Avatar>
-                  <div className="text-left text-sm">
-                    <div className="flex items-start gap-2">
-                      <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      <span className="text-muted-foreground">
-                        {clockInData.location.address || 
-                          `${clockInData.location.latitude.toFixed(6)}, ${clockInData.location.longitude.toFixed(6)}`}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 ml-6">
-                      Accuracy: ±{Math.round(clockInData.location.accuracy)}m
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {showCamera ? (
-              <div className="w-full max-w-md space-y-4">
-                <div className="relative bg-black rounded-lg overflow-hidden">
-                  {!capturedPhoto ? (
-                    <>
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        className="w-full h-auto"
-                        data-testid="video-camera"
-                      />
-                      <div className="absolute top-2 right-2">
-                        <Button
-                          size="icon"
-                          variant="secondary"
-                          onClick={handleCancel}
-                          data-testid="button-close-camera"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="relative">
-                      <img src={capturedPhoto} alt="Captured" className="w-full h-auto" />
-                      <div className="absolute top-2 right-2">
-                        <Button
-                          size="icon"
-                          variant="secondary"
-                          onClick={handleRetake}
-                          data-testid="button-retake"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <canvas ref={canvasRef} className="hidden" />
-                </div>
-
-                {location && (
-                  <div className="bg-muted/50 p-3 rounded-lg text-left">
-                    <div className="flex items-start gap-2 text-sm">
-                      <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
-                      <div className="flex-1">
-                        <p className="font-medium" data-testid="text-captured-location">
-                          {location.address || `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Accuracy: ±{Math.round(location.accuracy)}m
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {isLoadingLocation && (
-                  <div className="text-sm text-muted-foreground">
-                    Getting your location...
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  {!capturedPhoto ? (
-                    <>
-                      <Button
-                        onClick={capturePhoto}
-                        className="flex-1"
-                        disabled={!stream}
-                        data-testid="button-capture"
-                      >
-                        <Camera className="mr-2 h-4 w-4" />
-                        Capture Photo
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={handleCancel}
-                        data-testid="button-cancel-camera"
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        onClick={handleConfirmClockIn}
-                        className="flex-1"
-                        disabled={!location}
-                        data-testid="button-confirm-clock-in"
-                      >
-                        <Clock className="mr-2 h-4 w-4" />
-                        Confirm & Clock In
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={handleRetake}
-                        data-testid="button-retake-photo"
-                      >
-                        Retake
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <Button
-                size="lg"
-                onClick={handleClockAction}
-                className="w-full max-w-xs h-14 text-lg"
-                variant={isClockedIn ? "destructive" : "default"}
-                data-testid="button-clock-action"
-              >
-                <Clock className="mr-2 h-5 w-5" />
-                {isClockedIn ? "Clock Out" : "Clock In"}
-              </Button>
-            )}
-
-            {/* Show current location when not clocked in and not showing camera */}
-            {!isClockedIn && !showCamera && location && (
-              <div className="w-full max-w-md bg-muted/50 p-3 rounded-lg">
-                <div className="flex items-start gap-2 text-sm">
-                  <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
-                  <div className="flex-1 text-left">
-                    <p className="font-medium" data-testid="text-current-location">
-                      {location.address || `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Accuracy: ±{Math.round(location.accuracy)}m
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
+      {/* Clock In/Out Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Attendance History
+            <Clock className="h-5 w-5" />
+            Today's Attendance
           </CardTitle>
+          <CardDescription>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {attendanceHistory.map((record, index) => (
-              <div
-                key={index}
-                className="p-4 rounded-md bg-muted/50 space-y-2"
-                data-testid={`row-attendance-${index}`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3 flex-1">
-                    {record.photo && (
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={record.photo} alt="Check-in photo" />
-                        <AvatarFallback>📸</AvatarFallback>
-                      </Avatar>
-                    )}
-                    <div className="flex-1">
-                      <p className="font-medium" data-testid={`text-date-${index}`}>
-                        {format(new Date(record.date), "EEE, MMM dd, yyyy")}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {record.checkIn} {record.checkOut ? `- ${record.checkOut}` : '(In Progress)'}
-                      </p>
-                      {record.location && (
-                        <div className="flex items-start gap-1 mt-2 text-sm">
-                          <MapPin className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-primary" />
-                          <div className="flex-1">
-                            <p className="text-muted-foreground text-xs" data-testid={`text-location-${index}`}>
-                              {record.location.address || 
-                                `${record.location.latitude.toFixed(6)}, ${record.location.longitude.toFixed(6)}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Accuracy: ±{Math.round(record.location.accuracy)}m
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <Badge variant="default" data-testid={`badge-status-${index}`}>
-                    {record.status === "present" ? "Present" : record.status}
-                  </Badge>
+        <CardContent className="space-y-4">
+          {todayLoading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Clock In</p>
+                  <p className="text-lg font-semibold" data-testid="text-clock-in-time">
+                    {formatTime(todayRecord?.clockInTime || null)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Clock Out</p>
+                  <p className="text-lg font-semibold" data-testid="text-clock-out-time">
+                    {formatTime(todayRecord?.clockOutTime || null)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Hours Today</p>
+                  <p className="text-lg font-semibold" data-testid="text-daily-hours">
+                    {dailyHours.toFixed(1)} hrs
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleClockIn}
+                  disabled={isClockedIn || isClockedOut || clockInMutation.isPending}
+                  className="flex-1"
+                  data-testid="button-clock-in"
+                >
+                  {clockInMutation.isPending ? "Clocking In..." : "Clock In"}
+                </Button>
+                <Button
+                  onClick={handleClockOut}
+                  disabled={!isClockedIn || clockOutMutation.isPending}
+                  variant="outline"
+                  className="flex-1"
+                  data-testid="button-clock-out"
+                >
+                  {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
+                </Button>
+              </div>
+
+              {isClockedOut && (
+                <p className="text-sm text-muted-foreground text-center">
+                  You've completed your attendance for today
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Attendance Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Hours Summary
+          </CardTitle>
+          <CardDescription>View your work hours by period</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={selectedPeriod} onValueChange={(v) => setSelectedPeriod(v as any)}>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="daily" data-testid="tab-daily">Daily</TabsTrigger>
+              <TabsTrigger value="weekly" data-testid="tab-weekly">Weekly</TabsTrigger>
+              <TabsTrigger value="monthly" data-testid="tab-monthly">Monthly</TabsTrigger>
+            </TabsList>
+
+            <div className="mt-6">
+              <div className="text-center space-y-2 mb-6">
+                <p className="text-4xl font-bold text-primary" data-testid="text-total-hours">
+                  {totalHours.toFixed(1)} hrs
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Total hours {selectedPeriod === 'daily' ? 'today' : selectedPeriod === 'weekly' ? 'this week' : 'this month'}
+                </p>
+              </div>
+
+              {recordsLoading ? (
+                <p className="text-sm text-muted-foreground text-center">Loading records...</p>
+              ) : records.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center">
+                  No attendance records for this period
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {records.map((record) => (
+                    <div
+                      key={record.id}
+                      className="flex items-center justify-between p-3 rounded-md bg-muted/50"
+                      data-testid={`attendance-record-${record.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">{formatDate(record.date)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatTime(record.clockInTime)} - {formatTime(record.clockOutTime)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">
+                          {calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

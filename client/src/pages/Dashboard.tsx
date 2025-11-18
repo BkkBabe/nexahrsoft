@@ -22,7 +22,7 @@ export default function Dashboard() {
         <h2 className="text-2xl md:text-3xl font-semibold mb-6" data-testid="text-dashboard-title">
           What do you want to do today?
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-3 gap-3 md:gap-6">
           {menuItems.map((item) => (
             <MenuCard
               key={item.title}

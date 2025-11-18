@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -21,7 +21,17 @@ export const companySettings = pgTable("company_settings", {
   companyName: text("company_name").notNull().default("NexaHR"),
   logoUrl: text("logo_url"), // URL to company logo in object storage
   faviconUrl: text("favicon_url"), // URL to favicon in object storage
+  attendanceBufferMinutes: integer("attendance_buffer_minutes").notNull().default(15), // Max minutes buffer for clock in/out
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const attendanceRecords = pgTable("attendance_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  date: text("date").notNull(), // Format: YYYY-MM-DD for easy querying
+  clockInTime: timestamp("clock_in_time").notNull(),
+  clockOutTime: timestamp("clock_out_time"), // Nullable - user might still be clocked in
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -59,3 +69,22 @@ export const insertCompanySettingsSchema = createInsertSchema(companySettings).o
 
 export type InsertCompanySettings = z.infer<typeof insertCompanySettingsSchema>;
 export type CompanySettings = typeof companySettings.$inferSelect;
+
+export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const clockInSchema = z.object({
+  timestamp: z.string().datetime(), // ISO 8601 datetime string
+});
+
+export const clockOutSchema = z.object({
+  recordId: z.string().uuid(),
+  timestamp: z.string().datetime(), // ISO 8601 datetime string
+});
+
+export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema>;
+export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
+export type ClockIn = z.infer<typeof clockInSchema>;
+export type ClockOut = z.infer<typeof clockOutSchema>;

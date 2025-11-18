@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock } from "lucide-react";
 import type { CompanySettings } from "@shared/schema";
 
 export default function AdminSettingsPage() {
@@ -15,10 +15,18 @@ export default function AdminSettingsPage() {
   const [faviconFile, setFaviconFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
+  const [attendanceBufferMinutes, setAttendanceBufferMinutes] = useState<number>(15);
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
   });
+
+  // Update state when settings change
+  useEffect(() => {
+    if (settings?.attendanceBufferMinutes !== undefined) {
+      setAttendanceBufferMinutes(settings.attendanceBufferMinutes);
+    }
+  }, [settings]);
 
   const uploadLogoMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -178,6 +186,32 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const updateAttendanceBufferMutation = useMutation({
+    mutationFn: async (minutes: number) => {
+      await apiRequest("PUT", "/api/admin/attendance/buffer", {
+        attendanceBufferMinutes: minutes,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });
+      toast({
+        title: "Success",
+        description: "Attendance buffer updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUpdateAttendanceBuffer = () => {
+    updateAttendanceBufferMutation.mutate(attendanceBufferMinutes);
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -324,6 +358,48 @@ export default function AdminSettingsPage() {
             >
               <Upload className="h-4 w-4 mr-2" />
               {uploadFaviconMutation.isPending ? "Uploading..." : "Upload Favicon"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Attendance Settings
+            </CardTitle>
+            <CardDescription>
+              Configure attendance tracking settings for your organization
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="attendance-buffer">
+                Clock In/Out Buffer (minutes)
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Maximum minutes allowance before/after scheduled time
+              </p>
+              <Input
+                id="attendance-buffer"
+                type="number"
+                min="0"
+                max="120"
+                value={attendanceBufferMinutes}
+                onChange={(e) => setAttendanceBufferMinutes(parseInt(e.target.value) || 0)}
+                data-testid="input-attendance-buffer"
+              />
+              <p className="text-xs text-muted-foreground">
+                Current buffer: {attendanceBufferMinutes} minutes (Range: 0-120)
+              </p>
+            </div>
+
+            <Button
+              onClick={handleUpdateAttendanceBuffer}
+              disabled={updateAttendanceBufferMutation.isPending}
+              data-testid="button-update-buffer"
+            >
+              {updateAttendanceBufferMutation.isPending ? "Updating..." : "Update Buffer"}
             </Button>
           </CardContent>
         </Card>
