@@ -34,6 +34,28 @@ export const attendanceRecords = pgTable("attendance_records", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const userSessions = pgTable("user_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // Internal DB ID
+  sessionId: text("session_id").notNull().unique(), // Express session ID
+  userId: varchar("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastSeen: timestamp("last_seen").notNull().defaultNow(),
+  userAgent: text("user_agent"), // Browser/device info
+  ipAddress: text("ip_address"), // IP address
+  revokedAt: timestamp("revoked_at"), // Null if active, timestamp if revoked
+});
+
+export const loginChallenges = pgTable("login_challenges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  challengeToken: text("challenge_token").notNull().unique(), // Signed token for validation
+  ipAddress: text("ip_address"), // IP that initiated login
+  userAgent: text("user_agent"), // Browser that initiated login
+  expiresAt: timestamp("expires_at").notNull(), // Short-lived (2 minutes)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  usedAt: timestamp("used_at"), // Null if not used, timestamp if consumed
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -88,3 +110,19 @@ export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type ClockIn = z.infer<typeof clockInSchema>;
 export type ClockOut = z.infer<typeof clockOutSchema>;
+
+export const insertUserSessionSchema = createInsertSchema(userSessions).omit({
+  id: true,
+  createdAt: true,
+  lastSeen: true,
+});
+
+export const insertLoginChallengeSchema = createInsertSchema(loginChallenges).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertLoginChallenge = z.infer<typeof insertLoginChallengeSchema>;
+export type LoginChallenge = typeof loginChallenges.$inferSelect;
