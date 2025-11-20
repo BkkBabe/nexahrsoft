@@ -129,3 +129,69 @@ export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
 export type UserSession = typeof userSessions.$inferSelect;
 export type InsertLoginChallenge = z.infer<typeof insertLoginChallengeSchema>;
 export type LoginChallenge = typeof loginChallenges.$inferSelect;
+
+// Payslip Management
+export const payslipRecords = pgTable("payslip_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  periodStart: text("period_start").notNull(), // Format: YYYY-MM-DD
+  periodEnd: text("period_end").notNull(), // Format: YYYY-MM-DD
+  hourlyWage: integer("hourly_wage").notNull(), // Cents (e.g., 2500 = $25.00)
+  totalHours: integer("total_hours").notNull(), // Total hours in half-hour increments (e.g., 80 = 40 hours)
+  totalPay: integer("total_pay").notNull(), // Cents
+  status: text("status").notNull().default("draft"), // 'draft' or 'approved'
+  approvedAt: timestamp("approved_at"), // Nullable until approved
+  approvedBy: varchar("approved_by").references(() => users.id), // Admin who approved
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPayslipRecordSchema = createInsertSchema(payslipRecords).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPayslipRecord = z.infer<typeof insertPayslipRecordSchema>;
+export type PayslipRecord = typeof payslipRecords.$inferSelect;
+
+// Leave Management
+export const leaveBalances = pgTable("leave_balances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  leaveType: text("leave_type").notNull(), // 'annual', 'sick', 'unpaid', etc.
+  totalDays: integer("total_days").notNull().default(0), // Total entitled days
+  usedDays: integer("used_days").notNull().default(0), // Days already used
+  year: integer("year").notNull(), // Year for this balance
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const leaveApplications = pgTable("leave_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  leaveType: text("leave_type").notNull(), // 'annual', 'sick', 'unpaid', etc.
+  startDate: text("start_date").notNull(), // Format: YYYY-MM-DD
+  endDate: text("end_date").notNull(), // Format: YYYY-MM-DD
+  totalDays: integer("total_days").notNull(), // Number of days requested
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected'
+  reviewedBy: varchar("reviewed_by").references(() => users.id), // Admin who reviewed
+  reviewedAt: timestamp("reviewed_at"), // When it was reviewed
+  reviewComments: text("review_comments"), // Admin's comments
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertLeaveBalanceSchema = createInsertSchema(leaveBalances).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLeaveApplicationSchema = createInsertSchema(leaveApplications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertLeaveBalance = z.infer<typeof insertLeaveBalanceSchema>;
+export type LeaveBalance = typeof leaveBalances.$inferSelect;
+export type InsertLeaveApplication = z.infer<typeof insertLeaveApplicationSchema>;
+export type LeaveApplication = typeof leaveApplications.$inferSelect;

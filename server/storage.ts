@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications } from "@shared/schema";
 import { eq, or, and, gte, lte, desc, isNull, not } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -38,6 +38,28 @@ export interface IStorage {
   getLoginChallenge(challengeToken: string): Promise<LoginChallenge | undefined>;
   useLoginChallenge(challengeId: string): Promise<void>;
   cleanupExpiredChallenges(): Promise<void>;
+  
+  // Payslip methods
+  createPayslip(payslip: InsertPayslipRecord): Promise<PayslipRecord>;
+  updatePayslip(id: string, updates: Partial<PayslipRecord>): Promise<PayslipRecord | undefined>;
+  getPayslipById(id: string): Promise<PayslipRecord | undefined>;
+  getPayslipsByUser(userId: string): Promise<PayslipRecord[]>;
+  getApprovedPayslipsByUser(userId: string): Promise<PayslipRecord[]>;
+  getAllPayslips(): Promise<PayslipRecord[]>;
+  
+  // Leave management methods
+  createOrUpdateLeaveBalance(balance: InsertLeaveBalance): Promise<LeaveBalance>;
+  getLeaveBalance(userId: string, leaveType: string, year: number): Promise<LeaveBalance | undefined>;
+  getUserLeaveBalances(userId: string, year: number): Promise<LeaveBalance[]>;
+  getAllLeaveBalances(year: number): Promise<LeaveBalance[]>;
+  updateLeaveUsedDays(id: string, usedDays: number): Promise<LeaveBalance | undefined>;
+  
+  createLeaveApplication(application: InsertLeaveApplication): Promise<LeaveApplication>;
+  updateLeaveApplication(id: string, updates: Partial<LeaveApplication>): Promise<LeaveApplication | undefined>;
+  getLeaveApplicationById(id: string): Promise<LeaveApplication | undefined>;
+  getUserLeaveApplications(userId: string): Promise<LeaveApplication[]>;
+  getAllLeaveApplications(): Promise<LeaveApplication[]>;
+  getPendingLeaveApplications(): Promise<LeaveApplication[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -185,6 +207,76 @@ export class MemStorage implements IStorage {
 
   async cleanupExpiredChallenges(): Promise<void> {
     throw new Error("MemStorage login challenge not implemented");
+  }
+
+  // Payslip methods - stub implementations
+  async createPayslip(payslip: InsertPayslipRecord): Promise<PayslipRecord> {
+    throw new Error("MemStorage payslip not implemented");
+  }
+
+  async updatePayslip(id: string, updates: Partial<PayslipRecord>): Promise<PayslipRecord | undefined> {
+    throw new Error("MemStorage payslip not implemented");
+  }
+
+  async getPayslipById(id: string): Promise<PayslipRecord | undefined> {
+    throw new Error("MemStorage payslip not implemented");
+  }
+
+  async getPayslipsByUser(userId: string): Promise<PayslipRecord[]> {
+    throw new Error("MemStorage payslip not implemented");
+  }
+
+  async getApprovedPayslipsByUser(userId: string): Promise<PayslipRecord[]> {
+    throw new Error("MemStorage payslip not implemented");
+  }
+
+  async getAllPayslips(): Promise<PayslipRecord[]> {
+    throw new Error("MemStorage payslip not implemented");
+  }
+
+  // Leave management methods - stub implementations
+  async createOrUpdateLeaveBalance(balance: InsertLeaveBalance): Promise<LeaveBalance> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async getLeaveBalance(userId: string, leaveType: string, year: number): Promise<LeaveBalance | undefined> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async getUserLeaveBalances(userId: string, year: number): Promise<LeaveBalance[]> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async getAllLeaveBalances(year: number): Promise<LeaveBalance[]> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async updateLeaveUsedDays(id: string, usedDays: number): Promise<LeaveBalance | undefined> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async createLeaveApplication(application: InsertLeaveApplication): Promise<LeaveApplication> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async updateLeaveApplication(id: string, updates: Partial<LeaveApplication>): Promise<LeaveApplication | undefined> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async getLeaveApplicationById(id: string): Promise<LeaveApplication | undefined> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async getUserLeaveApplications(userId: string): Promise<LeaveApplication[]> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async getAllLeaveApplications(): Promise<LeaveApplication[]> {
+    throw new Error("MemStorage leave not implemented");
+  }
+
+  async getPendingLeaveApplications(): Promise<LeaveApplication[]> {
+    throw new Error("MemStorage leave not implemented");
   }
 }
 
@@ -405,6 +497,171 @@ export class PgStorage implements IStorage {
     const now = new Date();
     await db.delete(loginChallenges)
       .where(lte(loginChallenges.expiresAt, now));
+  }
+
+  // Payslip methods
+  async createPayslip(payslip: InsertPayslipRecord): Promise<PayslipRecord> {
+    const [record] = await db.insert(payslipRecords)
+      .values(payslip)
+      .returning();
+    return record;
+  }
+
+  async updatePayslip(id: string, updates: Partial<PayslipRecord>): Promise<PayslipRecord | undefined> {
+    const [updated] = await db.update(payslipRecords)
+      .set(updates)
+      .where(eq(payslipRecords.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getPayslipById(id: string): Promise<PayslipRecord | undefined> {
+    const [record] = await db.select()
+      .from(payslipRecords)
+      .where(eq(payslipRecords.id, id));
+    return record;
+  }
+
+  async getPayslipsByUser(userId: string): Promise<PayslipRecord[]> {
+    return await db.select()
+      .from(payslipRecords)
+      .where(eq(payslipRecords.userId, userId))
+      .orderBy(desc(payslipRecords.createdAt));
+  }
+
+  async getApprovedPayslipsByUser(userId: string): Promise<PayslipRecord[]> {
+    return await db.select()
+      .from(payslipRecords)
+      .where(
+        and(
+          eq(payslipRecords.userId, userId),
+          eq(payslipRecords.status, "approved")
+        )
+      )
+      .orderBy(desc(payslipRecords.createdAt));
+  }
+
+  async getAllPayslips(): Promise<PayslipRecord[]> {
+    return await db.select()
+      .from(payslipRecords)
+      .orderBy(desc(payslipRecords.createdAt));
+  }
+
+  // Leave management methods
+  async createOrUpdateLeaveBalance(balance: InsertLeaveBalance): Promise<LeaveBalance> {
+    // Check if balance already exists
+    const [existing] = await db.select()
+      .from(leaveBalances)
+      .where(
+        and(
+          eq(leaveBalances.userId, balance.userId),
+          eq(leaveBalances.leaveType, balance.leaveType),
+          eq(leaveBalances.year, balance.year)
+        )
+      );
+
+    if (existing) {
+      // Update existing balance
+      const [updated] = await db.update(leaveBalances)
+        .set({
+          totalDays: balance.totalDays,
+          updatedAt: new Date(),
+        })
+        .where(eq(leaveBalances.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new balance
+      const [created] = await db.insert(leaveBalances)
+        .values(balance)
+        .returning();
+      return created;
+    }
+  }
+
+  async getLeaveBalance(userId: string, leaveType: string, year: number): Promise<LeaveBalance | undefined> {
+    const [balance] = await db.select()
+      .from(leaveBalances)
+      .where(
+        and(
+          eq(leaveBalances.userId, userId),
+          eq(leaveBalances.leaveType, leaveType),
+          eq(leaveBalances.year, year)
+        )
+      );
+    return balance;
+  }
+
+  async getUserLeaveBalances(userId: string, year: number): Promise<LeaveBalance[]> {
+    return await db.select()
+      .from(leaveBalances)
+      .where(
+        and(
+          eq(leaveBalances.userId, userId),
+          eq(leaveBalances.year, year)
+        )
+      )
+      .orderBy(leaveBalances.leaveType);
+  }
+
+  async getAllLeaveBalances(year: number): Promise<LeaveBalance[]> {
+    return await db.select()
+      .from(leaveBalances)
+      .where(eq(leaveBalances.year, year))
+      .orderBy(leaveBalances.userId, leaveBalances.leaveType);
+  }
+
+  async updateLeaveUsedDays(id: string, usedDays: number): Promise<LeaveBalance | undefined> {
+    const [updated] = await db.update(leaveBalances)
+      .set({
+        usedDays,
+        updatedAt: new Date(),
+      })
+      .where(eq(leaveBalances.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createLeaveApplication(application: InsertLeaveApplication): Promise<LeaveApplication> {
+    const [created] = await db.insert(leaveApplications)
+      .values(application)
+      .returning();
+    return created;
+  }
+
+  async updateLeaveApplication(id: string, updates: Partial<LeaveApplication>): Promise<LeaveApplication | undefined> {
+    const [updated] = await db.update(leaveApplications)
+      .set(updates)
+      .where(eq(leaveApplications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getLeaveApplicationById(id: string): Promise<LeaveApplication | undefined> {
+    const [application] = await db.select()
+      .from(leaveApplications)
+      .where(eq(leaveApplications.id, id));
+    return application;
+  }
+
+  async getUserLeaveApplications(userId: string): Promise<LeaveApplication[]> {
+    return await db.select()
+      .from(leaveApplications)
+      .where(eq(leaveApplications.userId, userId))
+      .orderBy(desc(leaveApplications.createdAt));
+  }
+
+  async getAllLeaveApplications(): Promise<LeaveApplication[]> {
+    return await db.select()
+      .from(leaveApplications)
+      .orderBy(desc(leaveApplications.createdAt));
+  }
+
+  async getPendingLeaveApplications(): Promise<LeaveApplication[]> {
+    return await db.select()
+      .from(leaveApplications)
+      .where(eq(leaveApplications.status, "pending"))
+      .orderBy(leaveApplications.createdAt);
   }
 }
 
