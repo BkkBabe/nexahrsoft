@@ -384,6 +384,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== GEOCODING ENDPOINTS ====================
+  
+  // Simple in-memory cache for geocoding results
+  const geocodeCache = new Map<string, { address: string, timestamp: number }>();
+  const GEOCODE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Reverse geocode coordinates to address
+  app.get("/api/geocode/reverse", async (req: Request, res: Response) => {
+    const { lat, lon } = req.query;
+
+    if (!lat || !lon) {
+      return res.status(400).json({ message: "Latitude and longitude required" });
+    }
+
+    try {
+      const latitude = parseFloat(lat as string);
+      const longitude = parseFloat(lon as string);
+
+      if (isNaN(latitude) || isNaN(longitude)) {
+        return res.status(400).json({ message: "Invalid coordinates" });
+      }
+
+      // Round coordinates to 5 decimal places for cache key (~1 meter precision)
+      const cacheKey = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
+
+      // Check cache
+      const cached = geocodeCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < GEOCODE_CACHE_TTL) {
+        return res.json({ 
+          coordinates: `${latitude}, ${longitude}`,
+          address: cached.address,
+          cached: true
+        });
+      }
+
+      // Call Nominatim API for reverse geocoding
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'NexaHR HRMS App'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Geocoding service unavailable");
+      }
+
+      const data = await response.json();
+      const address = data.display_name || `${latitude}, ${longitude}`;
+
+      // Cache the result
+      geocodeCache.set(cacheKey, { address, timestamp: Date.now() });
+
+      res.json({ 
+        coordinates: `${latitude}, ${longitude}`,
+        address,
+        cached: false
+      });
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      res.status(500).json({ 
+        message: "Failed to geocode coordinates",
+        coordinates: `${lat}, ${lon}`
+      });
+    }
+  });
+
   // ==================== ATTENDANCE ENDPOINTS ====================
   
   // Clock in (supports multiple clock-ins per day)

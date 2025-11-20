@@ -75,6 +75,38 @@ export default function AttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Location display component
+  const LocationDisplay = ({ lat, lon }: { lat: string; lon: string }) => {
+    const { data, isLoading } = useQuery<{ coordinates: string; address: string }>({
+      queryKey: ['/api/geocode/reverse', { lat, lon }],
+      enabled: !!lat && !!lon,
+      staleTime: 24 * 60 * 60 * 1000, // Cache for 24 hours
+    });
+
+    if (isLoading) {
+      return (
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <MapPin className="h-3 w-3" />
+          {parseFloat(lat).toFixed(4)}, {parseFloat(lon).toFixed(4)}
+        </p>
+      );
+    }
+
+    return (
+      <div className="text-xs text-muted-foreground space-y-1">
+        <p className="flex items-center gap-1">
+          <MapPin className="h-3 w-3" />
+          {parseFloat(lat).toFixed(4)}, {parseFloat(lon).toFixed(4)}
+        </p>
+        {data?.address && (
+          <p className="pl-4 text-xs">
+            {data.address}
+          </p>
+        )}
+      </div>
+    );
+  };
+
   // Fetch today's attendance records
   const { data: todayData, isLoading: todayLoading } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/attendance/today'],
@@ -207,7 +239,7 @@ export default function AttendancePage() {
     },
     onError: (error: any) => {
       // Check if requires confirmation
-      if (error.message && error.message.includes("less than 5 minutes")) {
+      if (error.requiresConfirmation || (error.message && error.message.includes("less than 5 minutes"))) {
         setConfirmationMessage(error.message);
         setShowConfirmation(true);
       } else {
@@ -320,25 +352,30 @@ export default function AttendancePage() {
                   {todayRecords.map((record, index) => (
                     <div
                       key={record.id}
-                      className="flex items-center justify-between p-3 rounded-md bg-muted/30"
+                      className="p-3 rounded-md bg-muted/30 space-y-2"
                       data-testid={`today-record-${index}`}
                     >
-                      <div>
-                        <p className="text-sm font-medium">
-                          Clock-in #{index + 1}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatTime(record.clockInTime)} - {formatTime(record.clockOutTime)}
-                        </p>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">
+                            Clock-in #{index + 1}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatTime(record.clockInTime)} - {formatTime(record.clockOutTime)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">
+                            {calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs
+                          </p>
+                          {!record.clockOutTime && (
+                            <p className="text-xs text-green-600">Active</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold">
-                          {calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs
-                        </p>
-                        {!record.clockOutTime && (
-                          <p className="text-xs text-green-600">Active</p>
-                        )}
-                      </div>
+                      {record.latitude && record.longitude && (
+                        <LocationDisplay lat={record.latitude} lon={record.longitude} />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -472,10 +509,7 @@ export default function AttendancePage() {
                             {formatTime(record.clockInTime)} - {formatTime(record.clockOutTime)}
                           </p>
                           {record.latitude && record.longitude && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              {parseFloat(record.latitude).toFixed(4)}, {parseFloat(record.longitude).toFixed(4)}
-                            </p>
+                            <LocationDisplay lat={record.latitude} lon={record.longitude} />
                           )}
                         </div>
                       </div>
