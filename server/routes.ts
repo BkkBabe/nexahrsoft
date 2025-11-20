@@ -632,6 +632,360 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== PAYSLIP ENDPOINTS ====================
+
+  // Helper function to calculate hours from attendance records (rounded to nearest 0.5)
+  function calculateTotalHoursFromRecords(records: any[]): number {
+    const totalHours = records.reduce((sum, record) => {
+      if (record.clockOutTime) {
+        const hours = (new Date(record.clockOutTime).getTime() - new Date(record.clockInTime).getTime()) / (1000 * 60 * 60);
+        return sum + Math.round(hours * 2) / 2; // Round to nearest 0.5
+      }
+      return sum;
+    }, 0);
+    return totalHours;
+  }
+
+  // Admin: Calculate hours for payslip generation
+  app.get("/api/admin/payslips/calculate", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { userId, startDate, endDate } = req.query as { userId?: string; startDate?: string; endDate?: string };
+      
+      if (!userId || !startDate || !endDate) {
+        return res.status(400).json({ message: "userId, startDate, and endDate are required" });
+      }
+
+      const records = await storage.getAttendanceRecordsByUserAndDateRange(userId, startDate, endDate);
+      const totalHours = calculateTotalHoursFromRecords(records);
+
+      res.json({
+        userId,
+        startDate,
+        endDate,
+        totalHours,
+        recordCount: records.length,
+      });
+    } catch (error) {
+      console.error("Calculate hours error:", error);
+      res.status(500).json({ message: "Failed to calculate hours" });
+    }
+  });
+
+  // Admin: Get all payslips
+  app.get("/api/admin/payslips", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const payslips = await storage.getAllPayslips();
+      res.json({ payslips });
+    } catch (error) {
+      console.error("Get all payslips error:", error);
+      res.status(500).json({ message: "Failed to get payslips" });
+    }
+  });
+
+  // Admin: Create payslip
+  app.post("/api/admin/payslips", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const schema = z.object({
+        userId: z.string(),
+        periodStart: z.string(),
+        periodEnd: z.string(),
+        hourlyWage: z.number().min(0), // Cents
+      });
+
+      const data = schema.parse(req.body);
+
+      // Calculate total hours from attendance records
+      const records = await storage.getAttendanceRecordsByUserAndDateRange(
+        data.userId,
+        data.periodStart,
+        data.periodEnd
+      );
+      const totalHours = calculateTotalHoursFromRecords(records);
+      
+      // Convert hours to half-hour increments (e.g., 8.5 hours = 17 half-hours)
+      const totalHalfHours = Math.round(totalHours * 2);
+      const totalPay = (data.hourlyWage * totalHalfHours) / 2; // Divide by 2 since wage is per hour but we have half-hours
+
+      const payslip = await storage.createPayslip({
+        userId: data.userId,
+        periodStart: data.periodStart,
+        periodEnd: data.periodEnd,
+        hourlyWage: data.hourlyWage,
+        totalHours: totalHalfHours,
+        totalPay: Math.round(totalPay),
+        status: "draft",
+        approvedAt: null,
+        approvedBy: null,
+      });
+
+      res.json({ success: true, payslip });
+    } catch (error) {
+      console.error("Create payslip error:", error);
+      res.status(500).json({ message: "Failed to create payslip" });
+    }
+  });
+
+  // Admin: Approve payslip
+  app.patch("/api/admin/payslips/:id/approve", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { id } = req.params;
+      const adminId = req.session.userId!;
+
+      const payslip = await storage.updatePayslip(id, {
+        status: "approved",
+        approvedAt: new Date(),
+        approvedBy: adminId,
+      });
+
+      if (!payslip) {
+        return res.status(404).json({ message: "Payslip not found" });
+      }
+
+      res.json({ success: true, payslip });
+    } catch (error) {
+      console.error("Approve payslip error:", error);
+      res.status(500).json({ message: "Failed to approve payslip" });
+    }
+  });
+
+  // User: Get approved payslips
+  app.get("/api/payslips", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const payslips = await storage.getApprovedPayslipsByUser(userId);
+      res.json({ payslips });
+    } catch (error) {
+      console.error("Get user payslips error:", error);
+      res.status(500).json({ message: "Failed to get payslips" });
+    }
+  });
+
+  // ==================== LEAVE MANAGEMENT ENDPOINTS ====================
+
+  // Admin: Get all leave balances
+  app.get("/api/admin/leave/balances", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { year } = req.query as { year?: string };
+      const currentYear = year ? parseInt(year) : new Date().getFullYear();
+      const balances = await storage.getAllLeaveBalances(currentYear);
+      res.json({ balances });
+    } catch (error) {
+      console.error("Get all leave balances error:", error);
+      res.status(500).json({ message: "Failed to get leave balances" });
+    }
+  });
+
+  // Admin: Create or update leave balance
+  app.post("/api/admin/leave/balances", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const schema = z.object({
+        userId: z.string(),
+        leaveType: z.string(),
+        totalDays: z.number().min(0),
+        year: z.number().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const year = data.year || new Date().getFullYear();
+
+      const balance = await storage.createOrUpdateLeaveBalance({
+        userId: data.userId,
+        leaveType: data.leaveType,
+        totalDays: data.totalDays,
+        usedDays: 0,
+        year,
+      });
+
+      res.json({ success: true, balance });
+    } catch (error) {
+      console.error("Create/update leave balance error:", error);
+      res.status(500).json({ message: "Failed to update leave balance" });
+    }
+  });
+
+  // Admin: Get all leave applications
+  app.get("/api/admin/leave/applications", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const applications = await storage.getAllLeaveApplications();
+      res.json({ applications });
+    } catch (error) {
+      console.error("Get all leave applications error:", error);
+      res.status(500).json({ message: "Failed to get leave applications" });
+    }
+  });
+
+  // Admin: Review leave application (approve/reject)
+  app.patch("/api/admin/leave/applications/:id", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { id } = req.params;
+      const schema = z.object({
+        status: z.enum(["approved", "rejected"]),
+        reviewComments: z.string().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const adminId = req.session.userId!;
+
+      const application = await storage.getLeaveApplicationById(id);
+      if (!application) {
+        return res.status(404).json({ message: "Leave application not found" });
+      }
+
+      // If approved, update leave balance
+      if (data.status === "approved") {
+        const balance = await storage.getLeaveBalance(
+          application.userId,
+          application.leaveType,
+          new Date().getFullYear()
+        );
+
+        if (balance) {
+          await storage.updateLeaveUsedDays(
+            balance.id,
+            balance.usedDays + application.totalDays
+          );
+        }
+      }
+
+      const updated = await storage.updateLeaveApplication(id, {
+        status: data.status,
+        reviewedBy: adminId,
+        reviewedAt: new Date(),
+        reviewComments: data.reviewComments || null,
+      });
+
+      res.json({ success: true, application: updated });
+    } catch (error) {
+      console.error("Review leave application error:", error);
+      res.status(500).json({ message: "Failed to review leave application" });
+    }
+  });
+
+  // User: Get leave balances
+  app.get("/api/leave/balances", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const { year } = req.query as { year?: string };
+      const currentYear = year ? parseInt(year) : new Date().getFullYear();
+      
+      const balances = await storage.getUserLeaveBalances(userId, currentYear);
+      res.json({ balances });
+    } catch (error) {
+      console.error("Get user leave balances error:", error);
+      res.status(500).json({ message: "Failed to get leave balances" });
+    }
+  });
+
+  // User: Get leave applications
+  app.get("/api/leave/applications", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const applications = await storage.getUserLeaveApplications(userId);
+      res.json({ applications });
+    } catch (error) {
+      console.error("Get user leave applications error:", error);
+      res.status(500).json({ message: "Failed to get leave applications" });
+    }
+  });
+
+  // User: Submit leave application
+  app.post("/api/leave/applications", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+
+    try {
+      const schema = z.object({
+        leaveType: z.string(),
+        startDate: z.string(),
+        endDate: z.string(),
+        totalDays: z.number().min(1),
+        reason: z.string().min(1),
+      });
+
+      const data = schema.parse(req.body);
+      const userId = req.session.userId;
+
+      // Check if user has enough leave balance
+      const balance = await storage.getLeaveBalance(
+        userId,
+        data.leaveType,
+        new Date().getFullYear()
+      );
+
+      if (balance) {
+        const remainingDays = balance.totalDays - balance.usedDays;
+        if (data.totalDays > remainingDays) {
+          return res.status(400).json({ 
+            message: `Insufficient leave balance. You have ${remainingDays} days remaining.` 
+          });
+        }
+      }
+
+      const application = await storage.createLeaveApplication({
+        userId,
+        leaveType: data.leaveType,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        totalDays: data.totalDays,
+        reason: data.reason,
+        status: "pending",
+        reviewedBy: null,
+        reviewedAt: null,
+        reviewComments: null,
+      });
+
+      res.json({ success: true, application });
+    } catch (error) {
+      console.error("Submit leave application error:", error);
+      res.status(500).json({ message: "Failed to submit leave application" });
+    }
+  });
+
   // Serve public objects
   app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
     const filePath = req.params.filePath;
