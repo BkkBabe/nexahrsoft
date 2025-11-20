@@ -1,153 +1,141 @@
-import { Download, DollarSign } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { DollarSign, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useState } from "react";
-
-//todo: remove mock functionality
-const mockPayslip = {
-  month: "January 2024",
-  employeeId: "EMP001",
-  employeeName: "Faith Jr. Negapatan",
-  department: "Engineering",
-  earnings: [
-    { item: "Basic Salary", amount: 4500.0 },
-    { item: "Housing Allowance", amount: 800.0 },
-    { item: "Transport Allowance", amount: 200.0 },
-  ],
-  deductions: [
-    { item: "CPF Employee", amount: 900.0 },
-    { item: "Income Tax", amount: 450.0 },
-  ],
-};
+import { useQuery } from "@tanstack/react-query";
+import type { PayslipRecord } from "@shared/schema";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function PayslipPage() {
-  const [selectedMonth, setSelectedMonth] = useState("2024-01");
+  const { data: payslipsData, isLoading } = useQuery<{ payslips: PayslipRecord[] }>({
+    queryKey: ["/api/payslips"],
+  });
 
-  const totalEarnings = mockPayslip.earnings.reduce((sum, item) => sum + item.amount, 0);
-  const totalDeductions = mockPayslip.deductions.reduce((sum, item) => sum + item.amount, 0);
-  const netPay = totalEarnings - totalDeductions;
+  const payslips = payslipsData?.payslips || [];
 
-  const handleDownload = () => {
-    console.log("Downloading payslip for", selectedMonth);
-  };
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold mb-2">Payslips</h2>
+          <p className="text-sm text-muted-foreground">
+            View your approved payslips
+          </p>
+        </div>
+        <div className="grid gap-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-48" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-24 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold mb-2" data-testid="text-page-title">
-            Payslip
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            View and download your monthly payslips
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-40" data-testid="select-month">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="2024-01">January 2024</SelectItem>
-              <SelectItem value="2023-12">December 2023</SelectItem>
-              <SelectItem value="2023-11">November 2023</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button onClick={handleDownload} data-testid="button-download">
-            <Download className="mr-2 h-4 w-4" />
-            Download
-          </Button>
-        </div>
+      <div>
+        <h2 className="text-2xl font-semibold mb-2" data-testid="text-page-title">
+          Payslips
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          View your approved payslips based on attendance hours
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Payslip Details
-            </span>
-            <span className="text-lg" data-testid="text-payslip-month">{mockPayslip.month}</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">Employee ID</p>
-              <p className="font-medium" data-testid="text-employee-id">{mockPayslip.employeeId}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Employee Name</p>
-              <p className="font-medium" data-testid="text-employee-name">{mockPayslip.employeeName}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Department</p>
-              <p className="font-medium" data-testid="text-department">{mockPayslip.department}</p>
-            </div>
-          </div>
+      {payslips.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <DollarSign className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-medium mb-2">No Payslips Available</h3>
+            <p className="text-sm text-muted-foreground">
+              Your approved payslips will appear here once they are generated by the admin.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {payslips.map((payslip) => {
+            const actualHours = payslip.totalHours / 2; // Convert half-hours to hours
+            const hourlyWageDollars = payslip.hourlyWage / 100; // Convert cents to dollars
+            const totalPayDollars = payslip.totalPay / 100; // Convert cents to dollars
 
-          <Separator />
+            return (
+              <Card key={payslip.id} data-testid={`card-payslip-${payslip.id}`}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5" />
+                      Payslip
+                    </span>
+                    <span className="text-sm font-normal text-muted-foreground" data-testid={`text-period-${payslip.id}`}>
+                      {new Date(payslip.periodStart).toLocaleDateString()} - {new Date(payslip.periodEnd).toLocaleDateString()}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Period</p>
+                      <p className="font-medium" data-testid={`text-payslip-period-${payslip.id}`}>
+                        {new Date(payslip.periodStart).toLocaleDateString()} to {new Date(payslip.periodEnd).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Generated On</p>
+                      <p className="font-medium" data-testid={`text-generated-date-${payslip.id}`}>
+                        {new Date(payslip.createdAt!).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
 
-          <div className="space-y-4">
-            <h3 className="font-semibold text-lg">Earnings</h3>
-            {mockPayslip.earnings.map((item, index) => (
-              <div key={index} className="flex justify-between items-center" data-testid={`row-earning-${index}`}>
-                <span className="text-sm">{item.item}</span>
-                <span className="font-medium font-mono" data-testid={`text-earning-amount-${index}`}>
-                  ${item.amount.toFixed(2)}
-                </span>
-              </div>
-            ))}
-            <Separator />
-            <div className="flex justify-between items-center font-semibold">
-              <span>Total Earnings</span>
-              <span className="font-mono text-green-600" data-testid="text-total-earnings">
-                ${totalEarnings.toFixed(2)}
-              </span>
-            </div>
-          </div>
+                  <Separator />
 
-          <Separator />
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Total Hours Worked</span>
+                      </div>
+                      <span className="font-mono font-medium" data-testid={`text-total-hours-${payslip.id}`}>
+                        {actualHours.toFixed(1)} hours
+                      </span>
+                    </div>
 
-          <div className="space-y-4">
-            <h3 className="font-semibold text-lg">Deductions</h3>
-            {mockPayslip.deductions.map((item, index) => (
-              <div key={index} className="flex justify-between items-center" data-testid={`row-deduction-${index}`}>
-                <span className="text-sm">{item.item}</span>
-                <span className="font-medium font-mono" data-testid={`text-deduction-amount-${index}`}>
-                  ${item.amount.toFixed(2)}
-                </span>
-              </div>
-            ))}
-            <Separator />
-            <div className="flex justify-between items-center font-semibold">
-              <span>Total Deductions</span>
-              <span className="font-mono text-red-600" data-testid="text-total-deductions">
-                ${totalDeductions.toFixed(2)}
-              </span>
-            </div>
-          </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Hourly Wage</span>
+                      <span className="font-mono font-medium" data-testid={`text-hourly-wage-${payslip.id}`}>
+                        ${hourlyWageDollars.toFixed(2)}/hour
+                      </span>
+                    </div>
+                  </div>
 
-          <Separator className="my-6" />
+                  <Separator />
 
-          <div className="bg-primary/10 p-4 rounded-lg">
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-semibold">Net Pay</span>
-              <span className="text-2xl font-bold font-mono" data-testid="text-net-pay">
-                ${netPay.toFixed(2)}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                  <div className="bg-primary/10 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-semibold">Total Pay</span>
+                      <span className="text-2xl font-bold font-mono" data-testid={`text-total-pay-${payslip.id}`}>
+                        ${totalPayDollars.toFixed(2)}
+                      </span>
+                    </div>
+                    {payslip.approvedAt && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Approved on {new Date(payslip.approvedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
