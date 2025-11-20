@@ -141,7 +141,7 @@ export const payslipRecords = pgTable("payslip_records", {
   totalPay: integer("total_pay").notNull(), // Cents
   status: text("status").notNull().default("draft"), // 'draft' or 'approved'
   approvedAt: timestamp("approved_at"), // Nullable until approved
-  approvedBy: varchar("approved_by").references(() => users.id), // Admin who approved
+  approvedBy: varchar("approved_by"), // Admin identifier (not FK since admin is not in users table)
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
