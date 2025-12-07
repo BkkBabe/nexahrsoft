@@ -381,25 +381,38 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <Button
-                  onClick={handleClockIn}
-                  disabled={clockInMutation.isPending}
-                  className="flex-1"
-                  data-testid="button-clock-in"
-                >
-                  <Camera className="mr-2 h-4 w-4" />
-                  {clockInMutation.isPending ? "Clocking In..." : "Clock In"}
-                </Button>
-                <Button
-                  onClick={handleClockOut}
-                  disabled={!activeRecord || clockOutMutation.isPending}
-                  variant="outline"
-                  className="flex-1"
-                  data-testid="button-clock-out"
-                >
-                  {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
-                </Button>
+              {/* Status Message */}
+              <div className="py-3 text-center">
+                <p className="text-sm font-medium text-muted-foreground" data-testid="text-status-message">
+                  {activeRecord 
+                    ? "Ending your day?" 
+                    : "Hi, are you ready to start your day with a blast?"}
+                </p>
+              </div>
+
+              {/* Clock In/Out Button - Only one visible at a time */}
+              <div className="flex justify-center">
+                {activeRecord ? (
+                  <Button
+                    onClick={handleClockOut}
+                    disabled={clockOutMutation.isPending}
+                    variant="destructive"
+                    className="w-full max-w-xs"
+                    data-testid="button-clock-out"
+                  >
+                    {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleClockIn}
+                    disabled={clockInMutation.isPending}
+                    className="w-full max-w-xs"
+                    data-testid="button-clock-in"
+                  >
+                    <Camera className="mr-2 h-4 w-4" />
+                    {clockInMutation.isPending ? "Clocking In..." : "Clock In"}
+                  </Button>
+                )}
               </div>
             </>
           )}
