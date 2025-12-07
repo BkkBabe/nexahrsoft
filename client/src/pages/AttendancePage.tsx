@@ -386,7 +386,7 @@ export default function AttendancePage() {
                 <p className="text-sm font-medium text-muted-foreground" data-testid="text-status-message">
                   {activeRecord 
                     ? "Ending your day?" 
-                    : "Hi, are you ready to start your day with a blast?"}
+                    : "Hi, are you ready to kickstart your day with good energy?"}
                 </p>
               </div>
 
