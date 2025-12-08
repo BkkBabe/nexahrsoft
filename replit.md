@@ -20,13 +20,13 @@ Preferred communication style: Simple, everyday language.
 ### Backend Architecture
 
 - **Server Framework**: Express.js with TypeScript, express-session for session management, RESTful API design.
-- **Authentication & Authorization**: Dual system (admin hardcoded, user bcrypt-hashed password), session-based with secure HTTP-only cookies, role-based access control (admin vs. user), security model ensures sessions only for approved users, user approval workflow for new registrations.
+- **Authentication & Authorization**: Dual system (admin hardcoded, user bcrypt-hashed password), session-based with secure HTTP-only cookies, role-based access control (admin vs. user), security model ensures sessions only for approved users, user approval workflow for new registrations, forced password change on first login via mustChangePassword flag.
 - **Data Layer**: Drizzle ORM for type-safe queries, Zod validation, PostgreSQL-backed storage (PgStorage) via Neon serverless database.
 - **API Structure**: `/api/admin/*`, `/api/auth/*` following RESTful conventions with Zod schema validation.
 
 ### Database Schema
 
-- **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent). Supports both password-based and OAuth, with approval-based access control and full HR metadata.
+- **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent, mustChangePassword). Supports both password-based and OAuth, with approval-based access control, forced password change on first login, and full HR metadata.
 - **Company Settings Table**: Stores company branding and email settings (company_name, logo_url, favicon_url, senderEmail, senderName, appUrl, updated_at). Singleton pattern ensures one record.
 - **Attendance Records Table**: Stores clock-in/out times, user ID, date, calculated hours, location data, and photo metadata.
 - **Extensibility**: Designed to easily accommodate future tables for leave, claims, payroll, etc.
