@@ -6,6 +6,10 @@ import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
 import { registerUserSchema, loginUserSchema } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
+import { Resend } from "resend";
+
+// Initialize Resend email client
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 // Admin credentials
 const ADMIN_CREDENTIALS = {
@@ -1298,7 +1302,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
             mustChangePassword: true,
           });
 
-          // Log the email (actual sending would be done with email service)
+          // Generate QR code for app URL
+          const appUrl = companySettings.appUrl || 'https://app.nexahrms.com';
+          const qrCodeDataUrl = await QRCode.toDataURL(appUrl, { width: 150 });
+          const qrCodeBase64 = qrCodeDataUrl.split(',')[1];
+
+          // Send actual email using Resend
+          if (resend) {
+            const senderEmail = companySettings.senderEmail || 'onboarding@resend.dev';
+            const senderName = companySettings.senderName || 'NexaHRMS';
+            
+            await resend.emails.send({
+              from: `${senderName} <${senderEmail}>`,
+              to: user.email,
+              subject: 'Welcome to NexaHRMS - Your Login Credentials',
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #333;">Welcome to NexaHRMS!</h2>
+                  <p>Dear ${user.name},</p>
+                  <p>We're excited to provide you with a seamless, efficient, and user-friendly experience for managing all your HR needs. From attendance and leave management to performance, payroll, and beyond—everything you need is right here at your fingertips.</p>
+                  <h3 style="color: #333;">Your Login Credentials</h3>
+                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                    <p><strong>App URL:</strong> <a href="${appUrl}">${appUrl}</a></p>
+                    <p><strong>Username:</strong> ${user.employeeCode || user.username}</p>
+                    <p><strong>Password:</strong> ${tempPassword}</p>
+                  </div>
+                  <p style="color: #e74c3c;"><strong>Important:</strong> You will be required to change your password upon first login.</p>
+                  <div style="text-align: center; margin: 20px 0;">
+                    <p>Scan this QR code to access the app:</p>
+                    <img src="cid:qrcode" alt="QR Code" style="width: 150px; height: 150px;" />
+                  </div>
+                  <p>Best regards,<br>${senderName} Team</p>
+                </div>
+              `,
+              attachments: [
+                {
+                  filename: 'qrcode.png',
+                  content: qrCodeBase64,
+                  contentId: 'qrcode',
+                },
+              ],
+            });
+          }
+
+          // Log the email
           await storage.createEmailLog({
             userId,
             emailType: 'welcome',
@@ -1308,12 +1355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sentAt: new Date(),
           });
 
-          // In production, you would send actual email here using Resend/SendGrid
-          console.log(`Welcome email prepared for ${user.email}:`);
-          console.log(`  Username: ${user.employeeCode || user.username}`);
-          console.log(`  Password: ${tempPassword}`);
-          console.log(`  App URL: ${companySettings.appUrl || 'https://app.nexahrms.com'}`);
-
+          console.log(`Welcome email sent to ${user.email}`);
           sent++;
         } catch (error: any) {
           console.error(`Failed to send email to user ${userId}:`, error);
@@ -1362,6 +1404,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mustChangePassword: true,
       });
 
+      // Generate QR code for app URL
+      const appUrl = companySettings.appUrl || 'https://app.nexahrms.com';
+      const qrCodeDataUrl = await QRCode.toDataURL(appUrl, { width: 150 });
+      const qrCodeBase64 = qrCodeDataUrl.split(',')[1];
+
+      // Send actual email using Resend
+      if (resend) {
+        const senderEmail = companySettings.senderEmail || 'onboarding@resend.dev';
+        const senderName = companySettings.senderName || 'NexaHRMS';
+        
+        await resend.emails.send({
+          from: `${senderName} <${senderEmail}>`,
+          to: user.email,
+          subject: 'Welcome to NexaHRMS - Your New Login Credentials',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">Welcome to NexaHRMS!</h2>
+              <p>Dear ${user.name},</p>
+              <p>Your login credentials have been reset. Please use the new credentials below to access the system.</p>
+              <h3 style="color: #333;">Your New Login Credentials</h3>
+              <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <p><strong>App URL:</strong> <a href="${appUrl}">${appUrl}</a></p>
+                <p><strong>Username:</strong> ${user.employeeCode || user.username}</p>
+                <p><strong>Password:</strong> ${tempPassword}</p>
+              </div>
+              <p style="color: #e74c3c;"><strong>Important:</strong> You will be required to change your password upon first login.</p>
+              <div style="text-align: center; margin: 20px 0;">
+                <p>Scan this QR code to access the app:</p>
+                <img src="cid:qrcode" alt="QR Code" style="width: 150px; height: 150px;" />
+              </div>
+              <p>Best regards,<br>${senderName} Team</p>
+            </div>
+          `,
+          attachments: [
+            {
+              filename: 'qrcode.png',
+              content: qrCodeBase64,
+              contentId: 'qrcode',
+            },
+          ],
+        });
+      }
+
       // Log the email
       await storage.createEmailLog({
         userId,
@@ -1372,11 +1457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sentAt: new Date(),
       });
 
-      // In production, send actual email
-      console.log(`Welcome email resent for ${user.email}:`);
-      console.log(`  Username: ${user.employeeCode || user.username}`);
-      console.log(`  Password: ${tempPassword}`);
-      console.log(`  App URL: ${companySettings.appUrl || 'https://app.nexahrms.com'}`);
+      console.log(`Welcome email resent to ${user.email}`);
 
       res.json({
         success: true,
