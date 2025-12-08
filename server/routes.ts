@@ -449,6 +449,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create individual user (admin only)
+  app.post("/api/admin/users/create", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        employeeCode: z.string().min(1, "Employee code is required"),
+        name: z.string().min(1, "Name is required"),
+        email: z.string().email("Valid email is required"),
+        department: z.string().optional(),
+        designation: z.string().optional(),
+        section: z.string().optional(),
+        mobileNumber: z.string().optional(),
+        gender: z.string().optional(),
+        joinDate: z.string().optional(),
+        sendWelcomeEmail: z.boolean().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      
+      // Check if user already exists by email or employee code
+      const existingByEmail = await storage.getUserByEmail(data.email);
+      if (existingByEmail) {
+        return res.status(400).json({ message: "User with this email already exists" });
+      }
+      
+      const existingByCode = await storage.getUserByEmployeeCode(data.employeeCode);
+      if (existingByCode) {
+        return res.status(400).json({ message: "User with this employee code already exists" });
+      }
+
+      // Generate username from employee code
+      const username = data.employeeCode.toLowerCase();
+      
+      // Generate initial password (employee code + 4 random chars)
+      const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const initialPassword = `${data.employeeCode}${randomSuffix}`;
+      const passwordHash = await bcrypt.hash(initialPassword, 10);
+
+      const user = await storage.createUser({
+        email: data.email.toLowerCase(),
+        username,
+        name: data.name,
+        passwordHash,
+        role: "user",
+        isApproved: true,
+        employeeCode: data.employeeCode,
+        department: data.department || null,
+        designation: data.designation || null,
+        section: data.section || null,
+        mobileNumber: data.mobileNumber || null,
+        gender: data.gender || null,
+        joinDate: data.joinDate || null,
+        mustChangePassword: true,
+      });
+
+      res.json({
+        success: true,
+        user,
+        initialPassword,
+        message: `User ${data.name} created successfully`,
+      });
+    } catch (error: any) {
+      console.error("Create user error:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: error.message || "Failed to create user" });
+    }
+  });
+
   // Company settings routes
   app.get("/api/company/settings", async (req: Request, res: Response) => {
     try {
