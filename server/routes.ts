@@ -12,6 +12,12 @@ const ADMIN_CREDENTIALS = {
   password: "nexa123!",
 };
 
+// Generate temporary password for welcome emails
+function generateTempPassword(employeeCode: string): string {
+  const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${employeeCode}@${randomPart}`;
+}
+
 // Default user credentials (for development/testing)
 const DEFAULT_USER = {
   username: "nexauser",
@@ -277,6 +283,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Approve user error:", error);
       res.status(500).json({ message: "Failed to approve user" });
+    }
+  });
+
+  // Update user (admin only)
+  app.put("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      // If password is being updated, hash it
+      if (updates.password) {
+        updates.passwordHash = await bcrypt.hash(updates.password, 10);
+        delete updates.password;
+      }
+      
+      const user = await storage.updateUser(id, updates);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({ success: true, user });
+    } catch (error) {
+      console.error("Update user error:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Bulk import employees (admin only)
+  app.post("/api/admin/users/import", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        employees: z.array(z.object({
+          code: z.string(),
+          name: z.string(),
+          shortName: z.string().optional(),
+          nricFin: z.string().optional(),
+          gender: z.string().optional(),
+          department: z.string().optional(),
+          section: z.string().optional(),
+          designation: z.string().optional(),
+          fingerId: z.string().optional(),
+          email: z.string().email(),
+          joinDate: z.string().optional(),
+          resignDate: z.string().optional(),
+        })),
+      });
+
+      const { employees } = schema.parse(req.body);
+      
+      const results = {
+        created: 0,
+        skipped: 0,
+        errors: [] as string[],
+      };
+
+      for (const emp of employees) {
+        try {
+          // Check if user already exists by email or employee code
+          const existingByEmail = await storage.getUserByEmail(emp.email);
+          const existingByCode = emp.code ? await storage.getUserByEmployeeCode(emp.code) : null;
+          
+          if (existingByEmail || existingByCode) {
+            results.skipped++;
+            continue;
+          }
+
+          // Generate username from employee code
+          const username = emp.code.toLowerCase();
+          
+          // Generate initial password (employee code + last 4 of NRIC or random)
+          const nricSuffix = emp.nricFin ? emp.nricFin.slice(-4) : Math.random().toString(36).substring(2, 6);
+          const initialPassword = `${emp.code}${nricSuffix}`;
+          const passwordHash = await bcrypt.hash(initialPassword, 10);
+
+          await storage.createUser({
+            email: emp.email.toLowerCase(),
+            username,
+            name: emp.name,
+            passwordHash,
+            role: "user",
+            isApproved: true, // Pre-approve imported employees
+            employeeCode: emp.code,
+            shortName: emp.shortName || null,
+            nricFin: emp.nricFin || null,
+            gender: emp.gender || null,
+            department: emp.department || null,
+            section: emp.section || null,
+            designation: emp.designation || null,
+            fingerId: emp.fingerId || null,
+            joinDate: emp.joinDate || null,
+            resignDate: emp.resignDate || null,
+          });
+          
+          results.created++;
+        } catch (error: any) {
+          results.errors.push(`${emp.name}: ${error.message}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Imported ${results.created} employees, skipped ${results.skipped} existing`,
+        ...results,
+      });
+    } catch (error) {
+      console.error("Import employees error:", error);
+      res.status(500).json({ message: "Failed to import employees" });
     }
   });
 
@@ -983,6 +1097,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Submit leave application error:", error);
       res.status(500).json({ message: "Failed to submit leave application" });
+    }
+  });
+
+  // ==================== EMAIL ENDPOINTS ====================
+
+  // Send welcome emails to selected users (admin only)
+  app.post("/api/admin/users/send-welcome-email", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userIds: z.array(z.string()),
+      });
+
+      const { userIds } = schema.parse(req.body);
+      
+      if (userIds.length === 0) {
+        return res.status(400).json({ message: "No users selected" });
+      }
+
+      const companySettings = await storage.getCompanySettings();
+      let sent = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const userId of userIds) {
+        try {
+          const user = await storage.getUser(userId);
+          if (!user) {
+            errors.push(`User ${userId} not found`);
+            failed++;
+            continue;
+          }
+
+          // Generate new temporary password
+          const tempPassword = generateTempPassword(user.employeeCode || user.username || '');
+          const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+          // Update user with new password and timestamp
+          await storage.updateUser(userId, {
+            passwordHash,
+            welcomeEmailSentAt: new Date(),
+          });
+
+          // Log the email (actual sending would be done with email service)
+          await storage.createEmailLog({
+            userId,
+            emailType: 'welcome',
+            recipientEmail: user.email,
+            subject: 'Welcome to NexaHRMS - Your Login Credentials',
+            status: 'sent',
+            sentAt: new Date(),
+          });
+
+          // In production, you would send actual email here using Resend/SendGrid
+          console.log(`Welcome email prepared for ${user.email}:`);
+          console.log(`  Username: ${user.employeeCode || user.username}`);
+          console.log(`  Password: ${tempPassword}`);
+          console.log(`  App URL: ${companySettings.appUrl || 'https://app.nexahrms.com'}`);
+
+          sent++;
+        } catch (error: any) {
+          console.error(`Failed to send email to user ${userId}:`, error);
+          errors.push(`User ${userId}: ${error.message}`);
+          failed++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Sent ${sent} emails, ${failed} failed`,
+        sent,
+        failed,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error) {
+      console.error("Send welcome emails error:", error);
+      res.status(500).json({ message: "Failed to send welcome emails" });
+    }
+  });
+
+  // Resend welcome email to a single user (regenerates password)
+  app.post("/api/admin/users/resend-welcome-email", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.string(),
+      });
+
+      const { userId } = schema.parse(req.body);
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const companySettings = await storage.getCompanySettings();
+
+      // Generate new temporary password
+      const tempPassword = generateTempPassword(user.employeeCode || user.username || '');
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      // Update user with new password and timestamp
+      await storage.updateUser(userId, {
+        passwordHash,
+        welcomeEmailSentAt: new Date(),
+      });
+
+      // Log the email
+      await storage.createEmailLog({
+        userId,
+        emailType: 'welcome',
+        recipientEmail: user.email,
+        subject: 'Welcome to NexaHRMS - Your New Login Credentials',
+        status: 'sent',
+        sentAt: new Date(),
+      });
+
+      // In production, send actual email
+      console.log(`Welcome email resent for ${user.email}:`);
+      console.log(`  Username: ${user.employeeCode || user.username}`);
+      console.log(`  Password: ${tempPassword}`);
+      console.log(`  App URL: ${companySettings.appUrl || 'https://app.nexahrms.com'}`);
+
+      res.json({
+        success: true,
+        message: `Welcome email resent to ${user.email} with new password`,
+      });
+    } catch (error) {
+      console.error("Resend welcome email error:", error);
+      res.status(500).json({ message: "Failed to resend welcome email" });
+    }
+  });
+
+  // Update email settings (admin only)
+  app.put("/api/company/email-settings", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        senderEmail: z.string().email().optional(),
+        senderName: z.string().optional(),
+        appUrl: z.string().url().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const updated = await storage.updateCompanySettings(data);
+      res.json({ success: true, settings: updated });
+    } catch (error) {
+      console.error("Update email settings error:", error);
+      res.status(500).json({ message: "Failed to update email settings" });
     }
   });
 

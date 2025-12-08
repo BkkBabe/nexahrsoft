@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs } from "@shared/schema";
 import { eq, or, and, gte, lte, desc, isNull, not } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -60,6 +60,17 @@ export interface IStorage {
   getUserLeaveApplications(userId: string): Promise<LeaveApplication[]>;
   getAllLeaveApplications(): Promise<LeaveApplication[]>;
   getPendingLeaveApplications(): Promise<LeaveApplication[]>;
+  
+  // User update methods
+  updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+  bulkCreateUsers(usersData: Partial<User>[]): Promise<User[]>;
+  getUserByEmployeeCode(employeeCode: string): Promise<User | undefined>;
+  
+  // Email log methods
+  createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
+  updateEmailLog(id: string, updates: Partial<EmailLog>): Promise<EmailLog | undefined>;
+  getEmailLogsByUser(userId: string): Promise<EmailLog[]>;
+  getAllEmailLogs(): Promise<EmailLog[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -75,6 +86,9 @@ export class MemStorage implements IStorage {
       faviconUrl: null,
       attendanceBufferMinutes: 15,
       updatedAt: new Date(),
+      senderEmail: null,
+      senderName: null,
+      appUrl: "https://app.nexahrms.com",
     };
   }
 
@@ -119,6 +133,17 @@ export class MemStorage implements IStorage {
       role: insertUser.role ?? "user",
       isApproved: insertUser.isApproved ?? false,
       createdAt: new Date(),
+      employeeCode: insertUser.employeeCode ?? null,
+      shortName: insertUser.shortName ?? null,
+      nricFin: insertUser.nricFin ?? null,
+      gender: insertUser.gender ?? null,
+      department: insertUser.department ?? null,
+      section: insertUser.section ?? null,
+      designation: insertUser.designation ?? null,
+      fingerId: insertUser.fingerId ?? null,
+      joinDate: insertUser.joinDate ?? null,
+      resignDate: insertUser.resignDate ?? null,
+      welcomeEmailSentAt: insertUser.welcomeEmailSentAt ?? null,
     };
     this.users.set(id, user);
     return user;
@@ -277,6 +302,36 @@ export class MemStorage implements IStorage {
 
   async getPendingLeaveApplications(): Promise<LeaveApplication[]> {
     throw new Error("MemStorage leave not implemented");
+  }
+
+  // User update methods - stub implementations
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    throw new Error("MemStorage updateUser not implemented");
+  }
+
+  async bulkCreateUsers(usersData: Partial<User>[]): Promise<User[]> {
+    throw new Error("MemStorage bulkCreateUsers not implemented");
+  }
+
+  async getUserByEmployeeCode(employeeCode: string): Promise<User | undefined> {
+    throw new Error("MemStorage getUserByEmployeeCode not implemented");
+  }
+
+  // Email log methods - stub implementations
+  async createEmailLog(log: InsertEmailLog): Promise<EmailLog> {
+    throw new Error("MemStorage createEmailLog not implemented");
+  }
+
+  async updateEmailLog(id: string, updates: Partial<EmailLog>): Promise<EmailLog | undefined> {
+    throw new Error("MemStorage updateEmailLog not implemented");
+  }
+
+  async getEmailLogsByUser(userId: string): Promise<EmailLog[]> {
+    throw new Error("MemStorage getEmailLogsByUser not implemented");
+  }
+
+  async getAllEmailLogs(): Promise<EmailLog[]> {
+    throw new Error("MemStorage getAllEmailLogs not implemented");
   }
 }
 
@@ -662,6 +717,69 @@ export class PgStorage implements IStorage {
       .from(leaveApplications)
       .where(eq(leaveApplications.status, "pending"))
       .orderBy(leaveApplications.createdAt);
+  }
+
+  // User update methods
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
+  }
+
+  async bulkCreateUsers(usersData: Partial<User>[]): Promise<User[]> {
+    if (usersData.length === 0) return [];
+    
+    const createdUsers: User[] = [];
+    for (const userData of usersData) {
+      try {
+        const [created] = await db.insert(users)
+          .values(userData as any)
+          .returning();
+        createdUsers.push(created);
+      } catch (error) {
+        console.error("Error creating user:", userData.email, error);
+      }
+    }
+    return createdUsers;
+  }
+
+  async getUserByEmployeeCode(employeeCode: string): Promise<User | undefined> {
+    const [user] = await db.select()
+      .from(users)
+      .where(eq(users.employeeCode, employeeCode))
+      .limit(1);
+    return user;
+  }
+
+  // Email log methods
+  async createEmailLog(log: InsertEmailLog): Promise<EmailLog> {
+    const [created] = await db.insert(emailLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+
+  async updateEmailLog(id: string, updates: Partial<EmailLog>): Promise<EmailLog | undefined> {
+    const [updated] = await db.update(emailLogs)
+      .set(updates)
+      .where(eq(emailLogs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getEmailLogsByUser(userId: string): Promise<EmailLog[]> {
+    return await db.select()
+      .from(emailLogs)
+      .where(eq(emailLogs.userId, userId))
+      .orderBy(desc(emailLogs.createdAt));
+  }
+
+  async getAllEmailLogs(): Promise<EmailLog[]> {
+    return await db.select()
+      .from(emailLogs)
+      .orderBy(desc(emailLogs.createdAt));
   }
 }
 

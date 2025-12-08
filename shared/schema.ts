@@ -14,6 +14,18 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("user"), // 'admin' or 'user'
   isApproved: boolean("is_approved").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // HR metadata fields
+  employeeCode: text("employee_code"), // Employee code (e.g., 06001)
+  shortName: text("short_name"), // Short name / nickname
+  nricFin: text("nric_fin"), // NRIC/FIN number
+  gender: text("gender"), // MALE, FEMALE
+  department: text("department"), // Department name
+  section: text("section"), // Section (e.g., SINGAPOREAN, FOREIGN)
+  designation: text("designation"), // Job title/designation
+  fingerId: text("finger_id"), // Finger/Face ID
+  joinDate: text("join_date"), // Join date (DD-MM-YYYY)
+  resignDate: text("resign_date"), // Resign date (DD-MM-YYYY)
+  welcomeEmailSentAt: timestamp("welcome_email_sent_at"), // When welcome email was last sent
 });
 
 export const companySettings = pgTable("company_settings", {
@@ -23,6 +35,23 @@ export const companySettings = pgTable("company_settings", {
   faviconUrl: text("favicon_url"), // URL to favicon in object storage
   attendanceBufferMinutes: integer("attendance_buffer_minutes").notNull().default(15), // Max minutes buffer for clock in/out
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  // Email settings
+  senderEmail: text("sender_email"), // Email address to send from
+  senderName: text("sender_name"), // Sender display name
+  appUrl: text("app_url").default("https://app.nexahrms.com"), // App URL for QR code
+});
+
+// Email logs for tracking sent emails
+export const emailLogs = pgTable("email_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  emailType: text("email_type").notNull(), // 'welcome', 'password_reset', etc.
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  status: text("status").notNull().default("pending"), // 'pending', 'sent', 'failed'
+  errorMessage: text("error_message"), // Error message if failed
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const attendanceRecords = pgTable("attendance_records", {
@@ -195,3 +224,12 @@ export type InsertLeaveBalance = z.infer<typeof insertLeaveBalanceSchema>;
 export type LeaveBalance = typeof leaveBalances.$inferSelect;
 export type InsertLeaveApplication = z.infer<typeof insertLeaveApplicationSchema>;
 export type LeaveApplication = typeof leaveApplications.$inferSelect;
+
+// Email log types
+export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
+export type EmailLog = typeof emailLogs.$inferSelect;
