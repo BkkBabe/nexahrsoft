@@ -26,10 +26,30 @@ Preferred communication style: Simple, everyday language.
 
 ### Database Schema
 
-- **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at). Supports both password-based and OAuth, with approval-based access control.
-- **Company Settings Table**: Stores company branding (company_name, logo_url, favicon_url, updated_at). Singleton pattern ensures one record.
-- **Attendance Records Table**: Stores clock-in/out times, user ID, date, and calculated hours.
+- **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent). Supports both password-based and OAuth, with approval-based access control and full HR metadata.
+- **Company Settings Table**: Stores company branding and email settings (company_name, logo_url, favicon_url, senderEmail, senderName, appUrl, updated_at). Singleton pattern ensures one record.
+- **Attendance Records Table**: Stores clock-in/out times, user ID, date, calculated hours, location data, and photo metadata.
 - **Extensibility**: Designed to easily accommodate future tables for leave, claims, payroll, etc.
+
+### Admin Features (MVP)
+
+- **Admin Reports Page**: Generate and export attendance and employee reports with:
+  - Date range filtering for attendance data
+  - Print functionality for physical records
+  - CSV export for spreadsheet analysis
+  - Summary statistics (total employees, attendance records, hours worked)
+  
+- **Admin Email Onboarding System**: Send welcome emails to employees with:
+  - Batch email sending to multiple selected employees
+  - Individual resend capability with password regeneration
+  - QR code linking to app URL (https://app.nexahrms.com/)
+  - Username and initial password distribution
+  - Email settings configuration (sender email, sender name, app URL)
+  
+- **Admin Settings**: Configure system-wide settings including:
+  - Company branding (logo, favicon, name)
+  - Email sender configuration for welcome messages
+  - QR code preview for verification
 
 ### Key Architectural Patterns
 
