@@ -512,16 +512,21 @@ export default function AdminEmailsPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <CardTitle>Employee List</CardTitle>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => refetchUsers()}
-                  data-testid="button-refresh-employees"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <CardTitle>Employee List</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => refetchUsers()}
+                    data-testid="button-refresh-employees"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Select employees to send or resend welcome emails. Resending will generate a new password.
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1 md:w-64">
@@ -540,7 +545,7 @@ export default function AdminEmailsPage() {
                   data-testid="button-batch-send"
                 >
                   <Send className="mr-2 h-4 w-4" />
-                  {sendEmailMutation.isPending ? "Sending..." : `Send to ${selectedUsers.size} Selected`}
+                  {sendEmailMutation.isPending ? "Sending..." : `Send/Resend to ${selectedUsers.size} Selected`}
                 </Button>
               </div>
             </div>
