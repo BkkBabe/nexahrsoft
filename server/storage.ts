@@ -356,7 +356,9 @@ export class PgStorage implements IStorage {
     const [user] = await db.select().from(users).where(
       or(
         eq(users.email, emailOrUsername),
-        eq(users.username, username)
+        eq(users.username, username),
+        eq(users.employeeCode, emailOrUsername),
+        eq(users.employeeCode, username)
       )
     );
     return user;
