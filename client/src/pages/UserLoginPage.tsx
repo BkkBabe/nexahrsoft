@@ -93,13 +93,21 @@ export default function UserLoginPage() {
       });
       
       console.log('Login response received:', response.status);
+      
+      const data = await response.json();
 
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
 
-      console.log('About to redirect to dashboard');
+      console.log('About to redirect, mustChangePassword:', data.user?.mustChangePassword);
+      
+      // Check if user must change password on first login
+      if (data.user?.mustChangePassword) {
+        window.location.href = "/change-password";
+        return;
+      }
       
       // Use window.location for full page reload to ensure session is recognized
       // This avoids race conditions with React Query cache updates

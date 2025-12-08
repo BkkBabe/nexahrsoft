@@ -117,6 +117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name: user.name,
             email: user.email,
             isApproved: user.isApproved,
+            mustChangePassword: user.mustChangePassword || false,
           },
         });
       }
@@ -133,6 +134,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ success: true, message: "Logged out successfully" });
     });
+  });
+
+  // Change password endpoint (for first-time login or voluntary change)
+  app.post("/api/auth/change-password", async (req: Request, res: Response) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const schema = z.object({
+        currentPassword: z.string().min(1, "Current password is required"),
+        newPassword: z.string().min(8, "New password must be at least 8 characters"),
+        confirmPassword: z.string(),
+      }).refine((data) => data.newPassword === data.confirmPassword, {
+        message: "Passwords don't match",
+        path: ["confirmPassword"],
+      }).refine((data) => data.currentPassword !== data.newPassword, {
+        message: "New password must be different from current password",
+        path: ["newPassword"],
+      });
+
+      const { currentPassword, newPassword } = schema.parse(req.body);
+
+      const user = await storage.getUser(req.session.userId);
+      if (!user || !user.passwordHash) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify current password
+      const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash new password and update user
+      const newPasswordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(user.id, {
+        passwordHash: newPasswordHash,
+        mustChangePassword: false,
+      });
+
+      res.json({ 
+        success: true, 
+        message: "Password changed successfully" 
+      });
+    } catch (error) {
+      console.error("Change password error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to change password" });
+    }
   });
 
   // User registration endpoint (with password)
@@ -232,7 +285,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: user.email,
           username: user.username, 
           name: user.name,
-          isApproved: user.isApproved 
+          isApproved: user.isApproved,
+          mustChangePassword: user.mustChangePassword || false
         } 
       });
     } catch (error) {
@@ -1134,10 +1188,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const tempPassword = generateTempPassword(user.employeeCode || user.username || '');
           const passwordHash = await bcrypt.hash(tempPassword, 10);
 
-          // Update user with new password and timestamp
+          // Update user with new password, timestamp, and force password change
           await storage.updateUser(userId, {
             passwordHash,
             welcomeEmailSentAt: new Date(),
+            mustChangePassword: true,
           });
 
           // Log the email (actual sending would be done with email service)
@@ -1197,10 +1252,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tempPassword = generateTempPassword(user.employeeCode || user.username || '');
       const passwordHash = await bcrypt.hash(tempPassword, 10);
 
-      // Update user with new password and timestamp
+      // Update user with new password, timestamp, and force password change
       await storage.updateUser(userId, {
         passwordHash,
         welcomeEmailSentAt: new Date(),
+        mustChangePassword: true,
       });
 
       // Log the email

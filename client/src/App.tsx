@@ -27,6 +27,7 @@ import AdminReportsPage from "@/pages/AdminReportsPage";
 import AdminEmailsPage from "@/pages/AdminEmailsPage";
 import UserLoginPage from "@/pages/UserLoginPage";
 import PendingApprovalPage from "@/pages/PendingApprovalPage";
+import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
 import type { CompanySettings } from "@shared/schema";
@@ -39,6 +40,7 @@ interface SessionData {
     name: string;
     email: string;
     isApproved?: boolean;
+    mustChangePassword?: boolean;
   };
 }
 
@@ -51,11 +53,20 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
   });
 
   useEffect(() => {
+    // Redirect users who must change password
+    if (session.authenticated && !session.isAdmin && session.user?.mustChangePassword) {
+      if (location !== "/change-password") {
+        setLocation("/change-password");
+      }
+      return;
+    }
+    
     // Redirect unapproved users to pending approval page
     if (session.authenticated && !session.isAdmin && !session.user?.isApproved) {
       if (location !== "/pending-approval") {
         setLocation("/pending-approval");
       }
+      return;
     }
     
     // Redirect authenticated users from root to dashboard
@@ -196,6 +207,9 @@ function Router() {
       </Route>
       <Route path="/admin/emails">
         {() => <AdminProtected><AdminEmailsPage /></AdminProtected>}
+      </Route>
+      <Route path="/change-password">
+        {() => session?.authenticated ? <ChangePasswordPage /> : <UserLoginPage />}
       </Route>
       {session?.authenticated ? (
         <Route>
