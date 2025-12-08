@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import QRCode from "qrcode";
 import { registerUserSchema, loginUserSchema } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 
@@ -1225,6 +1226,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Resend welcome email error:", error);
       res.status(500).json({ message: "Failed to resend welcome email" });
+    }
+  });
+
+  // Generate QR code for app URL (admin only)
+  app.get("/api/admin/qr-code", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const companySettings = await storage.getCompanySettings();
+      const appUrl = companySettings.appUrl || 'https://app.nexahrms.com';
+      
+      const qrCodeDataUrl = await QRCode.toDataURL(appUrl, {
+        errorCorrectionLevel: 'H',
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+
+      res.json({ 
+        success: true, 
+        qrCode: qrCodeDataUrl,
+        appUrl 
+      });
+    } catch (error) {
+      console.error("Generate QR code error:", error);
+      res.status(500).json({ message: "Failed to generate QR code" });
     }
   });
 

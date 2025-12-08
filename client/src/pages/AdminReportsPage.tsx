@@ -24,10 +24,15 @@ export default function AdminReportsPage() {
     queryKey: ["/api/admin/users"],
   });
 
-  const { data: attendanceData, isLoading: attendanceLoading } = useQuery<{ records: AttendanceRecord[] }>({
+  const { data: attendanceData, isLoading: attendanceLoading, error: attendanceError } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ["/api/admin/attendance/records", startDate, endDate],
     queryFn: async () => {
-      const response = await fetch(`/api/admin/attendance/records?startDate=${startDate}&endDate=${endDate}`);
+      const response = await fetch(`/api/admin/attendance/records?startDate=${startDate}&endDate=${endDate}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch attendance records');
+      }
       return response.json();
     },
   });

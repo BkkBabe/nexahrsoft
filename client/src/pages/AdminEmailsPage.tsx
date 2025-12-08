@@ -33,9 +33,10 @@ export default function AdminEmailsPage() {
 
   const sendEmailMutation = useMutation({
     mutationFn: async (userIds: string[]) => {
-      return await apiRequest("POST", "/api/admin/users/send-welcome-email", { userIds });
+      const response = await apiRequest("POST", "/api/admin/users/send-welcome-email", { userIds });
+      return await response.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { message?: string; sent?: number }) => {
       toast({
         title: "Emails Sent",
         description: data.message || `Successfully sent welcome emails to ${data.sent || 0} users.`,
@@ -43,7 +44,7 @@ export default function AdminEmailsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setSelectedUsers(new Set());
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to send emails",
@@ -54,16 +55,17 @@ export default function AdminEmailsPage() {
 
   const resendEmailMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return await apiRequest("POST", "/api/admin/users/resend-welcome-email", { userId });
+      const response = await apiRequest("POST", "/api/admin/users/resend-welcome-email", { userId });
+      return await response.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { message?: string }) => {
       toast({
         title: "Email Resent",
         description: data.message || "Welcome email has been resent with a new password.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to resend email",

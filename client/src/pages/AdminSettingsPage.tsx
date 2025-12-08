@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode } from "lucide-react";
 import type { CompanySettings } from "@shared/schema";
 
 export default function AdminSettingsPage() {
@@ -16,6 +16,9 @@ export default function AdminSettingsPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
   const [attendanceBufferMinutes, setAttendanceBufferMinutes] = useState<number>(15);
+  const [senderEmail, setSenderEmail] = useState<string>("");
+  const [senderName, setSenderName] = useState<string>("");
+  const [appUrl, setAppUrl] = useState<string>("https://app.nexahrms.com");
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
@@ -26,7 +29,20 @@ export default function AdminSettingsPage() {
     if (settings?.attendanceBufferMinutes !== undefined) {
       setAttendanceBufferMinutes(settings.attendanceBufferMinutes);
     }
+    if (settings?.senderEmail) {
+      setSenderEmail(settings.senderEmail);
+    }
+    if (settings?.senderName) {
+      setSenderName(settings.senderName);
+    }
+    if (settings?.appUrl) {
+      setAppUrl(settings.appUrl);
+    }
   }, [settings]);
+
+  const { data: qrCodeData, isLoading: qrLoading, error: qrError } = useQuery<{ qrCode: string; appUrl: string }>({
+    queryKey: ["/api/admin/qr-code"],
+  });
 
   const uploadLogoMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -210,6 +226,35 @@ export default function AdminSettingsPage() {
 
   const handleUpdateAttendanceBuffer = () => {
     updateAttendanceBufferMutation.mutate(attendanceBufferMinutes);
+  };
+
+  const updateEmailSettingsMutation = useMutation({
+    mutationFn: async (data: { senderEmail?: string; senderName?: string; appUrl?: string }) => {
+      await apiRequest("PUT", "/api/company/email-settings", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/qr-code"] });
+      toast({
+        title: "Success",
+        description: "Email settings updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUpdateEmailSettings = () => {
+    updateEmailSettingsMutation.mutate({
+      senderEmail: senderEmail || undefined,
+      senderName: senderName || undefined,
+      appUrl: appUrl || undefined,
+    });
   };
 
   if (isLoading) {
@@ -401,6 +446,107 @@ export default function AdminSettingsPage() {
             >
               {updateAttendanceBufferMutation.isPending ? "Updating..." : "Update Buffer"}
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Email Settings
+            </CardTitle>
+            <CardDescription>
+              Configure sender information for welcome emails to employees
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="sender-email">Sender Email</Label>
+                <Input
+                  id="sender-email"
+                  type="email"
+                  placeholder="hr@company.com"
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  data-testid="input-sender-email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sender-name">Sender Name</Label>
+                <Input
+                  id="sender-name"
+                  type="text"
+                  placeholder="HR Department"
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  data-testid="input-sender-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="app-url">App URL (for QR Code)</Label>
+              <Input
+                id="app-url"
+                type="url"
+                placeholder="https://app.nexahrms.com"
+                value={appUrl}
+                onChange={(e) => setAppUrl(e.target.value)}
+                data-testid="input-app-url"
+              />
+              <p className="text-xs text-muted-foreground">
+                This URL will be embedded in the QR code sent to employees
+              </p>
+            </div>
+            <Button
+              onClick={handleUpdateEmailSettings}
+              disabled={updateEmailSettingsMutation.isPending}
+              data-testid="button-update-email-settings"
+            >
+              {updateEmailSettingsMutation.isPending ? "Updating..." : "Update Email Settings"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <QrCode className="h-5 w-5" />
+              App QR Code Preview
+            </CardTitle>
+            <CardDescription>
+              This QR code will be included in welcome emails
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col items-center gap-4">
+              {qrLoading ? (
+                <div className="w-48 h-48 flex items-center justify-center border rounded-lg bg-muted/20">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : qrError ? (
+                <div className="w-48 h-48 flex flex-col items-center justify-center border rounded-lg bg-destructive/10 text-destructive">
+                  <QrCode className="h-12 w-12 mb-2" />
+                  <p className="text-sm">Failed to load QR code</p>
+                </div>
+              ) : qrCodeData?.qrCode ? (
+                <>
+                  <img
+                    src={qrCodeData.qrCode}
+                    alt="App QR Code"
+                    className="w-48 h-48"
+                    data-testid="img-qr-code"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Scans to: {qrCodeData.appUrl}
+                  </p>
+                </>
+              ) : (
+                <div className="w-48 h-48 flex items-center justify-center border rounded-lg bg-muted/20">
+                  <QrCode className="h-12 w-12 text-muted-foreground" />
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
