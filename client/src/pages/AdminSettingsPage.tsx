@@ -578,7 +578,7 @@ export default function AdminSettingsPage() {
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-6">
-        <Link href="/admin">
+        <Link href="/admin/dashboard">
           <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-to-dashboard">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Dashboard
