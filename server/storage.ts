@@ -83,6 +83,7 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       companyName: "NexaHR",
       logoUrl: null,
+      clockInLogoUrl: null,
       faviconUrl: null,
       attendanceBufferMinutes: 15,
       updatedAt: new Date(),
@@ -144,6 +145,7 @@ export class MemStorage implements IStorage {
       joinDate: insertUser.joinDate ?? null,
       resignDate: insertUser.resignDate ?? null,
       welcomeEmailSentAt: insertUser.welcomeEmailSentAt ?? null,
+      mustChangePassword: insertUser.mustChangePassword ?? false,
     };
     this.users.set(id, user);
     return user;

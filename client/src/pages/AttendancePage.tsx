@@ -344,7 +344,7 @@ export default function AttendancePage() {
           dateStr,
           locationAddress || 'Fetching location...',
           userName,
-          companySettings?.logoUrl || null
+          companySettings?.clockInLogoUrl || null
         );
         
         const photoDataUrl = canvas.toDataURL('image/jpeg', 0.9);
@@ -400,7 +400,20 @@ export default function AttendancePage() {
 
   // Clock out mutation
   const clockOutMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/attendance/clock-out", {}),
+    mutationFn: async () => {
+      let latitude: string | undefined;
+      let longitude: string | undefined;
+      
+      try {
+        const loc = await getLocation();
+        latitude = loc.latitude.toString();
+        longitude = loc.longitude.toString();
+      } catch (error) {
+        console.error("Could not get location for clock-out:", error);
+      }
+      
+      return apiRequest("POST", "/api/attendance/clock-out", { latitude, longitude });
+    },
     onSuccess: () => {
       toast({
         title: "Clocked Out",

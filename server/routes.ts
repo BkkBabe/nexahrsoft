@@ -526,6 +526,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get upload URL for clock-in logo (admin only)
+  app.post("/api/company/upload-clockin-logo", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const uploadSchema = z.object({
+        filename: z.string().min(1),
+        contentType: z.string().regex(/^image\/(png|jpeg|jpg|gif|webp|svg\+xml)$/i),
+        size: z.number().max(5 * 1024 * 1024), // 5MB max
+      });
+
+      const validation = uploadSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid file. Must be an image (PNG, JPEG, GIF, WebP) under 5MB" 
+        });
+      }
+
+      const { filename } = validation.data;
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Get clock-in logo upload URL error:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
   // Update company settings (admin only)
   app.put("/api/company/settings", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
@@ -683,6 +713,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId;
       const now = new Date();
       const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      const { latitude, longitude } = req.body as { latitude?: string; longitude?: string };
       
       // Get all today's records
       const todayRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, date, date);
@@ -696,9 +727,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No active clock-in found. Please clock in first." });
       }
 
-      // Update with clock out time
+      // Update with clock out time and location
       const updated = await storage.updateAttendanceRecord(openRecord.id, {
         clockOutTime: now,
+        clockOutLatitude: latitude || null,
+        clockOutLongitude: longitude || null,
       });
 
       res.json({ success: true, record: updated });

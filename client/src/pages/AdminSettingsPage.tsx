@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera } from "lucide-react";
+import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -33,8 +34,10 @@ export default function AdminSettingsPage() {
   const { toast } = useToast();
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [faviconFile, setFaviconFile] = useState<File | null>(null);
+  const [clockInLogoFile, setClockInLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
+  const [clockInLogoPreview, setClockInLogoPreview] = useState<string | null>(null);
   const [attendanceBufferMinutes, setAttendanceBufferMinutes] = useState<number>(15);
   const [senderEmail, setSenderEmail] = useState<string>("");
   const [senderName, setSenderName] = useState<string>("");
@@ -224,6 +227,85 @@ export default function AdminSettingsPage() {
   const handleFaviconUpload = () => {
     if (faviconFile) {
       uploadFaviconMutation.mutate(faviconFile);
+    }
+  };
+
+  const uploadClockInLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const uploadUrlRes = await apiRequest("POST", "/api/company/upload-clockin-logo", {
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      });
+      const { uploadURL } = await uploadUrlRes.json();
+
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Failed to upload clock-in logo");
+      }
+
+      await apiRequest("PUT", "/api/company/settings", {
+        clockInLogoUrl: uploadURL.split("?")[0],
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });
+      setClockInLogoFile(null);
+      setClockInLogoPreview(null);
+      toast({
+        title: "Success",
+        description: "Clock-in logo uploaded successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleClockInLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Invalid File",
+          description: "Please select an image file",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Clock-in logo must be less than 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setClockInLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setClockInLogoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleClockInLogoUpload = () => {
+    if (clockInLogoFile) {
+      uploadClockInLogoMutation.mutate(clockInLogoFile);
     }
   };
 
@@ -496,6 +578,12 @@ export default function AdminSettingsPage() {
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-6">
+        <Link href="/admin">
+          <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-to-dashboard">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Dashboard
+          </Button>
+        </Link>
         <h1 className="text-3xl font-bold">Company Settings</h1>
         <p className="text-muted-foreground">Manage your company branding and appearance</p>
       </div>
@@ -624,21 +712,21 @@ export default function AdminSettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
-              Company Logo
+              App Logo
             </CardTitle>
             <CardDescription>
-              Upload your company logo (max 5MB, recommended: 200x200px)
+              Upload your app logo for header/branding (max 5MB, recommended: 200x200px)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start gap-6">
               <div className="flex-1 space-y-2">
-                <Label htmlFor="logo-upload">Current Logo</Label>
+                <Label htmlFor="logo-upload">Current App Logo</Label>
                 <div className="border rounded-md p-4 bg-muted/20">
                   {settings?.logoUrl ? (
                     <img
                       src={settings.logoUrl}
-                      alt="Company Logo"
+                      alt="App Logo"
                       className="h-32 w-32 object-contain mx-auto"
                       data-testid="img-current-logo"
                     />
@@ -656,7 +744,7 @@ export default function AdminSettingsPage() {
                   <div className="border rounded-md p-4 bg-muted/20">
                     <img
                       src={logoPreview}
-                      alt="Logo Preview"
+                      alt="App Logo Preview"
                       className="h-32 w-32 object-contain mx-auto"
                       data-testid="img-logo-preview"
                     />
@@ -666,7 +754,7 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="logo-upload">Upload New Logo</Label>
+              <Label htmlFor="logo-upload">Upload New App Logo</Label>
               <Input
                 id="logo-upload"
                 type="file"
@@ -682,7 +770,74 @@ export default function AdminSettingsPage() {
               data-testid="button-upload-logo"
             >
               <Upload className="h-4 w-4 mr-2" />
-              {uploadLogoMutation.isPending ? "Uploading..." : "Upload Logo"}
+              {uploadLogoMutation.isPending ? "Uploading..." : "Upload App Logo"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              Company Logo (Clock-in)
+            </CardTitle>
+            <CardDescription>
+              Upload your company logo to display on employee clock-in photos (max 5MB, recommended: 200x200px)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-6">
+              <div className="flex-1 space-y-2">
+                <Label>Current Clock-in Logo</Label>
+                <div className="border rounded-md p-4 bg-muted/20">
+                  {settings?.clockInLogoUrl ? (
+                    <img
+                      src={settings.clockInLogoUrl}
+                      alt="Clock-in Logo"
+                      className="h-32 w-32 object-contain mx-auto"
+                      data-testid="img-current-clockin-logo"
+                    />
+                  ) : (
+                    <div className="h-32 w-32 flex items-center justify-center mx-auto text-muted-foreground">
+                      <Camera className="h-12 w-12" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {clockInLogoPreview && (
+                <div className="flex-1 space-y-2">
+                  <Label>Preview</Label>
+                  <div className="border rounded-md p-4 bg-muted/20">
+                    <img
+                      src={clockInLogoPreview}
+                      alt="Clock-in Logo Preview"
+                      className="h-32 w-32 object-contain mx-auto"
+                      data-testid="img-clockin-logo-preview"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clockin-logo-upload">Upload New Clock-in Logo</Label>
+              <Input
+                id="clockin-logo-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleClockInLogoChange}
+                data-testid="input-clockin-logo-upload"
+              />
+            </div>
+
+            <Button
+              onClick={handleClockInLogoUpload}
+              disabled={!clockInLogoFile || uploadClockInLogoMutation.isPending}
+              data-testid="button-upload-clockin-logo"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {uploadClockInLogoMutation.isPending ? "Uploading..." : "Upload Clock-in Logo"}
             </Button>
           </CardContent>
         </Card>

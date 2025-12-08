@@ -32,7 +32,8 @@ export const users = pgTable("users", {
 export const companySettings = pgTable("company_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyName: text("company_name").notNull().default("NexaHR"),
-  logoUrl: text("logo_url"), // URL to company logo in object storage
+  logoUrl: text("logo_url"), // URL to app logo in object storage (used in header/branding)
+  clockInLogoUrl: text("clock_in_logo_url"), // URL to company logo displayed during clock-in
   faviconUrl: text("favicon_url"), // URL to favicon in object storage
   attendanceBufferMinutes: integer("attendance_buffer_minutes").notNull().default(15), // Max minutes buffer for clock in/out
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -62,8 +63,10 @@ export const attendanceRecords = pgTable("attendance_records", {
   clockInTime: timestamp("clock_in_time").notNull(),
   clockOutTime: timestamp("clock_out_time"), // Nullable - user might still be clocked in
   photoUrl: text("photo_url"), // URL to attendance photo in object storage
-  latitude: text("latitude"), // GPS latitude
-  longitude: text("longitude"), // GPS longitude
+  latitude: text("latitude"), // GPS latitude (clock-in)
+  longitude: text("longitude"), // GPS longitude (clock-in)
+  clockOutLatitude: text("clock_out_latitude"), // GPS latitude (clock-out)
+  clockOutLongitude: text("clock_out_longitude"), // GPS longitude (clock-out)
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
