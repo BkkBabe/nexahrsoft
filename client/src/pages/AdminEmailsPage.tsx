@@ -56,7 +56,7 @@ export default function AdminEmailsPage() {
   });
 
   const { data: settingsData } = useQuery<CompanySettings>({
-    queryKey: ["/api/admin/settings"],
+    queryKey: ["/api/company/settings"],
   });
 
   const users = usersData?.users || [];
