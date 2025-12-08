@@ -7,13 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check, AlertTriangle, Settings } from "lucide-react";
+import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check, AlertTriangle, Settings, Clock, FileText } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState } from "react";
 import { format } from "date-fns";
-import type { User, CompanySettings } from "@shared/schema";
+import type { User, CompanySettings, EmailLog } from "@shared/schema";
 
 interface NewUserForm {
   employeeCode: string;
@@ -59,7 +60,12 @@ export default function AdminEmailsPage() {
     queryKey: ["/api/company/settings"],
   });
 
+  const { data: emailLogsData, isLoading: isLoadingLogs, refetch: refetchLogs } = useQuery<{ logs: EmailLog[] }>({
+    queryKey: ["/api/admin/email-logs"],
+  });
+
   const users = usersData?.users || [];
+  const emailLogs = emailLogsData?.logs || [];
   const emailConfigured = settingsData?.senderEmail && settingsData?.senderName;
 
   const filteredUsers = users.filter(user => 
@@ -509,134 +515,235 @@ export default function AdminEmailsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <CardTitle>Employee List</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => refetchUsers()}
-                    data-testid="button-refresh-employees"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Select employees to send or resend welcome emails. Resending will generate a new password.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1 md:w-64">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search employees..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                    data-testid="input-search"
-                  />
-                </div>
-                <Button
-                  onClick={handleBatchSend}
-                  disabled={selectedUsers.size === 0 || sendEmailMutation.isPending || !emailConfigured}
-                  data-testid="button-batch-send"
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  {sendEmailMutation.isPending ? "Sending..." : `Send/Resend to ${selectedUsers.size} Selected`}
-                </Button>
-              </div>
-            </div>
-            {!emailConfigured && (
-              <Alert className="mt-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription className="flex items-center justify-between">
-                  <span>Email settings are not configured. Please set up sender email in settings before sending emails.</span>
-                  <Link href="/admin/settings">
-                    <Button variant="outline" size="sm">
-                      <Settings className="h-4 w-4 mr-2" />
-                      Go to Settings
+        <Tabs defaultValue="employees" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="employees" data-testid="tab-employees">
+              <Users className="h-4 w-4 mr-2" />
+              Employee List
+            </TabsTrigger>
+            <TabsTrigger value="logs" data-testid="tab-email-logs">
+              <FileText className="h-4 w-4 mr-2" />
+              Email Logs
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="employees" className="mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <CardTitle>Employee List</CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => refetchUsers()}
+                        data-testid="button-refresh-employees"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Select employees to send or resend welcome emails. Resending will generate a new password.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 md:w-64">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search employees..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9"
+                        data-testid="input-search"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleBatchSend}
+                      disabled={selectedUsers.size === 0 || sendEmailMutation.isPending || !emailConfigured}
+                      data-testid="button-batch-send"
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      {sendEmailMutation.isPending ? "Sending..." : `Send/Resend to ${selectedUsers.size} Selected`}
                     </Button>
-                  </Link>
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full" data-testid="table-employees">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="p-3 text-left">
-                        <Checkbox
-                          checked={selectedUsers.size === filteredUsers.length && filteredUsers.length > 0}
-                          onCheckedChange={handleSelectAll}
-                          data-testid="checkbox-select-all"
-                        />
-                      </th>
-                      <th className="p-3 text-left font-medium">Employee Code</th>
-                      <th className="p-3 text-left font-medium">Name</th>
-                      <th className="p-3 text-left font-medium">Email</th>
-                      <th className="p-3 text-left font-medium">Department</th>
-                      <th className="p-3 text-center font-medium">Email Status</th>
-                      <th className="p-3 text-center font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map(user => (
-                      <tr key={user.id} className="border-b hover:bg-muted/50" data-testid={`row-user-${user.id}`}>
-                        <td className="p-3">
-                          <Checkbox
-                            checked={selectedUsers.has(user.id)}
-                            onCheckedChange={() => handleSelectUser(user.id)}
-                            data-testid={`checkbox-user-${user.id}`}
-                          />
-                        </td>
-                        <td className="p-3">{user.employeeCode || "-"}</td>
-                        <td className="p-3">{user.name}</td>
-                        <td className="p-3 text-sm">{user.email}</td>
-                        <td className="p-3">{user.department || "-"}</td>
-                        <td className="p-3 text-center">
-                          {user.welcomeEmailSentAt ? (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800">
-                              Sent {format(new Date(user.welcomeEmailSentAt), "dd/MM/yy")}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">Not Sent</Badge>
-                          )}
-                        </td>
-                        <td className="p-3 text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleResend(user.id)}
-                            disabled={resendEmailMutation.isPending || !emailConfigured}
-                            data-testid={`button-resend-${user.id}`}
-                          >
-                            <RefreshCw className={`mr-1 h-4 w-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
-                            {user.welcomeEmailSentAt ? 'Resend' : 'Send'}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {filteredUsers.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No employees found matching your search.
+                  </div>
+                </div>
+                {!emailConfigured && (
+                  <Alert className="mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>Email settings are not configured. Please set up sender email in settings before sending emails.</span>
+                      <Link href="/admin/settings">
+                        <Button variant="outline" size="sm">
+                          <Settings className="h-4 w-4 mr-2" />
+                          Go to Settings
+                        </Button>
+                      </Link>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full" data-testid="table-employees">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="p-3 text-left">
+                            <Checkbox
+                              checked={selectedUsers.size === filteredUsers.length && filteredUsers.length > 0}
+                              onCheckedChange={handleSelectAll}
+                              data-testid="checkbox-select-all"
+                            />
+                          </th>
+                          <th className="p-3 text-left font-medium">Employee Code</th>
+                          <th className="p-3 text-left font-medium">Name</th>
+                          <th className="p-3 text-left font-medium">Email</th>
+                          <th className="p-3 text-left font-medium">Department</th>
+                          <th className="p-3 text-center font-medium">Email Status</th>
+                          <th className="p-3 text-center font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredUsers.map(user => (
+                          <tr key={user.id} className="border-b hover:bg-muted/50" data-testid={`row-user-${user.id}`}>
+                            <td className="p-3">
+                              <Checkbox
+                                checked={selectedUsers.has(user.id)}
+                                onCheckedChange={() => handleSelectUser(user.id)}
+                                data-testid={`checkbox-user-${user.id}`}
+                              />
+                            </td>
+                            <td className="p-3">{user.employeeCode || "-"}</td>
+                            <td className="p-3">{user.name}</td>
+                            <td className="p-3 text-sm">{user.email}</td>
+                            <td className="p-3">{user.department || "-"}</td>
+                            <td className="p-3 text-center">
+                              {user.welcomeEmailSentAt ? (
+                                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                  Sent {format(new Date(user.welcomeEmailSentAt), "dd/MM/yy")}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">Not Sent</Badge>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleResend(user.id)}
+                                disabled={resendEmailMutation.isPending || !emailConfigured}
+                                data-testid={`button-resend-${user.id}`}
+                              >
+                                <RefreshCw className={`mr-1 h-4 w-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
+                                {user.welcomeEmailSentAt ? 'Resend' : 'Send'}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {filteredUsers.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No employees found matching your search.
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="logs" className="mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <CardTitle>Email Logs</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => refetchLogs()}
+                      data-testid="button-refresh-logs"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Badge variant="outline">
+                    {emailLogs.length} {emailLogs.length === 1 ? 'email' : 'emails'} sent
+                  </Badge>
+                </div>
+                <CardDescription>
+                  View history of all welcome emails sent to employees
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingLogs ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : emailLogs.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No emails have been sent yet.</p>
+                    <p className="text-sm">Start by sending welcome emails to employees.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full" data-testid="table-email-logs">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="p-3 text-left font-medium">Recipient</th>
+                          <th className="p-3 text-left font-medium">Subject</th>
+                          <th className="p-3 text-left font-medium">Type</th>
+                          <th className="p-3 text-center font-medium">Status</th>
+                          <th className="p-3 text-left font-medium">Sent At</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {emailLogs.map((log) => (
+                          <tr key={log.id} className="border-b hover:bg-muted/50" data-testid={`row-log-${log.id}`}>
+                            <td className="p-3 text-sm">{log.recipientEmail}</td>
+                            <td className="p-3 text-sm max-w-xs truncate">{log.subject}</td>
+                            <td className="p-3">
+                              <Badge variant="outline" className="capitalize">
+                                {log.emailType}
+                              </Badge>
+                            </td>
+                            <td className="p-3 text-center">
+                              {log.status === 'sent' ? (
+                                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  Sent
+                                </Badge>
+                              ) : log.status === 'failed' ? (
+                                <Badge variant="destructive">
+                                  Failed
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  Pending
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="p-3 text-sm text-muted-foreground">
+                              {log.sentAt ? format(new Date(log.sentAt), "dd MMM yyyy, HH:mm") : "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

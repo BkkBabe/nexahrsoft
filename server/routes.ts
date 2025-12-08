@@ -1469,6 +1469,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get email logs (admin only)
+  app.get("/api/admin/email-logs", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const logs = await storage.getAllEmailLogs();
+      res.json({ logs });
+    } catch (error) {
+      console.error("Get email logs error:", error);
+      res.status(500).json({ message: "Failed to fetch email logs" });
+    }
+  });
+
   // Generate QR code for app URL (admin only)
   app.get("/api/admin/qr-code", requireAdmin, async (req: Request, res: Response) => {
     try {
