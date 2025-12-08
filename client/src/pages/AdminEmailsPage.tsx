@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check } from "lucide-react";
-import { useLocation } from "wouter";
+import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check, AlertTriangle, Settings } from "lucide-react";
+import { useLocation, Link } from "wouter";
 import { useState } from "react";
 import { format } from "date-fns";
-import type { User } from "@shared/schema";
+import type { User, CompanySettings } from "@shared/schema";
 
 interface NewUserForm {
   employeeCode: string;
@@ -50,11 +51,16 @@ export default function AdminEmailsPage() {
   const [createdUserInfo, setCreatedUserInfo] = useState<{ username: string; password: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const { data: usersData, isLoading } = useQuery<{ users: User[] }>({
+  const { data: usersData, isLoading, refetch: refetchUsers } = useQuery<{ users: User[] }>({
     queryKey: ["/api/admin/users"],
   });
 
+  const { data: settingsData } = useQuery<CompanySettings>({
+    queryKey: ["/api/admin/settings"],
+  });
+
   const users = usersData?.users || [];
+  const emailConfigured = settingsData?.senderEmail && settingsData?.senderName;
 
   const filteredUsers = users.filter(user => 
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -506,7 +512,17 @@ export default function AdminEmailsPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <CardTitle>Employee List</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Employee List</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => refetchUsers()}
+                  data-testid="button-refresh-employees"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1 md:w-64">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -520,7 +536,7 @@ export default function AdminEmailsPage() {
                 </div>
                 <Button
                   onClick={handleBatchSend}
-                  disabled={selectedUsers.size === 0 || sendEmailMutation.isPending}
+                  disabled={selectedUsers.size === 0 || sendEmailMutation.isPending || !emailConfigured}
                   data-testid="button-batch-send"
                 >
                   <Send className="mr-2 h-4 w-4" />
@@ -528,6 +544,20 @@ export default function AdminEmailsPage() {
                 </Button>
               </div>
             </div>
+            {!emailConfigured && (
+              <Alert className="mt-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="flex items-center justify-between">
+                  <span>Email settings are not configured. Please set up sender email in settings before sending emails.</span>
+                  <Link href="/admin/settings">
+                    <Button variant="outline" size="sm">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Go to Settings
+                    </Button>
+                  </Link>
+                </AlertDescription>
+              </Alert>
+            )}
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -582,7 +612,7 @@ export default function AdminEmailsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleResend(user.id)}
-                            disabled={resendEmailMutation.isPending}
+                            disabled={resendEmailMutation.isPending || !emailConfigured}
                             data-testid={`button-resend-${user.id}`}
                           >
                             <RefreshCw className={`mr-1 h-4 w-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
