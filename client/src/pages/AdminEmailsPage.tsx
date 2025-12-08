@@ -24,6 +24,7 @@ interface NewUserForm {
   mobileNumber: string;
   gender: string;
   joinDate: string;
+  role: "user" | "admin";
 }
 
 const initialFormState: NewUserForm = {
@@ -36,6 +37,7 @@ const initialFormState: NewUserForm = {
   mobileNumber: "",
   gender: "",
   joinDate: "",
+  role: "user",
 };
 
 export default function AdminEmailsPage() {
@@ -432,6 +434,27 @@ export default function AdminEmailsPage() {
                         onChange={(e) => handleFormChange("joinDate", e.target.value)}
                         data-testid="input-employee-join-date"
                       />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="role">Account Type</Label>
+                      <Select
+                        value={newUserForm.role}
+                        onValueChange={(value) => handleFormChange("role", value)}
+                      >
+                        <SelectTrigger data-testid="select-employee-role">
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">Employee</SelectItem>
+                          <SelectItem value="admin">Administrator</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Administrators have full access to admin panel and settings
+                      </p>
                     </div>
                   </div>
 

@@ -463,6 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         gender: z.string().optional(),
         joinDate: z.string().optional(),
         sendWelcomeEmail: z.boolean().optional(),
+        role: z.enum(["user", "admin"]).optional(),
       });
 
       const data = schema.parse(req.body);
@@ -491,7 +492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         username,
         name: data.name,
         passwordHash,
-        role: "user",
+        role: data.role || "user",
         isApproved: true,
         employeeCode: data.employeeCode,
         department: data.department || null,
