@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Clock, Calendar, TrendingUp, Camera, MapPin } from "lucide-react";
+import { Clock, Calendar, TrendingUp, Camera, MapPin, Check } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -14,7 +14,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { AttendanceRecord } from "@shared/schema";
+import type { AttendanceRecord, CompanySettings } from "@shared/schema";
+
+interface SessionData {
+  authenticated: boolean;
+  isAdmin?: boolean;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    isApproved?: boolean;
+  };
+}
 
 // Helper function to calculate hours worked (to nearest 0.5 hour)
 function calculateHours(clockInTime: Date | string, clockOutTime: Date | string | null): number {
@@ -67,13 +78,29 @@ export default function AttendancePage() {
   const { toast } = useToast();
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [showCamera, setShowCamera] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [photoData, setPhotoData] = useState<string | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationAddress, setLocationAddress] = useState<string | null>(null);
+  const [isLocationReady, setIsLocationReady] = useState(false);
   const [override, setOverride] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Fetch user session
+  const { data: sessionData, isLoading: sessionLoading } = useQuery<SessionData>({
+    queryKey: ['/api/auth/session'],
+  });
+
+  // Fetch company settings
+  const { data: companySettings } = useQuery<CompanySettings>({
+    queryKey: ['/api/company/settings'],
+  });
+
+  const userName = sessionData?.user?.name || "User";
+  const isSessionReady = !sessionLoading && sessionData?.authenticated && sessionData?.user?.name;
 
   // Location display component
   const LocationDisplay = ({ lat, lon }: { lat: string; lon: string }) => {
@@ -182,8 +209,115 @@ export default function AttendancePage() {
     }
   };
 
-  // Capture photo
-  const capturePhoto = () => {
+  // Draw overlay on canvas
+  const drawPhotoOverlay = (
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    isClockIn: boolean,
+    time: string,
+    dayName: string,
+    dateStr: string,
+    locationText: string,
+    username: string,
+    companyLogoUrl: string | null
+  ) => {
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Scale factor based on canvas size for responsive text
+    const scale = Math.min(width, height) / 400;
+    
+    // Draw semi-transparent dark overlay at bottom
+    const overlayHeight = height * 0.35;
+    const gradient = ctx.createLinearGradient(0, height - overlayHeight, 0, height);
+    gradient.addColorStop(0, 'rgba(0, 30, 50, 0)');
+    gradient.addColorStop(0.3, 'rgba(0, 30, 50, 0.7)');
+    gradient.addColorStop(1, 'rgba(0, 30, 50, 0.9)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - overlayHeight, width, overlayHeight);
+    
+    // Draw Clock-in/Clock-out badge (blue for clock-in, green for clock-out)
+    const badgeColor = isClockIn ? '#2563eb' : '#16a34a';
+    const badgeText = isClockIn ? 'Clock-in' : 'Clock-out';
+    const badgeX = 20 * scale;
+    const badgeY = height - overlayHeight + 30 * scale;
+    const badgeHeight = 36 * scale;
+    const badgeWidth = 130 * scale;
+    
+    ctx.fillStyle = badgeColor;
+    ctx.beginPath();
+    ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 6 * scale);
+    ctx.fill();
+    
+    // Checkmark and text in badge
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${16 * scale}px Inter, sans-serif`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('\u2713 ' + badgeText, badgeX + 12 * scale, badgeY + badgeHeight / 2);
+    
+    // Draw time (large)
+    const timeY = badgeY + badgeHeight + 35 * scale;
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${32 * scale}px Inter, sans-serif`;
+    ctx.fillText(time, badgeX, timeY);
+    
+    // Draw separator and day/date
+    const timeWidth = ctx.measureText(time).width;
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillRect(badgeX + timeWidth + 15 * scale, timeY - 20 * scale, 2 * scale, 40 * scale);
+    
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${14 * scale}px Inter, sans-serif`;
+    ctx.fillText(dayName, badgeX + timeWidth + 30 * scale, timeY - 8 * scale);
+    ctx.font = `${14 * scale}px Inter, sans-serif`;
+    ctx.fillText(dateStr, badgeX + timeWidth + 30 * scale, timeY + 12 * scale);
+    
+    // Draw location info box
+    const infoBoxY = timeY + 30 * scale;
+    const infoBoxHeight = 70 * scale;
+    const infoBoxWidth = width * 0.55;
+    
+    ctx.fillStyle = 'rgba(0, 100, 150, 0.6)';
+    ctx.beginPath();
+    ctx.roundRect(badgeX, infoBoxY, infoBoxWidth, infoBoxHeight, 6 * scale);
+    ctx.fill();
+    
+    // Location icon and text
+    ctx.fillStyle = 'white';
+    ctx.font = `${12 * scale}px Inter, sans-serif`;
+    const locIcon = '\u2316';
+    ctx.fillText(locIcon + '  ' + (locationText || 'Location unavailable'), badgeX + 10 * scale, infoBoxY + 18 * scale);
+    
+    // Username
+    const userIcon = '\u2302';
+    ctx.fillText(userIcon + '  ' + username, badgeX + 10 * scale, infoBoxY + 38 * scale);
+    
+    // Verification text
+    const verifyIcon = '\u2713';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.font = `${10 * scale}px Inter, sans-serif`;
+    ctx.fillText(verifyIcon + '  Time & location verified by NexaHRMS', badgeX + 10 * scale, infoBoxY + 56 * scale);
+    
+    // Company logo placeholder (right side)
+    const logoWidth = 120 * scale;
+    const logoHeight = 40 * scale;
+    const logoX = width - logoWidth - 20 * scale;
+    const logoY = timeY - 15 * scale;
+    
+    ctx.fillStyle = '#2563eb';
+    ctx.beginPath();
+    ctx.roundRect(logoX, logoY, logoWidth, logoHeight, 6 * scale);
+    ctx.fill();
+    
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${12 * scale}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(companyLogoUrl ? 'Company Logo' : 'Company Logo', logoX + logoWidth / 2, logoY + logoHeight / 2 + 4 * scale);
+    ctx.textAlign = 'left';
+  };
+
+  // Capture photo with overlay
+  const capturePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -191,38 +325,46 @@ export default function AttendancePage() {
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
+        // Draw video frame
         ctx.drawImage(video, 0, 0);
-        const photoDataUrl = canvas.toDataURL('image/jpeg');
+        
+        // Get current time and date
+        const now = new Date();
+        const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+        const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+        
+        // Draw overlay
+        drawPhotoOverlay(
+          ctx,
+          canvas,
+          true, // isClockIn
+          time,
+          dayName,
+          dateStr,
+          locationAddress || 'Fetching location...',
+          userName,
+          companySettings?.logoUrl || null
+        );
+        
+        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.9);
         setPhotoData(photoDataUrl);
         
-        // Stop camera
+        // Stop camera and show preview
         stopCamera();
         setShowCamera(false);
+        setShowPreview(true);
       }
     }
   };
 
-  // Clock in mutation
+  // Clock in mutation - uses already-fetched location from handleClockIn
   const clockInMutation = useMutation({
     mutationFn: async () => {
-      // Try to get location, but don't fail if unavailable
-      let loc: { latitude: number; longitude: number } | null = null;
-      try {
-        loc = await getLocation();
-        setLocation(loc);
-      } catch (error) {
-        console.error("Location error:", error);
-        toast({
-          title: "Location Unavailable",
-          description: "Clocking in without GPS location. Please enable location services for future clock-ins.",
-          variant: "default",
-        });
-      }
-
       return apiRequest("POST", "/api/attendance/clock-in", {
         photoUrl: photoData,
-        latitude: loc ? loc.latitude.toString() : null,
-        longitude: loc ? loc.longitude.toString() : null,
+        latitude: location ? location.latitude.toString() : null,
+        longitude: location ? location.longitude.toString() : null,
         override: override,
       });
     },
@@ -235,6 +377,7 @@ export default function AttendancePage() {
       queryClient.invalidateQueries({ queryKey: ['/api/attendance/records'], exact: false });
       setPhotoData(null);
       setLocation(null);
+      setLocationAddress(null);
       setOverride(false);
     },
     onError: (error: any) => {
@@ -250,6 +393,7 @@ export default function AttendancePage() {
         });
         setPhotoData(null);
         setLocation(null);
+        setLocationAddress(null);
       }
     },
   });
@@ -275,13 +419,47 @@ export default function AttendancePage() {
   });
 
   const handleClockIn = async () => {
+    // Reset location ready state
+    setIsLocationReady(false);
     setShowCamera(true);
     await startCamera();
+    
+    // Fetch location in background (camera is open while fetching)
+    try {
+      const loc = await getLocation();
+      setLocation(loc);
+      
+      // Fetch address via reverse geocoding
+      try {
+        const response = await fetch(`/api/geocode/reverse?lat=${loc.latitude}&lon=${loc.longitude}`);
+        const data = await response.json();
+        setLocationAddress(data.address || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+      } catch {
+        setLocationAddress(`${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+      }
+    } catch (error) {
+      console.error("Location error:", error);
+      setLocationAddress("Location unavailable");
+    }
+    
+    // Mark location as ready
+    setIsLocationReady(true);
   };
 
   const handlePhotoCapture = () => {
     capturePhoto();
+  };
+
+  const handleConfirmPhoto = () => {
+    setShowPreview(false);
     clockInMutation.mutate();
+  };
+
+  const handleRetakePhoto = async () => {
+    setShowPreview(false);
+    setPhotoData(null);
+    setShowCamera(true);
+    await startCamera();
   };
 
   const handleClockOut = () => {
@@ -299,7 +477,19 @@ export default function AttendancePage() {
     stopCamera();
     setShowCamera(false);
     setPhotoData(null);
-    setOverride(false); // Reset override flag
+    setLocation(null);
+    setLocationAddress(null);
+    setIsLocationReady(false);
+    setOverride(false);
+  };
+
+  const handleCancelPreview = () => {
+    setShowPreview(false);
+    setPhotoData(null);
+    setLocation(null);
+    setLocationAddress(null);
+    setIsLocationReady(false);
+    setOverride(false);
   };
 
   const handleCancelConfirmation = () => {
@@ -405,12 +595,16 @@ export default function AttendancePage() {
                 ) : (
                   <Button
                     onClick={handleClockIn}
-                    disabled={clockInMutation.isPending}
+                    disabled={clockInMutation.isPending || !isSessionReady}
                     className="w-full max-w-xs"
                     data-testid="button-clock-in"
                   >
                     <Camera className="mr-2 h-4 w-4" />
-                    {clockInMutation.isPending ? "Clocking In..." : "Clock In"}
+                    {!isSessionReady 
+                      ? "Loading..." 
+                      : clockInMutation.isPending 
+                        ? "Clocking In..." 
+                        : "Clock In"}
                   </Button>
                 )}
               </div>
@@ -438,14 +632,68 @@ export default function AttendancePage() {
               className="w-full rounded-md"
             />
             <canvas ref={canvasRef} className="hidden" />
+            {/* Location status indicator */}
+            <div className="flex items-center gap-2 text-sm">
+              <MapPin className="h-4 w-4" />
+              {isLocationReady ? (
+                <span className="text-green-600" data-testid="text-location-ready">
+                  {locationAddress || "Location ready"}
+                </span>
+              ) : (
+                <span className="text-muted-foreground animate-pulse" data-testid="text-location-loading">
+                  Fetching your location...
+                </span>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCancelCamera}>
               Cancel
             </Button>
-            <Button onClick={handlePhotoCapture} data-testid="button-capture-photo">
+            <Button 
+              onClick={handlePhotoCapture} 
+              disabled={!isLocationReady}
+              data-testid="button-capture-photo"
+            >
               <Camera className="mr-2 h-4 w-4" />
-              Capture & Clock In
+              {isLocationReady ? "Capture Photo" : "Waiting for location..."}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Photo Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={(open) => {
+        if (!open) handleCancelPreview();
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Your Attendance Photo</DialogTitle>
+            <DialogDescription>
+              Review your photo with the attendance overlay before clocking in
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4">
+            {photoData && (
+              <img
+                src={photoData}
+                alt="Attendance preview"
+                className="w-full rounded-md"
+                data-testid="img-photo-preview"
+              />
+            )}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={handleRetakePhoto} data-testid="button-retake-photo">
+              Retake Photo
+            </Button>
+            <Button 
+              onClick={handleConfirmPhoto} 
+              disabled={clockInMutation.isPending}
+              data-testid="button-confirm-photo"
+            >
+              <Check className="mr-2 h-4 w-4" />
+              {clockInMutation.isPending ? "Clocking In..." : "Confirm & Clock In"}
             </Button>
           </DialogFooter>
         </DialogContent>
