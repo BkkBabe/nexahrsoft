@@ -6,8 +6,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CompanySettings } from "@shared/schema";
+
+interface ParsedEmployee {
+  code: string;
+  name: string;
+  email: string;
+  shortName?: string;
+  nricFin?: string;
+  gender?: string;
+  department?: string;
+  section?: string;
+  designation?: string;
+  fingerId?: string;
+  joinDate?: string;
+  resignDate?: string;
+  mobileNumber?: string;
+}
 
 export default function AdminSettingsPage() {
   const { toast } = useToast();
@@ -19,6 +39,11 @@ export default function AdminSettingsPage() {
   const [senderEmail, setSenderEmail] = useState<string>("");
   const [senderName, setSenderName] = useState<string>("");
   const [appUrl, setAppUrl] = useState<string>("https://app.nexahrms.com");
+  
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parsedEmployees, setParsedEmployees] = useState<ParsedEmployee[]>([]);
+  const [csvErrors, setCsvErrors] = useState<string[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
@@ -257,6 +282,209 @@ export default function AdminSettingsPage() {
     });
   };
 
+  const parseCSV = (text: string): { employees: ParsedEmployee[]; errors: string[] } => {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length < 2) {
+      return { employees: [], errors: ['CSV file must have a header row and at least one data row'] };
+    }
+
+    const headerLine = lines[0];
+    const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    
+    const columnMap: Record<string, string> = {
+      'employee_code': 'code',
+      'employeecode': 'code',
+      'code': 'code',
+      'emp_code': 'code',
+      'name': 'name',
+      'full_name': 'name',
+      'fullname': 'name',
+      'employee_name': 'name',
+      'email': 'email',
+      'email_address': 'email',
+      'short_name': 'shortName',
+      'shortname': 'shortName',
+      'nickname': 'shortName',
+      'nric_fin': 'nricFin',
+      'nricfin': 'nricFin',
+      'nric': 'nricFin',
+      'ic': 'nricFin',
+      'gender': 'gender',
+      'sex': 'gender',
+      'department': 'department',
+      'dept': 'department',
+      'section': 'section',
+      'nationality': 'section',
+      'designation': 'designation',
+      'position': 'designation',
+      'job_title': 'designation',
+      'jobtitle': 'designation',
+      'title': 'designation',
+      'finger_id': 'fingerId',
+      'fingerid': 'fingerId',
+      'biometric_id': 'fingerId',
+      'join_date': 'joinDate',
+      'joindate': 'joinDate',
+      'start_date': 'joinDate',
+      'startdate': 'joinDate',
+      'hire_date': 'joinDate',
+      'resign_date': 'resignDate',
+      'resigndate': 'resignDate',
+      'end_date': 'resignDate',
+      'mobile_number': 'mobileNumber',
+      'mobilenumber': 'mobileNumber',
+      'phone': 'mobileNumber',
+      'mobile': 'mobileNumber',
+    };
+
+    const headerIndexMap: Record<string, number> = {};
+    headers.forEach((header, index) => {
+      const mappedField = columnMap[header];
+      if (mappedField) {
+        headerIndexMap[mappedField] = index;
+      }
+    });
+
+    const employees: ParsedEmployee[] = [];
+    const errors: string[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const values: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          values.push(current.trim().replace(/^["']|["']$/g, ''));
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim().replace(/^["']|["']$/g, ''));
+
+      const getValue = (field: string): string => {
+        const index = headerIndexMap[field];
+        return index !== undefined ? (values[index] || '').trim() : '';
+      };
+
+      const code = getValue('code');
+      const name = getValue('name');
+      const email = getValue('email');
+
+      if (!code && !name && !email) {
+        continue;
+      }
+
+      if (!code) {
+        errors.push(`Row ${i + 1}: Missing employee code`);
+        continue;
+      }
+      if (!name) {
+        errors.push(`Row ${i + 1}: Missing name`);
+        continue;
+      }
+      if (!email) {
+        errors.push(`Row ${i + 1}: Missing email`);
+        continue;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        errors.push(`Row ${i + 1}: Invalid email format (${email})`);
+        continue;
+      }
+
+      employees.push({
+        code,
+        name,
+        email,
+        shortName: getValue('shortName') || undefined,
+        nricFin: getValue('nricFin') || undefined,
+        gender: getValue('gender') || undefined,
+        department: getValue('department') || undefined,
+        section: getValue('section') || undefined,
+        designation: getValue('designation') || undefined,
+        fingerId: getValue('fingerId') || undefined,
+        joinDate: getValue('joinDate') || undefined,
+        resignDate: getValue('resignDate') || undefined,
+        mobileNumber: getValue('mobileNumber') || undefined,
+      });
+    }
+
+    return { employees, errors };
+  };
+
+  const handleCsvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        toast({
+          title: "Invalid File",
+          description: "Please upload a CSV file",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setCsvFile(file);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        const { employees, errors } = parseCSV(text);
+        setParsedEmployees(employees);
+        setCsvErrors(errors);
+        setShowPreview(true);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const importEmployeesMutation = useMutation({
+    mutationFn: async (employees: ParsedEmployee[]) => {
+      const response = await apiRequest("POST", "/api/admin/users/import", { employees });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Import Successful",
+        description: data.message || `Imported ${data.created} employees`,
+      });
+      setCsvFile(null);
+      setParsedEmployees([]);
+      setCsvErrors([]);
+      setShowPreview(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Import Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleImportEmployees = () => {
+    if (parsedEmployees.length > 0) {
+      importEmployeesMutation.mutate(parsedEmployees);
+    }
+  };
+
+  const handleCancelImport = () => {
+    setCsvFile(null);
+    setParsedEmployees([]);
+    setCsvErrors([]);
+    setShowPreview(false);
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -273,6 +501,125 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Import Employees
+            </CardTitle>
+            <CardDescription>
+              Upload a CSV file to bulk import employees. Required columns: employee_code, name, email
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!showPreview ? (
+              <div className="space-y-4">
+                <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                  <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                  <Label htmlFor="csv-upload" className="cursor-pointer">
+                    <span className="text-primary hover:underline">Click to upload CSV file</span>
+                  </Label>
+                  <Input
+                    id="csv-upload"
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCsvChange}
+                    className="hidden"
+                    data-testid="input-csv-upload"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    CSV with columns: employee_code, name, email, department, designation, etc.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-5 w-5 text-primary" />
+                    <span className="font-medium">{csvFile?.name}</span>
+                    <Badge variant="secondary">{parsedEmployees.length} employees</Badge>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleCancelImport} data-testid="button-cancel-import">
+                    <X className="h-4 w-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+
+                {csvErrors.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <p className="font-medium mb-1">{csvErrors.length} row(s) with errors:</p>
+                      <ul className="list-disc list-inside text-sm">
+                        {csvErrors.slice(0, 5).map((error, i) => (
+                          <li key={i}>{error}</li>
+                        ))}
+                        {csvErrors.length > 5 && (
+                          <li>...and {csvErrors.length - 5} more</li>
+                        )}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {parsedEmployees.length > 0 && (
+                  <div className="border rounded-lg">
+                    <div className="p-3 bg-muted/30 border-b">
+                      <h4 className="font-medium">Preview (showing first 10 rows)</h4>
+                    </div>
+                    <ScrollArea className="h-[300px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[100px]">Code</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Department</TableHead>
+                            <TableHead>Designation</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {parsedEmployees.slice(0, 10).map((emp, index) => (
+                            <TableRow key={index} data-testid={`row-preview-${index}`}>
+                              <TableCell className="font-mono text-sm">{emp.code}</TableCell>
+                              <TableCell>{emp.name}</TableCell>
+                              <TableCell className="text-sm">{emp.email}</TableCell>
+                              <TableCell className="text-sm">{emp.department || '-'}</TableCell>
+                              <TableCell className="text-sm">{emp.designation || '-'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                    {parsedEmployees.length > 10 && (
+                      <div className="p-2 text-center text-sm text-muted-foreground border-t">
+                        ...and {parsedEmployees.length - 10} more employees
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    onClick={handleImportEmployees}
+                    disabled={parsedEmployees.length === 0 || importEmployeesMutation.isPending}
+                    data-testid="button-confirm-import"
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    {importEmployeesMutation.isPending 
+                      ? "Importing..." 
+                      : `Import ${parsedEmployees.length} Employees`}
+                  </Button>
+                  <Button variant="outline" onClick={handleCancelImport} data-testid="button-cancel-import-2">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
