@@ -208,7 +208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
 
-      // Create new user (pending approval)
+      // Create new user (approved by default)
       const user = await storage.createUser({
         email,
         username,
@@ -217,15 +217,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mobileNumber,
         authId: null,
         role: "user",
-        isApproved: false,
+        isApproved: true,
       });
 
-      // Do NOT set session for unapproved users - they must wait for admin approval
-      // Only set session if user is pre-approved (shouldn't happen in normal registration)
-      if (user.isApproved) {
-        req.session.userId = user.id;
-        req.session.isAdmin = false;
-      }
+      // Set session for the user
+      req.session.userId = user.id;
+      req.session.isAdmin = false;
 
       res.json({ 
         success: true, 

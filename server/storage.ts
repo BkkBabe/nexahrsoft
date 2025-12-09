@@ -142,7 +142,7 @@ export class MemStorage implements IStorage {
       mobileNumber: insertUser.mobileNumber ?? null,
       authId: insertUser.authId ?? null,
       role: insertUser.role ?? "user",
-      isApproved: insertUser.isApproved ?? false,
+      isApproved: insertUser.isApproved ?? true,
       createdAt: new Date(),
       employeeCode: insertUser.employeeCode ?? null,
       shortName: insertUser.shortName ?? null,
@@ -415,7 +415,7 @@ export class PgStorage implements IStorage {
       mobileNumber: insertUser.mobileNumber ?? null,
       authId: insertUser.authId ?? null,
       role: insertUser.role ?? "user",
-      isApproved: insertUser.isApproved ?? false,
+      isApproved: insertUser.isApproved ?? true,
     }).returning();
     return user;
   }
