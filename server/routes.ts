@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import { randomBytes } from "crypto";
 import { storage } from "./storage";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -421,6 +422,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Reset user password (admin only) - manual override
+  app.post("/api/admin/users/:id/reset-password", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const schema = z.object({
+        reason: z.string().optional(),
+      });
+      
+      const { reason } = schema.parse(req.body);
+      
+      // Get the user first
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Generate a cryptographically secure random password
+      const newPassword = randomBytes(6).toString('base64').replace(/[+\/=]/g, '').slice(0, 10) + '!1';
+      
+      // Hash the new password
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      
+      // Update user with new password and set mustChangePassword flag
+      await storage.updateUser(id, {
+        passwordHash,
+        mustChangePassword: true, // Force password change on next login
+      });
+      
+      // Log the password override
+      await storage.createPasswordOverrideLog({
+        userId: id,
+        changedBy: 'admin',
+        reason: reason || null,
+      });
+      
+      res.json({ 
+        success: true, 
+        password: newPassword,
+        message: "Password reset successfully. User will be required to change password on next login." 
+      });
+    } catch (error) {
+      console.error("Password reset error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // Get password override logs (admin only)
+  app.get("/api/admin/password-override-logs", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const logs = await storage.getAllPasswordOverrideLogs();
+      res.json({ logs });
+    } catch (error) {
+      console.error("Get password override logs error:", error);
+      res.status(500).json({ message: "Failed to get password override logs" });
     }
   });
 

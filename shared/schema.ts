@@ -257,3 +257,20 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
 
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+
+// Password override logs for tracking admin password resets
+export const passwordOverrideLogs = pgTable("password_override_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id), // User whose password was reset
+  changedBy: text("changed_by").notNull(), // Admin who made the change
+  reason: text("reason"), // Optional reason for the override
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPasswordOverrideLogSchema = createInsertSchema(passwordOverrideLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPasswordOverrideLog = z.infer<typeof insertPasswordOverrideLogSchema>;
+export type PasswordOverrideLog = typeof passwordOverrideLogs.$inferSelect;

@@ -11,11 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check, AlertTriangle, Settings, Clock, FileText, Pencil, History } from "lucide-react";
+import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check, AlertTriangle, Settings, Clock, FileText, Pencil, History, Key } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState } from "react";
 import { format } from "date-fns";
-import type { User, CompanySettings, EmailLog, AuditLog } from "@shared/schema";
+import type { User, CompanySettings, EmailLog, AuditLog, PasswordOverrideLog } from "@shared/schema";
 
 interface NewUserForm {
   employeeCode: string;
@@ -54,6 +54,9 @@ export default function AdminEmailsPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<Partial<User>>({});
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetReason, setResetReason] = useState("");
 
   const { data: usersData, isLoading, refetch: refetchUsers } = useQuery<{ users: User[] }>({
     queryKey: ["/api/admin/users"],
@@ -71,7 +74,12 @@ export default function AdminEmailsPage() {
     queryKey: ["/api/admin/audit-logs"],
   });
 
+  const { data: passwordOverrideLogsData, isLoading: isLoadingOverrideLogs, refetch: refetchOverrideLogs } = useQuery<{ logs: PasswordOverrideLog[] }>({
+    queryKey: ["/api/admin/password-override-logs"],
+  });
+
   const users = usersData?.users || [];
+  const passwordOverrideLogs = passwordOverrideLogsData?.logs || [];
   const emailLogs = emailLogsData?.logs || [];
   const emailConfigured = settingsData?.senderEmail && settingsData?.senderName;
 
@@ -174,6 +182,47 @@ export default function AdminEmailsPage() {
       });
     },
   });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ userId, reason }: { userId: string; reason?: string }) => {
+      const response = await apiRequest("POST", `/api/admin/users/${userId}/reset-password`, { reason });
+      return await response.json();
+    },
+    onSuccess: (data: { message?: string; password?: string }) => {
+      if (data.password) {
+        setNewPassword(data.password);
+        toast({
+          title: "Password Reset",
+          description: "Password has been reset. The new password is shown below.",
+        });
+      } else {
+        toast({
+          title: "Password Reset",
+          description: data.message || "Password has been reset. User will be required to change password on next login.",
+        });
+        setResetPasswordUser(null);
+        setResetReason("");
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/password-override-logs"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset password",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleResetPassword = () => {
+    if (!resetPasswordUser) {
+      return;
+    }
+    resetPasswordMutation.mutate({ 
+      userId: resetPasswordUser.id, 
+      reason: resetReason || undefined 
+    });
+  };
 
   const handleFormChange = (field: keyof NewUserForm, value: string) => {
     setNewUserForm(prev => ({ ...prev, [field]: value }));
@@ -606,6 +655,10 @@ export default function AdminEmailsPage() {
               <History className="h-4 w-4 mr-2" />
               Audit Logs
             </TabsTrigger>
+            <TabsTrigger value="overrides" data-testid="tab-password-overrides">
+              <Key className="h-4 w-4 mr-2" />
+              Manual Overrides
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="employees" className="mt-4">
@@ -718,9 +771,19 @@ export default function AdminEmailsPage() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleOpenEdit(user)}
+                                  title="Edit employee"
                                   data-testid={`button-edit-${user.id}`}
                                 >
                                   <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setResetPasswordUser(user)}
+                                  title="Reset password"
+                                  data-testid={`button-reset-password-${user.id}`}
+                                >
+                                  <Key className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -920,6 +983,86 @@ export default function AdminEmailsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="overrides" className="mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <CardTitle>Manual Password Overrides</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => refetchOverrideLogs()}
+                      data-testid="button-refresh-override-logs"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Badge variant="outline">
+                    {passwordOverrideLogs.length} {passwordOverrideLogs.length === 1 ? 'override' : 'overrides'} logged
+                  </Badge>
+                </div>
+                <CardDescription>
+                  View history of all password resets performed by administrators
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingOverrideLogs ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : passwordOverrideLogs.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No password overrides have been logged yet.</p>
+                    <p className="text-sm">Override logs will appear when admin resets a user's password.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full" data-testid="table-password-overrides">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="p-3 text-left font-medium">Employee</th>
+                          <th className="p-3 text-left font-medium">Email</th>
+                          <th className="p-3 text-left font-medium">Reason</th>
+                          <th className="p-3 text-left font-medium">Changed By</th>
+                          <th className="p-3 text-left font-medium">Date/Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {passwordOverrideLogs.map((log) => {
+                          const employee = users.find(u => u.id === log.userId);
+                          return (
+                            <tr key={log.id} className="border-b hover:bg-muted/50" data-testid={`row-override-${log.id}`}>
+                              <td className="p-3 text-sm">
+                                <div>
+                                  <p className="font-medium">{employee?.name || 'Unknown'}</p>
+                                  <p className="text-xs text-muted-foreground">{employee?.employeeCode || '-'}</p>
+                                </div>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">
+                                {employee?.email || '-'}
+                              </td>
+                              <td className="p-3 text-sm max-w-xs truncate">
+                                {log.reason || <span className="italic text-muted-foreground">No reason provided</span>}
+                              </td>
+                              <td className="p-3 text-sm">
+                                <Badge variant="secondary">{log.changedBy}</Badge>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">
+                                {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm")}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
@@ -1028,6 +1171,84 @@ export default function AdminEmailsPage() {
               <Button onClick={handleSaveEdit} disabled={updateUserMutation.isPending} data-testid="button-save-edit">
                 {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!resetPasswordUser} onOpenChange={(open) => !open && setResetPasswordUser(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reset Password</DialogTitle>
+              <DialogDescription>
+                Reset password for {resetPasswordUser?.name}. A new random password will be generated.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <p className="text-sm">
+                  The user will be required to change their password on next login.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reset-reason">Reason for reset (optional)</Label>
+                <Input
+                  id="reset-reason"
+                  value={resetReason}
+                  onChange={(e) => setResetReason(e.target.value)}
+                  placeholder="e.g., User forgot password, Account recovery"
+                  data-testid="input-reset-reason"
+                />
+              </div>
+              {newPassword && (
+                <div className="space-y-2">
+                  <Label>New Password</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={newPassword}
+                      readOnly
+                      className="font-mono"
+                      data-testid="input-new-password"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        navigator.clipboard.writeText(newPassword);
+                        toast({ title: "Password copied to clipboard" });
+                      }}
+                      data-testid="button-copy-password"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Make sure to provide this password to the user securely.
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setResetPasswordUser(null);
+                  setResetReason("");
+                  setNewPassword("");
+                }}
+                data-testid="button-cancel-reset"
+              >
+                {newPassword ? "Close" : "Cancel"}
+              </Button>
+              {!newPassword && (
+                <Button 
+                  onClick={handleResetPassword} 
+                  disabled={resetPasswordMutation.isPending}
+                  data-testid="button-confirm-reset"
+                >
+                  {resetPasswordMutation.isPending ? "Resetting..." : "Reset Password"}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>

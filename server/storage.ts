@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs } from "@shared/schema";
 import { eq, or, and, gte, lte, desc, isNull, not } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -76,6 +76,11 @@ export interface IStorage {
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogsByUser(userId: string): Promise<AuditLog[]>;
   getAllAuditLogs(): Promise<AuditLog[]>;
+  
+  // Password override log methods
+  createPasswordOverrideLog(log: InsertPasswordOverrideLog): Promise<PasswordOverrideLog>;
+  getPasswordOverrideLogsByUser(userId: string): Promise<PasswordOverrideLog[]>;
+  getAllPasswordOverrideLogs(): Promise<PasswordOverrideLog[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -352,6 +357,18 @@ export class MemStorage implements IStorage {
 
   async getAllAuditLogs(): Promise<AuditLog[]> {
     throw new Error("MemStorage getAllAuditLogs not implemented");
+  }
+  
+  async createPasswordOverrideLog(log: InsertPasswordOverrideLog): Promise<PasswordOverrideLog> {
+    throw new Error("MemStorage createPasswordOverrideLog not implemented");
+  }
+  
+  async getPasswordOverrideLogsByUser(userId: string): Promise<PasswordOverrideLog[]> {
+    throw new Error("MemStorage getPasswordOverrideLogsByUser not implemented");
+  }
+  
+  async getAllPasswordOverrideLogs(): Promise<PasswordOverrideLog[]> {
+    throw new Error("MemStorage getAllPasswordOverrideLogs not implemented");
   }
 }
 
@@ -823,6 +840,24 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(auditLogs)
       .orderBy(desc(auditLogs.createdAt));
+  }
+  
+  async createPasswordOverrideLog(log: InsertPasswordOverrideLog): Promise<PasswordOverrideLog> {
+    const [result] = await db.insert(passwordOverrideLogs).values(log).returning();
+    return result;
+  }
+  
+  async getPasswordOverrideLogsByUser(userId: string): Promise<PasswordOverrideLog[]> {
+    return await db.select()
+      .from(passwordOverrideLogs)
+      .where(eq(passwordOverrideLogs.userId, userId))
+      .orderBy(desc(passwordOverrideLogs.createdAt));
+  }
+  
+  async getAllPasswordOverrideLogs(): Promise<PasswordOverrideLog[]> {
+    return await db.select()
+      .from(passwordOverrideLogs)
+      .orderBy(desc(passwordOverrideLogs.createdAt));
   }
 }
 
