@@ -316,6 +316,38 @@ export default function AttendancePage() {
     ctx.textAlign = 'left';
   };
 
+  // Compress and resize image to reduce file size
+  const compressImage = (canvas: HTMLCanvasElement, maxWidth: number = 800, quality: number = 0.7): string => {
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Calculate new dimensions while maintaining aspect ratio
+    let newWidth = width;
+    let newHeight = height;
+    
+    if (width > maxWidth) {
+      newWidth = maxWidth;
+      newHeight = Math.round((height / width) * maxWidth);
+    }
+    
+    // Create a smaller canvas for compression
+    const compressCanvas = document.createElement('canvas');
+    compressCanvas.width = newWidth;
+    compressCanvas.height = newHeight;
+    const compressCtx = compressCanvas.getContext('2d');
+    
+    if (compressCtx) {
+      // Use high-quality image smoothing for resize
+      compressCtx.imageSmoothingEnabled = true;
+      compressCtx.imageSmoothingQuality = 'high';
+      compressCtx.drawImage(canvas, 0, 0, newWidth, newHeight);
+      return compressCanvas.toDataURL('image/jpeg', quality);
+    }
+    
+    // Fallback to original if compression fails
+    return canvas.toDataURL('image/jpeg', quality);
+  };
+
   // Capture photo with overlay
   const capturePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
@@ -347,7 +379,8 @@ export default function AttendancePage() {
           companySettings?.clockInLogoUrl || null
         );
         
-        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        // Compress the image to reduce file size (max 800px width, 70% quality)
+        const photoDataUrl = compressImage(canvas, 800, 0.7);
         setPhotoData(photoDataUrl);
         
         // Stop camera and show preview

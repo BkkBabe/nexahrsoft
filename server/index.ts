@@ -48,14 +48,14 @@ declare module 'express-session' {
   }
 }
 
-// Increase body size limit for clock-in photos (base64 images can be large)
+// Body size limit for clock-in photos (compressed images are under 500KB typically)
 app.use(express.json({
-  limit: '50mb',
+  limit: '5mb',
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '5mb' }));
 
 app.use((req, res, next) => {
   const start = Date.now();
