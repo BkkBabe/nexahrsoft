@@ -1312,7 +1312,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const senderEmail = companySettings.senderEmail || 'onboarding@resend.dev';
             const senderName = companySettings.senderName || 'NexaHRMS';
             
-            await resend.emails.send({
+            console.log(`Sending email to ${user.email} from ${senderName} <${senderEmail}>`);
+            
+            const { data, error } = await resend.emails.send({
               from: `${senderName} <${senderEmail}>`,
               to: user.email,
               subject: 'Welcome to NexaHRMS - Your Login Credentials',
@@ -1343,6 +1345,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 },
               ],
             });
+            
+            if (error) {
+              console.error(`Resend API error for ${user.email}:`, JSON.stringify(error));
+              throw new Error(`Resend error: ${error.message}`);
+            }
+            
+            console.log(`Resend API success for ${user.email}:`, JSON.stringify(data));
           }
 
           // Log the email
@@ -1414,7 +1423,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const senderEmail = companySettings.senderEmail || 'onboarding@resend.dev';
         const senderName = companySettings.senderName || 'NexaHRMS';
         
-        await resend.emails.send({
+        console.log(`Resending email to ${user.email} from ${senderName} <${senderEmail}>`);
+        
+        const { data, error } = await resend.emails.send({
           from: `${senderName} <${senderEmail}>`,
           to: user.email,
           subject: 'Welcome to NexaHRMS - Your New Login Credentials',
@@ -1445,6 +1456,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           ],
         });
+        
+        if (error) {
+          console.error(`Resend API error for ${user.email}:`, JSON.stringify(error));
+          return res.status(400).json({ message: `Email failed: ${error.message}` });
+        }
+        
+        console.log(`Resend API success for ${user.email}:`, JSON.stringify(data));
       }
 
       // Log the email
