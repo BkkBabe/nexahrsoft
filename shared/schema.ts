@@ -237,3 +237,23 @@ export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
 
 export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
 export type EmailLog = typeof emailLogs.$inferSelect;
+
+// Audit logs for tracking admin changes to user data
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id), // User whose data was changed
+  changedBy: text("changed_by").notNull(), // Admin username/email who made the change
+  fieldChanged: text("field_changed").notNull(), // Which field was changed
+  oldValue: text("old_value"), // Previous value (nullable for new records)
+  newValue: text("new_value"), // New value
+  changeType: text("change_type").notNull().default("update"), // 'create', 'update', 'delete'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;

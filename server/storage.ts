@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs } from "@shared/schema";
 import { eq, or, and, gte, lte, desc, isNull, not } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -71,6 +71,11 @@ export interface IStorage {
   updateEmailLog(id: string, updates: Partial<EmailLog>): Promise<EmailLog | undefined>;
   getEmailLogsByUser(userId: string): Promise<EmailLog[]>;
   getAllEmailLogs(): Promise<EmailLog[]>;
+  
+  // Audit log methods
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogsByUser(userId: string): Promise<AuditLog[]>;
+  getAllAuditLogs(): Promise<AuditLog[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -334,6 +339,19 @@ export class MemStorage implements IStorage {
 
   async getAllEmailLogs(): Promise<EmailLog[]> {
     throw new Error("MemStorage getAllEmailLogs not implemented");
+  }
+
+  // Audit log methods - stub implementations
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    throw new Error("MemStorage createAuditLog not implemented");
+  }
+
+  async getAuditLogsByUser(userId: string): Promise<AuditLog[]> {
+    throw new Error("MemStorage getAuditLogsByUser not implemented");
+  }
+
+  async getAllAuditLogs(): Promise<AuditLog[]> {
+    throw new Error("MemStorage getAllAuditLogs not implemented");
   }
 }
 
@@ -784,6 +802,27 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(emailLogs)
       .orderBy(desc(emailLogs.createdAt));
+  }
+
+  // Audit log methods
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db.insert(auditLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+
+  async getAuditLogsByUser(userId: string): Promise<AuditLog[]> {
+    return await db.select()
+      .from(auditLogs)
+      .where(eq(auditLogs.userId, userId))
+      .orderBy(desc(auditLogs.createdAt));
+  }
+
+  async getAllAuditLogs(): Promise<AuditLog[]> {
+    return await db.select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt));
   }
 }
 

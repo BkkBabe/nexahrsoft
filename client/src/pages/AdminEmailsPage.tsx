@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check, AlertTriangle, Settings, Clock, FileText } from "lucide-react";
+import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus, Copy, Check, AlertTriangle, Settings, Clock, FileText, Pencil, History } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState } from "react";
 import { format } from "date-fns";
-import type { User, CompanySettings, EmailLog } from "@shared/schema";
+import type { User, CompanySettings, EmailLog, AuditLog } from "@shared/schema";
 
 interface NewUserForm {
   employeeCode: string;
@@ -51,6 +52,8 @@ export default function AdminEmailsPage() {
   const [newUserForm, setNewUserForm] = useState<NewUserForm>(initialFormState);
   const [createdUserInfo, setCreatedUserInfo] = useState<{ username: string; password: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState<Partial<User>>({});
 
   const { data: usersData, isLoading, refetch: refetchUsers } = useQuery<{ users: User[] }>({
     queryKey: ["/api/admin/users"],
@@ -62,6 +65,10 @@ export default function AdminEmailsPage() {
 
   const { data: emailLogsData, isLoading: isLoadingLogs, refetch: refetchLogs } = useQuery<{ logs: EmailLog[] }>({
     queryKey: ["/api/admin/email-logs"],
+  });
+
+  const { data: auditLogsData, isLoading: isLoadingAuditLogs, refetch: refetchAuditLogs } = useQuery<{ logs: AuditLog[] }>({
+    queryKey: ["/api/admin/audit-logs"],
   });
 
   const users = usersData?.users || [];
@@ -144,9 +151,79 @@ export default function AdminEmailsPage() {
     },
   });
 
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, updates }: { userId: string; updates: Partial<User> }) => {
+      const response = await apiRequest("PUT", `/api/admin/users/${userId}`, updates);
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Employee Updated",
+        description: "Employee details have been updated successfully.",
+      });
+      setEditingUser(null);
+      setEditForm({});
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/audit-logs"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update employee",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFormChange = (field: keyof NewUserForm, value: string) => {
     setNewUserForm(prev => ({ ...prev, [field]: value }));
   };
+
+  const handleEditFormChange = (field: keyof User, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleOpenEdit = (user: User) => {
+    setEditingUser(user);
+    setEditForm({
+      name: user.name,
+      email: user.email,
+      employeeCode: user.employeeCode || "",
+      department: user.department || "",
+      designation: user.designation || "",
+      section: user.section || "",
+      mobileNumber: user.mobileNumber || "",
+      gender: user.gender || "",
+      joinDate: user.joinDate || "",
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingUser) return;
+    
+    // Validate required fields
+    if (!editForm.name || editForm.name.trim().length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!editForm.email || !editForm.email.includes("@")) {
+      toast({
+        title: "Validation Error",
+        description: "Valid email is required",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    updateUserMutation.mutate({ userId: editingUser.id, updates: editForm });
+  };
+
+  const auditLogs = auditLogsData?.logs || [];
 
   const handleCreateUser = () => {
     if (!newUserForm.employeeCode || !newUserForm.name || !newUserForm.email) {
@@ -516,7 +593,7 @@ export default function AdminEmailsPage() {
         </Card>
 
         <Tabs defaultValue="employees" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-3 max-w-xl">
             <TabsTrigger value="employees" data-testid="tab-employees">
               <Users className="h-4 w-4 mr-2" />
               Employee List
@@ -524,6 +601,10 @@ export default function AdminEmailsPage() {
             <TabsTrigger value="logs" data-testid="tab-email-logs">
               <FileText className="h-4 w-4 mr-2" />
               Email Logs
+            </TabsTrigger>
+            <TabsTrigger value="audit" data-testid="tab-audit-logs">
+              <History className="h-4 w-4 mr-2" />
+              Audit Logs
             </TabsTrigger>
           </TabsList>
           
@@ -632,16 +713,26 @@ export default function AdminEmailsPage() {
                               )}
                             </td>
                             <td className="p-3 text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleResend(user.id)}
-                                disabled={resendEmailMutation.isPending || !emailConfigured}
-                                data-testid={`button-resend-${user.id}`}
-                              >
-                                <RefreshCw className={`mr-1 h-4 w-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
-                                {user.welcomeEmailSentAt ? 'Resend' : 'Send'}
-                              </Button>
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleOpenEdit(user)}
+                                  data-testid={`button-edit-${user.id}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleResend(user.id)}
+                                  disabled={resendEmailMutation.isPending || !emailConfigured}
+                                  data-testid={`button-resend-${user.id}`}
+                                >
+                                  <RefreshCw className={`mr-1 h-4 w-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
+                                  {user.welcomeEmailSentAt ? 'Resend' : 'Send'}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -743,7 +834,203 @@ export default function AdminEmailsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="audit" className="mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <CardTitle>Audit Logs</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => refetchAuditLogs()}
+                      data-testid="button-refresh-audit-logs"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Badge variant="outline">
+                    {auditLogs.length} {auditLogs.length === 1 ? 'change' : 'changes'} logged
+                  </Badge>
+                </div>
+                <CardDescription>
+                  View history of all changes made to employee data by administrators
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingAuditLogs ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : auditLogs.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No changes have been logged yet.</p>
+                    <p className="text-sm">Audit logs will appear when employee data is modified.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full" data-testid="table-audit-logs">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="p-3 text-left font-medium">Employee</th>
+                          <th className="p-3 text-left font-medium">Field Changed</th>
+                          <th className="p-3 text-left font-medium">Old Value</th>
+                          <th className="p-3 text-left font-medium">New Value</th>
+                          <th className="p-3 text-left font-medium">Changed By</th>
+                          <th className="p-3 text-left font-medium">Date/Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditLogs.map((log) => {
+                          const employee = users.find(u => u.id === log.userId);
+                          return (
+                            <tr key={log.id} className="border-b hover:bg-muted/50" data-testid={`row-audit-${log.id}`}>
+                              <td className="p-3 text-sm">
+                                <div>
+                                  <p className="font-medium">{employee?.name || 'Unknown'}</p>
+                                  <p className="text-xs text-muted-foreground">{employee?.employeeCode || '-'}</p>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <Badge variant="outline" className="capitalize">
+                                  {log.fieldChanged.replace(/([A-Z])/g, ' $1').trim()}
+                                </Badge>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground max-w-xs truncate">
+                                {log.oldValue || <span className="italic">empty</span>}
+                              </td>
+                              <td className="p-3 text-sm max-w-xs truncate">
+                                {log.newValue || <span className="italic text-muted-foreground">empty</span>}
+                              </td>
+                              <td className="p-3 text-sm">
+                                <Badge variant="secondary">{log.changedBy}</Badge>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">
+                                {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm")}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Employee</DialogTitle>
+              <DialogDescription>
+                Update employee details. Changes will be logged for audit purposes.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-employeeCode">Employee Code</Label>
+                <Input
+                  id="edit-employeeCode"
+                  value={editForm.employeeCode || ""}
+                  onChange={(e) => handleEditFormChange("employeeCode", e.target.value)}
+                  data-testid="input-edit-employee-code"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Full Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editForm.name || ""}
+                  onChange={(e) => handleEditFormChange("name", e.target.value)}
+                  data-testid="input-edit-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email Address</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editForm.email || ""}
+                  onChange={(e) => handleEditFormChange("email", e.target.value)}
+                  data-testid="input-edit-email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-department">Department</Label>
+                <Input
+                  id="edit-department"
+                  value={editForm.department || ""}
+                  onChange={(e) => handleEditFormChange("department", e.target.value)}
+                  data-testid="input-edit-department"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-designation">Designation</Label>
+                <Input
+                  id="edit-designation"
+                  value={editForm.designation || ""}
+                  onChange={(e) => handleEditFormChange("designation", e.target.value)}
+                  data-testid="input-edit-designation"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-section">Section</Label>
+                <Input
+                  id="edit-section"
+                  value={editForm.section || ""}
+                  onChange={(e) => handleEditFormChange("section", e.target.value)}
+                  data-testid="input-edit-section"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-mobileNumber">Mobile Number</Label>
+                <Input
+                  id="edit-mobileNumber"
+                  value={editForm.mobileNumber || ""}
+                  onChange={(e) => handleEditFormChange("mobileNumber", e.target.value)}
+                  data-testid="input-edit-mobile"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-gender">Gender</Label>
+                <Select
+                  value={editForm.gender || ""}
+                  onValueChange={(value) => handleEditFormChange("gender", value)}
+                >
+                  <SelectTrigger data-testid="select-edit-gender">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">Male</SelectItem>
+                    <SelectItem value="FEMALE">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-joinDate">Join Date</Label>
+                <Input
+                  id="edit-joinDate"
+                  type="date"
+                  value={editForm.joinDate || ""}
+                  onChange={(e) => handleEditFormChange("joinDate", e.target.value)}
+                  data-testid="input-edit-join-date"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingUser(null)} data-testid="button-cancel-edit">
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={updateUserMutation.isPending} data-testid="button-save-edit">
+                {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

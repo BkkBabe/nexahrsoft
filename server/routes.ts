@@ -345,16 +345,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update user (admin only)
+  // Update user (admin only) with audit logging
   app.put("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
       
-      // If password is being updated, hash it
-      if (updates.password) {
-        updates.passwordHash = await bcrypt.hash(updates.password, 10);
-        delete updates.password;
+      // Whitelist allowed fields - prevent updating sensitive fields like role, passwordHash
+      const allowedFields = ['name', 'email', 'department', 'designation', 'employeeCode', 'section', 'shortName', 'mobileNumber', 'gender', 'joinDate', 'resignDate', 'nricFin', 'fingerId'];
+      
+      // Validate and sanitize input
+      const updateSchema = z.object({
+        name: z.string().min(1).optional(),
+        email: z.string().email().optional(),
+        department: z.string().optional(),
+        designation: z.string().optional(),
+        employeeCode: z.string().optional(),
+        section: z.string().optional(),
+        shortName: z.string().optional(),
+        mobileNumber: z.string().optional(),
+        gender: z.string().optional(),
+        joinDate: z.string().optional(),
+        resignDate: z.string().optional(),
+        nricFin: z.string().optional(),
+        fingerId: z.string().optional(),
+      });
+      
+      const validatedData = updateSchema.parse(req.body);
+      
+      // Only include allowed fields
+      const updates: Partial<typeof validatedData> = {};
+      for (const field of allowedFields) {
+        if (field in validatedData) {
+          (updates as any)[field] = (validatedData as any)[field];
+        }
+      }
+      
+      // Get the old user data first for audit logging
+      const oldUser = await storage.getUser(id);
+      if (!oldUser) {
+        return res.status(404).json({ message: "User not found" });
       }
       
       const user = await storage.updateUser(id, updates);
@@ -363,9 +392,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
       
+      // Create audit logs for each changed field
+      const changedBy = 'admin'; // Admin username for audit trail
+      
+      for (const field of allowedFields) {
+        if ((updates as any)[field] !== undefined) {
+          const oldValue = (oldUser as any)[field];
+          const newValue = (user as any)[field];
+          
+          // Only log if value actually changed
+          if (String(oldValue ?? '') !== String(newValue ?? '')) {
+            await storage.createAuditLog({
+              userId: id,
+              changedBy,
+              fieldChanged: field,
+              oldValue: oldValue !== null && oldValue !== undefined ? String(oldValue) : null,
+              newValue: newValue !== null && newValue !== undefined ? String(newValue) : null,
+              changeType: 'update',
+            });
+          }
+        }
+      }
+      
       res.json({ success: true, user });
     } catch (error) {
       console.error("Update user error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
       res.status(500).json({ message: "Failed to update user" });
     }
   });
@@ -1495,6 +1549,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get email logs error:", error);
       res.status(500).json({ message: "Failed to fetch email logs" });
+    }
+  });
+
+  // Get audit logs (admin only)
+  app.get("/api/admin/audit-logs", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const logs = await storage.getAllAuditLogs();
+      res.json({ logs });
+    } catch (error) {
+      console.error("Get audit logs error:", error);
+      res.status(500).json({ message: "Failed to fetch audit logs" });
     }
   });
 

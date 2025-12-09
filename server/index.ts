@@ -27,8 +27,8 @@ app.use(
       // 'lax' allows cookies in first-party context (works in new tabs)
       // This is correct for apps accessed directly (not in iframes)
       sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      // Ensure cookies work across all paths
+      // No maxAge = session cookie that expires when browser closes
+      // This ensures users are logged out when they close the browser/tab
       path: '/',
     },
   })
