@@ -750,7 +750,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const { logoUrl, faviconUrl, companyName } = req.body;
+      const { logoUrl, faviconUrl, companyName, clockInLogoUrl } = req.body;
       const objectStorageService = new ObjectStorageService();
       
       const updates: any = {};
@@ -760,6 +760,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (faviconUrl) {
         updates.faviconUrl = objectStorageService.normalizePublicAssetPath(faviconUrl);
+      }
+      if (clockInLogoUrl) {
+        updates.clockInLogoUrl = objectStorageService.normalizePublicAssetPath(clockInLogoUrl);
       }
 
       const updatedSettings = await storage.updateCompanySettings(updates);
