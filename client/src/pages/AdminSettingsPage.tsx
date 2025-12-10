@@ -276,10 +276,11 @@ export default function AdminSettingsPage() {
   const handleClockInLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith("image/")) {
+      const validTypes = ["image/png", "image/jpeg", "image/jpg"];
+      if (!validTypes.includes(file.type)) {
         toast({
           title: "Invalid File",
-          description: "Please select an image file",
+          description: "Please select a PNG or JPEG image file",
           variant: "destructive",
         });
         return;
@@ -821,11 +822,11 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="clockin-logo-upload">Upload New Clock-in Logo</Label>
+              <Label htmlFor="clockin-logo-upload">Upload New Clock-in Logo (PNG or JPEG)</Label>
               <Input
                 id="clockin-logo-upload"
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg"
                 onChange={handleClockInLogoChange}
                 data-testid="input-clockin-logo-upload"
               />
