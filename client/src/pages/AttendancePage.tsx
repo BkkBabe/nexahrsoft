@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -88,6 +88,7 @@ export default function AttendancePage() {
   const [override, setOverride] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [clockInLogoImage, setClockInLogoImage] = useState<HTMLImageElement | null>(null);
 
   // Fetch user session
   const { data: sessionData, isLoading: sessionLoading } = useQuery<SessionData>({
@@ -98,6 +99,24 @@ export default function AttendancePage() {
   const { data: companySettings } = useQuery<CompanySettings>({
     queryKey: ['/api/company/settings'],
   });
+
+  // Preload clock-in logo image
+  useEffect(() => {
+    if (companySettings?.clockInLogoUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        setClockInLogoImage(img);
+      };
+      img.onerror = () => {
+        console.error("Failed to load clock-in logo");
+        setClockInLogoImage(null);
+      };
+      img.src = companySettings.clockInLogoUrl;
+    } else {
+      setClockInLogoImage(null);
+    }
+  }, [companySettings?.clockInLogoUrl]);
 
   const userName = sessionData?.user?.name || "User";
   const isSessionReady = !sessionLoading && sessionData?.authenticated && sessionData?.user?.name;
@@ -219,7 +238,7 @@ export default function AttendancePage() {
     dateStr: string,
     locationText: string,
     username: string,
-    companyLogoUrl: string | null
+    logoImage: HTMLImageElement | null
   ) => {
     const width = canvas.width;
     const height = canvas.height;
@@ -298,22 +317,53 @@ export default function AttendancePage() {
     ctx.font = `${10 * scale}px Inter, sans-serif`;
     ctx.fillText(verifyIcon + '  Time & location verified by NexaHRMS', badgeX + 10 * scale, infoBoxY + 56 * scale);
     
-    // Company logo placeholder (right side)
-    const logoWidth = 120 * scale;
-    const logoHeight = 40 * scale;
-    const logoX = width - logoWidth - 20 * scale;
-    const logoY = timeY - 15 * scale;
+    // Company logo (right side) - draw actual image if available
+    const maxLogoWidth = 120 * scale;
+    const maxLogoHeight = 80 * scale;
+    const logoPadding = 20 * scale;
     
-    ctx.fillStyle = '#2563eb';
-    ctx.beginPath();
-    ctx.roundRect(logoX, logoY, logoWidth, logoHeight, 6 * scale);
-    ctx.fill();
-    
-    ctx.fillStyle = 'white';
-    ctx.font = `bold ${12 * scale}px Inter, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(companyLogoUrl ? 'Company Logo' : 'Company Logo', logoX + logoWidth / 2, logoY + logoHeight / 2 + 4 * scale);
-    ctx.textAlign = 'left';
+    if (logoImage) {
+      // Calculate aspect ratio to fit logo within bounds
+      const imgAspect = logoImage.width / logoImage.height;
+      let logoWidth = maxLogoWidth;
+      let logoHeight = logoWidth / imgAspect;
+      
+      if (logoHeight > maxLogoHeight) {
+        logoHeight = maxLogoHeight;
+        logoWidth = logoHeight * imgAspect;
+      }
+      
+      const logoX = width - logoWidth - logoPadding;
+      const logoY = timeY - logoHeight / 2;
+      
+      // Draw logo with slight shadow for visibility
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 8 * scale;
+      ctx.shadowOffsetX = 2 * scale;
+      ctx.shadowOffsetY = 2 * scale;
+      ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    } else {
+      // Fallback: draw placeholder button if no logo
+      const logoWidth = 120 * scale;
+      const logoHeight = 40 * scale;
+      const logoX = width - logoWidth - logoPadding;
+      const logoY = timeY - 15 * scale;
+      
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.roundRect(logoX, logoY, logoWidth, logoHeight, 6 * scale);
+      ctx.fill();
+      
+      ctx.fillStyle = 'white';
+      ctx.font = `bold ${12 * scale}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('NexaHRMS', logoX + logoWidth / 2, logoY + logoHeight / 2 + 4 * scale);
+      ctx.textAlign = 'left';
+    }
   };
 
   // Compress and resize image to reduce file size
@@ -376,7 +426,7 @@ export default function AttendancePage() {
           dateStr,
           locationAddress || 'Fetching location...',
           userName,
-          companySettings?.clockInLogoUrl || null
+          clockInLogoImage
         );
         
         // Compress the image to reduce file size (max 800px width, 70% quality)
