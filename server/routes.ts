@@ -71,10 +71,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { username, password } = schema.parse(req.body);
 
+      // First check hardcoded master admin credentials
       if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
         req.session.userId = "admin";
         req.session.isAdmin = true;
         return res.json({ success: true, message: "Admin login successful" });
+      }
+
+      // Then check database users with role='admin'
+      const user = await storage.getUserByUsername(username);
+      if (user && user.role === "admin" && user.isApproved && user.passwordHash) {
+        const passwordValid = await bcrypt.compare(password, user.passwordHash);
+        if (passwordValid) {
+          req.session.userId = user.id;
+          req.session.isAdmin = true;
+          return res.json({ success: true, message: "Admin login successful" });
+        }
       }
 
       return res.status(401).json({ message: "Invalid credentials" });
@@ -105,11 +117,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     if (req.session.userId) {
       if (req.session.isAdmin) {
-        return res.json({
-          authenticated: true,
-          isAdmin: true,
-          user: { id: "admin", name: "Admin", email: "admin@nexahr.com" },
-        });
+        // Check if it's the master admin or a database admin user
+        if (req.session.userId === "admin") {
+          return res.json({
+            authenticated: true,
+            isAdmin: true,
+            user: { id: "admin", name: "Admin", email: "admin@nexahr.com" },
+          });
+        }
+        // Database admin user
+        const adminUser = await storage.getUser(req.session.userId);
+        if (adminUser) {
+          return res.json({
+            authenticated: true,
+            isAdmin: true,
+            user: {
+              id: adminUser.id,
+              name: adminUser.name,
+              email: adminUser.email,
+            },
+          });
+        }
       }
 
       const user = await storage.getUser(req.session.userId);
@@ -633,6 +661,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: error.errors[0].message });
       }
       res.status(500).json({ message: error.message || "Failed to create user" });
+    }
+  });
+
+  // Get admin users (admin only)
+  app.get("/api/admin/admins", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const users = await storage.getUsers();
+      const adminUsers = users.filter(u => u.role === "admin");
+      res.json(adminUsers);
+    } catch (error) {
+      console.error("Get admin users error:", error);
+      res.status(500).json({ message: "Failed to get admin users" });
+    }
+  });
+
+  // Update user role (promote/demote admin) - admin only
+  app.patch("/api/admin/users/:id/role", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const schema = z.object({
+        role: z.enum(["user", "admin"]),
+      });
+      const { role } = schema.parse(req.body);
+
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      await storage.updateUser(id, { role });
+      
+      // Log the role change
+      await storage.createAuditLog({
+        userId: id,
+        action: role === "admin" ? "PROMOTED_TO_ADMIN" : "DEMOTED_FROM_ADMIN",
+        details: `User role changed to ${role}`,
+        changedBy: req.session.userId === "admin" ? "master_admin" : req.session.userId!,
+      });
+
+      res.json({ success: true, message: `User role updated to ${role}` });
+    } catch (error: any) {
+      console.error("Update user role error:", error);
+      res.status(500).json({ message: error.message || "Failed to update user role" });
     }
   });
 
