@@ -10,7 +10,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, List, ChevronLeft, ChevronRight, Search, Plus } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, List, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
 
@@ -104,7 +104,7 @@ function getHeatmapTextColor(hours: number): string {
 
 export default function AdminAttendancePage() {
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
-  const [viewMode, setViewMode] = useState<'list' | 'heatmap'>('heatmap');
+  const [viewMode, setViewMode] = useState<'today' | 'list' | 'heatmap'>('today');
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -144,9 +144,16 @@ export default function AdminAttendancePage() {
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
   });
 
+  // Fetch today's attendance records
+  const todayDate = new Date().toISOString().split('T')[0];
+  const { data: todayRecordsData, isLoading: todayLoading } = useQuery<{ records: AttendanceRecord[] }>({
+    queryKey: ['/api/admin/attendance/records', { startDate: todayDate, endDate: todayDate }],
+  });
+
   const users = usersData || [];
   const records = recordsData?.records || [];
   const heatmapRecords = heatmapRecordsData?.records || [];
+  const todayRecords = todayRecordsData?.records || [];
 
   // Get unique departments for filter
   const departments = useMemo(() => {
@@ -378,6 +385,15 @@ export default function AdminAttendancePage() {
             Add Attendance
           </Button>
           <Button
+            variant={viewMode === 'today' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('today')}
+            data-testid="button-view-today"
+          >
+            <CalendarCheck className="h-4 w-4 mr-1" />
+            Today
+          </Button>
+          <Button
             variant={viewMode === 'list' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setViewMode('list')}
@@ -404,7 +420,177 @@ export default function AdminAttendancePage() {
         </div>
       </div>
 
-      {viewMode === 'heatmap' ? (
+      {viewMode === 'today' ? (
+        <>
+          {/* Today's Clock-ins View */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <CalendarCheck className="h-5 w-5" />
+                    Today's Clock-ins
+                  </CardTitle>
+                  <CardDescription>
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground" data-testid="text-today-clocked-in-count">{todayRecords.length}</span> clock-ins today
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Legend */}
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <span className="text-muted-foreground">Status:</span>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-blue-500 dark:bg-blue-400"></div>
+                  <span>In Progress</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-green-600 dark:bg-green-500"></div>
+                  <span>Completed (8+ hrs)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-green-400"></div>
+                  <span>Completed (6-8 hrs)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-yellow-400 dark:bg-yellow-500"></div>
+                  <span>Completed (4-6 hrs)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-orange-400 dark:bg-orange-500"></div>
+                  <span>Completed (1-4 hrs)</span>
+                </div>
+              </div>
+
+              {/* Today's Grid */}
+              {todayLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading today's records...</div>
+              ) : todayRecords.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No clock-ins yet today</p>
+                  <p className="text-sm">Employees who clock in will appear here</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                  {todayRecords
+                    .sort((a, b) => new Date(a.clockInTime).getTime() - new Date(b.clockInTime).getTime())
+                    .map((record) => {
+                      const user = users.find(u => u.id === record.userId);
+                      const hours = calculateHours(record.clockInTime, record.clockOutTime);
+                      const isInProgress = !record.clockOutTime;
+                      const bgColor = isInProgress 
+                        ? "bg-blue-500 dark:bg-blue-400" 
+                        : getHeatmapColor(hours, false);
+                      
+                      return (
+                        <Tooltip key={record.id}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={`${bgColor} rounded-lg p-3 cursor-pointer transition-opacity hover:opacity-80 text-white`}
+                              data-testid={`card-today-${record.id}`}
+                            >
+                              <div className="font-medium text-sm truncate">
+                                {user?.name || 'Unknown'}
+                              </div>
+                              <div className="text-xs opacity-90 mt-1">
+                                {isInProgress ? (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    In: {formatTime(record.clockInTime)}
+                                  </span>
+                                ) : (
+                                  <span>{hours.toFixed(1)} hrs</span>
+                                )}
+                              </div>
+                              {user?.department && (
+                                <div className="text-[10px] opacity-75 mt-1 truncate">
+                                  {user.department}
+                                </div>
+                              )}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs max-w-xs">
+                            <div className="font-medium">{user?.name || 'Unknown'}</div>
+                            {user?.employeeCode && (
+                              <div className="text-muted-foreground">{user.employeeCode}</div>
+                            )}
+                            <div className="mt-1">
+                              <div>Clock In: {formatTime(record.clockInTime)}</div>
+                              <div>
+                                Clock Out: {record.clockOutTime 
+                                  ? formatTime(record.clockOutTime) 
+                                  : <span className="text-blue-500">In Progress</span>}
+                              </div>
+                              {record.clockOutTime && (
+                                <div className="font-medium mt-1">{hours.toFixed(1)} hours worked</div>
+                              )}
+                            </div>
+                            {isInProgress && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="mt-2 h-6 text-xs w-full"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedRecord(record);
+                                  setShowEndClockInDialog(true);
+                                }}
+                                data-testid={`button-end-clockin-today-${record.id}`}
+                              >
+                                End Clock-in
+                              </Button>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                </div>
+              )}
+
+              {/* Summary stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+                <div className="bg-muted/50 p-3 rounded-md">
+                  <p className="text-xs text-muted-foreground mb-1">Total Clock-ins</p>
+                  <p className="text-xl font-bold" data-testid="text-today-total-clockins">
+                    {todayRecords.length}
+                  </p>
+                </div>
+                <div className="bg-muted/50 p-3 rounded-md">
+                  <p className="text-xs text-muted-foreground mb-1">In Progress</p>
+                  <p className="text-xl font-bold text-blue-500" data-testid="text-today-in-progress">
+                    {todayRecords.filter(r => !r.clockOutTime).length}
+                  </p>
+                </div>
+                <div className="bg-muted/50 p-3 rounded-md">
+                  <p className="text-xs text-muted-foreground mb-1">Completed</p>
+                  <p className="text-xl font-bold text-green-600" data-testid="text-today-completed">
+                    {todayRecords.filter(r => r.clockOutTime).length}
+                  </p>
+                </div>
+                <div className="bg-muted/50 p-3 rounded-md">
+                  <p className="text-xs text-muted-foreground mb-1">Avg Hours</p>
+                  <p className="text-xl font-bold" data-testid="text-today-avg-hours">
+                    {todayRecords.filter(r => r.clockOutTime).length > 0
+                      ? (todayRecords
+                          .filter(r => r.clockOutTime)
+                          .reduce((sum, r) => sum + calculateHours(r.clockInTime, r.clockOutTime), 0) / 
+                         todayRecords.filter(r => r.clockOutTime).length
+                        ).toFixed(1)
+                      : '-'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : viewMode === 'heatmap' ? (
         <>
           {/* Heatmap View */}
           <Card>
