@@ -682,6 +682,135 @@ export default function AdminAttendancePage() {
           </Card>
         </>
       )}
+
+      {/* Add Attendance Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={(open) => {
+        setShowAddDialog(open);
+        if (!open) {
+          setSelectedEmployee(null);
+          setAddSearchQuery("");
+          setClockInTime("09:00");
+          setClockOutTime("");
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Attendance Record</DialogTitle>
+            <DialogDescription>
+              Add attendance for an employee for today ({new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Employee Search */}
+            <div className="space-y-2">
+              <Label>Search Employee</Label>
+              <Input
+                placeholder="Type name, email, or employee code..."
+                value={addSearchQuery}
+                onChange={(e) => {
+                  setAddSearchQuery(e.target.value);
+                  setSelectedEmployee(null);
+                }}
+                data-testid="input-search-add-attendance"
+              />
+            </div>
+
+            {/* Search Results */}
+            {addSearchQuery.trim() !== "" && !selectedEmployee && (
+              <div className="border rounded-lg max-h-48 overflow-auto">
+                {addDialogFilteredEmployees.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground text-center">
+                    No matching employees found
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {addDialogFilteredEmployees.map((emp) => {
+                      const hasAttendance = employeeHasAttendanceToday(emp.id);
+                      return (
+                        <div
+                          key={emp.id}
+                          className={`p-3 cursor-pointer hover-elevate ${hasAttendance ? 'opacity-50' : ''}`}
+                          onClick={() => {
+                            if (!hasAttendance) {
+                              setSelectedEmployee(emp);
+                            }
+                          }}
+                          data-testid={`option-employee-${emp.id}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium">{emp.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {emp.email} {emp.employeeCode && `· ${emp.employeeCode}`}
+                              </div>
+                            </div>
+                            {hasAttendance && (
+                              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                                Already clocked in
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Selected Employee */}
+            {selectedEmployee && (
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="text-sm text-muted-foreground">Selected Employee:</div>
+                <div className="font-medium">{selectedEmployee.name}</div>
+                <div className="text-sm text-muted-foreground">{selectedEmployee.email}</div>
+              </div>
+            )}
+
+            {/* Time Inputs */}
+            {selectedEmployee && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="clockIn">Clock In Time</Label>
+                  <Input
+                    id="clockIn"
+                    type="time"
+                    value={clockInTime}
+                    onChange={(e) => setClockInTime(e.target.value)}
+                    data-testid="input-clock-in-time"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clockOut">Clock Out Time (Optional)</Label>
+                  <Input
+                    id="clockOut"
+                    type="time"
+                    value={clockOutTime}
+                    onChange={(e) => setClockOutTime(e.target.value)}
+                    data-testid="input-clock-out-time"
+                  />
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Note: Attendance can only be added for today. This action will be recorded in the audit log.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddAttendance}
+              disabled={!selectedEmployee || !clockInTime || addAttendanceMutation.isPending}
+              data-testid="button-confirm-add-attendance"
+            >
+              {addAttendanceMutation.isPending ? "Adding..." : "Add Attendance"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
