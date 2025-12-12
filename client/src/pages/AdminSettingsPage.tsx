@@ -6,13 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus } from "lucide-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { CompanySettings } from "@shared/schema";
+import type { CompanySettings, User } from "@shared/schema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ParsedEmployee {
   code: string;
@@ -47,6 +49,10 @@ export default function AdminSettingsPage() {
   const [parsedEmployees, setParsedEmployees] = useState<ParsedEmployee[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  
+  // Admin users management state
+  const [showAddAdminDialog, setShowAddAdminDialog] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
@@ -70,6 +76,43 @@ export default function AdminSettingsPage() {
 
   const { data: qrCodeData, isLoading: qrLoading, error: qrError } = useQuery<{ qrCode: string; appUrl: string }>({
     queryKey: ["/api/admin/qr-code"],
+  });
+
+  // Fetch admin users
+  const { data: adminUsers = [], isLoading: adminsLoading } = useQuery<User[]>({
+    queryKey: ["/api/admin/admins"],
+  });
+
+  // Fetch all users for adding new admins
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ["/api/admin/users"],
+  });
+
+  // Filter out users who are already admins for the add dialog
+  const nonAdminUsers = allUsers.filter(u => u.role !== "admin");
+
+  // Mutation to update user role
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: "user" | "admin" }) => {
+      await apiRequest("PATCH", `/api/admin/users/${userId}/role`, { role });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Success",
+        description: "User role updated successfully",
+      });
+      setShowAddAdminDialog(false);
+      setSelectedUserId("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const uploadLogoMutation = useMutation({
@@ -1052,7 +1095,141 @@ export default function AdminSettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Admin Users
+            </CardTitle>
+            <CardDescription>
+              Manage users who have admin access to the system
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() => setShowAddAdminDialog(true)}
+                data-testid="button-add-admin"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Admin
+              </Button>
+            </div>
+
+            {adminsLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading admin users...
+              </div>
+            ) : adminUsers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Shield className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No admin users configured</p>
+                <p className="text-sm">Only the master admin account has access</p>
+              </div>
+            ) : (
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adminUsers.map((admin) => (
+                      <TableRow key={admin.id} data-testid={`row-admin-${admin.id}`}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-primary" />
+                            {admin.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>{admin.email}</TableCell>
+                        <TableCell className="font-mono text-sm">{admin.username}</TableCell>
+                        <TableCell>{admin.department || "-"}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => updateRoleMutation.mutate({ userId: admin.id, role: "user" })}
+                            disabled={updateRoleMutation.isPending}
+                            data-testid={`button-remove-admin-${admin.id}`}
+                          >
+                            <ShieldOff className="h-4 w-4 mr-1" />
+                            Remove Admin
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Admin users can log in through the Admin Login page using their username and password. 
+                The master admin account (nexaadmin) always has access.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Add Admin Dialog */}
+      <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Admin User</DialogTitle>
+            <DialogDescription>
+              Select an employee to grant admin access. They will be able to log in via the Admin Login page.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Employee</Label>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger data-testid="select-admin-user">
+                  <SelectValue placeholder="Choose an employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {nonAdminUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id} data-testid={`option-user-${user.id}`}>
+                      {user.name} ({user.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {nonAdminUsers.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No employees available to add as admin. All users are already admins.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddAdminDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedUserId) {
+                  updateRoleMutation.mutate({ userId: selectedUserId, role: "admin" });
+                }
+              }}
+              disabled={!selectedUserId || updateRoleMutation.isPending}
+              data-testid="button-confirm-add-admin"
+            >
+              {updateRoleMutation.isPending ? "Adding..." : "Add as Admin"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

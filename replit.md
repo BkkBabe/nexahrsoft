@@ -20,7 +20,7 @@ Preferred communication style: Simple, everyday language.
 ### Backend Architecture
 
 - **Server Framework**: Express.js with TypeScript, express-session for session management, RESTful API design.
-- **Authentication & Authorization**: Dual system (admin hardcoded, user bcrypt-hashed password), session-based with secure HTTP-only cookies, role-based access control (admin vs. user), security model ensures sessions only for approved users, user approval workflow for new registrations, forced password change on first login via mustChangePassword flag.
+- **Authentication & Authorization**: Dual admin system (master admin hardcoded + database users with role='admin'), user bcrypt-hashed passwords, session-based with secure HTTP-only cookies, role-based access control (admin vs. user), security model ensures sessions only for approved users, user approval workflow for new registrations, forced password change on first login via mustChangePassword flag.
 - **Data Layer**: Drizzle ORM for type-safe queries, Zod validation, PostgreSQL-backed storage (PgStorage) via Neon serverless database.
 - **API Structure**: `/api/admin/*`, `/api/auth/*` following RESTful conventions with Zod schema validation.
 
@@ -50,6 +50,8 @@ Preferred communication style: Simple, everyday language.
   - Company branding (logo, favicon, name)
   - Email sender configuration for welcome messages
   - QR code preview for verification
+  - Admin Users Management: Promote employees to admin role, view/remove admin users
+  - Admin users can log in via Admin Login page using their username/password
 
 ### Key Architectural Patterns
 

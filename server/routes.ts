@@ -80,7 +80,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Then check database users with role='admin'
       const user = await storage.getUserByUsername(username);
-      if (user && user.role === "admin" && user.isApproved && user.passwordHash) {
+      if (user && user.role === "admin" && user.isApproved) {
+        // Security: Only allow login if user has a valid password hash
+        if (!user.passwordHash) {
+          console.log(`Admin login rejected: User ${username} has no password set`);
+          return res.status(401).json({ message: "Invalid credentials" });
+        }
         const passwordValid = await bcrypt.compare(password, user.passwordHash);
         if (passwordValid) {
           req.session.userId = user.id;
@@ -667,8 +672,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get admin users (admin only)
   app.get("/api/admin/admins", requireAdmin, async (_req: Request, res: Response) => {
     try {
-      const users = await storage.getUsers();
-      const adminUsers = users.filter(u => u.role === "admin");
+      const users = await storage.getAllUsers();
+      const adminUsers = users.filter((u: { role: string }) => u.role === "admin");
       res.json(adminUsers);
     } catch (error) {
       console.error("Get admin users error:", error);
@@ -690,15 +695,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
+      const oldRole = user.role;
       await storage.updateUser(id, { role });
+      
+      // Determine the actor's identity for audit logging
+      let changedByIdentifier: string;
+      if (req.session.userId === "admin") {
+        changedByIdentifier = "master_admin (nexaadmin)";
+      } else {
+        const actorUser = await storage.getUser(req.session.userId!);
+        changedByIdentifier = actorUser ? `${actorUser.name} (${actorUser.email})` : req.session.userId!;
+      }
       
       // Log the role change
       await storage.createAuditLog({
         userId: id,
-        action: role === "admin" ? "PROMOTED_TO_ADMIN" : "DEMOTED_FROM_ADMIN",
-        details: `User role changed to ${role}`,
-        changedBy: req.session.userId === "admin" ? "master_admin" : req.session.userId!,
+        changedBy: changedByIdentifier,
+        fieldChanged: "role",
+        oldValue: oldRole,
+        newValue: role,
+        changeType: "update",
       });
+
+      // If the acting admin demoted themselves, invalidate their admin session
+      if (role === "user" && req.session.userId === id) {
+        req.session.isAdmin = false;
+        return res.json({ 
+          success: true, 
+          message: "Your admin access has been removed. You will be redirected.",
+          selfDemoted: true 
+        });
+      }
 
       res.json({ success: true, message: `User role updated to ${role}` });
     } catch (error: any) {
