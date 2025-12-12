@@ -108,7 +108,7 @@ export default function AdminAttendancePage() {
   const [departmentFilter, setDepartmentFilter] = useState("all");
 
   // Fetch all users
-  const { data: usersData } = useQuery<{ users: User[] }>({
+  const { data: usersData } = useQuery<User[]>({
     queryKey: ['/api/admin/users'],
   });
 
@@ -125,7 +125,7 @@ export default function AdminAttendancePage() {
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
   });
 
-  const users = usersData?.users || [];
+  const users = usersData || [];
   const records = recordsData?.records || [];
   const heatmapRecords = heatmapRecordsData?.records || [];
 
