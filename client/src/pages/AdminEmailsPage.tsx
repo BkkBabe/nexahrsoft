@@ -58,7 +58,7 @@ export default function AdminEmailsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [resetReason, setResetReason] = useState("");
 
-  const { data: usersData, isLoading, refetch: refetchUsers } = useQuery<{ users: User[] }>({
+  const { data: usersData, isLoading, refetch: refetchUsers } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
   });
 
@@ -78,7 +78,7 @@ export default function AdminEmailsPage() {
     queryKey: ["/api/admin/password-override-logs"],
   });
 
-  const users = usersData?.users || [];
+  const users = usersData || [];
   const passwordOverrideLogs = passwordOverrideLogsData?.logs || [];
   const emailLogs = emailLogsData?.logs || [];
   const emailConfigured = settingsData?.senderEmail && settingsData?.senderName;

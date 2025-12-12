@@ -53,6 +53,7 @@ export default function AdminSettingsPage() {
   // Admin users management state
   const [showAddAdminDialog, setShowAddAdminDialog] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [adminSearchQuery, setAdminSearchQuery] = useState<string>("");
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
@@ -90,6 +91,15 @@ export default function AdminSettingsPage() {
 
   // Filter out users who are already admins for the add dialog
   const nonAdminUsers = allUsers.filter(u => u.role !== "admin");
+  
+  // Filter non-admin users by search query
+  const filteredNonAdminUsers = nonAdminUsers.filter(u => 
+    adminSearchQuery.trim() === "" ? false :
+    u.name.toLowerCase().includes(adminSearchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(adminSearchQuery.toLowerCase()) ||
+    (u.employeeCode && u.employeeCode.toLowerCase().includes(adminSearchQuery.toLowerCase())) ||
+    (u.username && u.username.toLowerCase().includes(adminSearchQuery.toLowerCase()))
+  );
 
   // Mutation to update user role
   const updateRoleMutation = useMutation({
@@ -105,6 +115,7 @@ export default function AdminSettingsPage() {
       });
       setShowAddAdminDialog(false);
       setSelectedUserId("");
+      setAdminSearchQuery("");
     },
     onError: (error: Error) => {
       toast({
@@ -1182,30 +1193,74 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* Add Admin Dialog */}
-      <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
-        <DialogContent>
+      <Dialog open={showAddAdminDialog} onOpenChange={(open) => {
+        setShowAddAdminDialog(open);
+        if (!open) {
+          setAdminSearchQuery("");
+          setSelectedUserId("");
+        }
+      }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Admin User</DialogTitle>
             <DialogDescription>
-              Select an employee to grant admin access. They will be able to log in via the Admin Login page.
+              Search for an employee to grant admin access. They will be able to log in via the Admin Login page.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Select Employee</Label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger data-testid="select-admin-user">
-                  <SelectValue placeholder="Choose an employee..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {nonAdminUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id} data-testid={`option-user-${user.id}`}>
-                      {user.name} ({user.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Search Employee</Label>
+              <Input
+                placeholder="Type name, email, or employee code..."
+                value={adminSearchQuery}
+                onChange={(e) => {
+                  setAdminSearchQuery(e.target.value);
+                  setSelectedUserId("");
+                }}
+                data-testid="input-search-admin-user"
+              />
             </div>
+            
+            {adminSearchQuery.trim() !== "" && (
+              <div className="border rounded-lg max-h-48 overflow-auto">
+                {filteredNonAdminUsers.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground text-center">
+                    No matching employees found
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {filteredNonAdminUsers.slice(0, 10).map((user) => (
+                      <div
+                        key={user.id}
+                        className={`p-3 cursor-pointer hover-elevate ${selectedUserId === user.id ? "bg-primary/10" : ""}`}
+                        onClick={() => setSelectedUserId(user.id)}
+                        data-testid={`option-user-${user.id}`}
+                      >
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {user.email} {user.employeeCode && `· ${user.employeeCode}`}
+                        </div>
+                      </div>
+                    ))}
+                    {filteredNonAdminUsers.length > 10 && (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        +{filteredNonAdminUsers.length - 10} more results. Refine your search.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {selectedUserId && (
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="text-sm text-muted-foreground">Selected:</div>
+                <div className="font-medium">
+                  {nonAdminUsers.find(u => u.id === selectedUserId)?.name}
+                </div>
+              </div>
+            )}
+            
             {nonAdminUsers.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 No employees available to add as admin. All users are already admins.
