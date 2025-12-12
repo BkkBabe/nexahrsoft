@@ -21,6 +21,7 @@ export interface IStorage {
   
   // Attendance methods
   createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord>;
+  getAttendanceRecord(id: string): Promise<AttendanceRecord | undefined>;
   updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined>;
   getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined>;
   getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
@@ -190,6 +191,10 @@ export class MemStorage implements IStorage {
 
   // Attendance methods - stub implementations for MemStorage
   async createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async getAttendanceRecord(id: string): Promise<AttendanceRecord | undefined> {
     throw new Error("MemStorage attendance not implemented");
   }
 
@@ -470,6 +475,14 @@ export class PgStorage implements IStorage {
       .values(record)
       .returning();
     return attendanceRecord;
+  }
+
+  async getAttendanceRecord(id: string): Promise<AttendanceRecord | undefined> {
+    const [record] = await db.select()
+      .from(attendanceRecords)
+      .where(eq(attendanceRecords.id, id))
+      .limit(1);
+    return record;
   }
 
   async updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined> {

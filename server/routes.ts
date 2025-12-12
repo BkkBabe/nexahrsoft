@@ -1200,6 +1200,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: End clock-in for an employee (nexaadmin only)
+  app.post("/api/admin/attendance/end-clockin", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    // Only master admin (nexaadmin) can end clock-ins
+    if (req.session.userId !== "admin") {
+      return res.status(403).json({ message: "Only master admin can end employee clock-ins" });
+    }
+
+    try {
+      const schema = z.object({
+        recordId: z.string().uuid(),
+        clockOutTime: z.string(), // HH:mm format
+      });
+
+      const { recordId, clockOutTime } = schema.parse(req.body);
+
+      // Get the attendance record
+      const record = await storage.getAttendanceRecord(recordId);
+      if (!record) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+
+      // Check if already clocked out
+      if (record.clockOutTime) {
+        return res.status(400).json({ message: "This attendance record already has a clock-out time" });
+      }
+
+      // Get the employee
+      const employee = await storage.getUser(record.userId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // Parse clock out time to full datetime using the record's date
+      const recordDate = new Date(record.date);
+      const [clockOutHour, clockOutMinute] = clockOutTime.split(':').map(Number);
+      const clockOutDateTime = new Date(
+        recordDate.getFullYear(), 
+        recordDate.getMonth(), 
+        recordDate.getDate(), 
+        clockOutHour, 
+        clockOutMinute, 
+        0
+      );
+
+      // Validate clock out is after clock in
+      const clockInDateTime = new Date(record.clockInTime);
+      if (clockOutDateTime <= clockInDateTime) {
+        return res.status(400).json({ message: "Clock out time must be after clock in time" });
+      }
+
+      // Update the attendance record
+      const updatedRecord = await storage.updateAttendanceRecord(recordId, {
+        clockOutTime: clockOutDateTime,
+      });
+
+      // Create audit log entry
+      await storage.createAuditLog({
+        userId: record.userId,
+        changedBy: "Master Admin (nexaadmin)",
+        fieldChanged: "attendance_clockout",
+        oldValue: null,
+        newValue: JSON.stringify({
+          recordId,
+          date: record.date,
+          clockOut: clockOutTime,
+        }),
+        changeType: "update",
+      });
+
+      res.json({ 
+        success: true, 
+        record: updatedRecord,
+        message: `Clock-out set for ${employee.name}` 
+      });
+    } catch (error) {
+      console.error("Admin end clock-in error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to end clock-in" });
+    }
+  });
+
   // Admin: Update attendance buffer settings
   app.put("/api/admin/attendance/buffer", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {

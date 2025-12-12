@@ -86,8 +86,9 @@ function normalizeRecordDateKey(dateValue: Date | string): string {
   return getDateKey(d);
 }
 
-// Get color class based on hours worked
-function getHeatmapColor(hours: number): string {
+// Get color class based on hours worked and open sessions
+function getHeatmapColor(hours: number, hasOpenSession?: boolean): string {
+  if (hasOpenSession) return "bg-blue-500 dark:bg-blue-400"; // Blue for in-progress
   if (hours >= 8) return "bg-green-600 dark:bg-green-500";
   if (hours >= 6) return "bg-green-400 dark:bg-green-400";
   if (hours >= 4) return "bg-yellow-400 dark:bg-yellow-500";
@@ -117,6 +118,11 @@ export default function AdminAttendancePage() {
   const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
   const [clockInTime, setClockInTime] = useState("09:00");
   const [clockOutTime, setClockOutTime] = useState("");
+  
+  // End clock-in dialog state
+  const [showEndClockInDialog, setShowEndClockInDialog] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
+  const [endClockOutTime, setEndClockOutTime] = useState("18:00");
   
   const { toast } = useToast();
 
@@ -177,15 +183,41 @@ export default function AdminAttendancePage() {
     return getDaysInMonth(heatmapMonth.year, heatmapMonth.month);
   }, [heatmapMonth]);
 
-  // Create a map of userId -> date -> record for heatmap
+  // Aggregated data type for heatmap cells
+  type AggregatedAttendance = {
+    totalHours: number;
+    recordCount: number;
+    records: AttendanceRecord[];
+    hasOpenSession: boolean; // true if any record is missing clock-out
+  };
+
+  // Create a map of userId -> date -> aggregated attendance data for heatmap
   const heatmapDataMap = useMemo(() => {
-    const map: Record<string, Record<string, AttendanceRecord>> = {};
+    const map: Record<string, Record<string, AggregatedAttendance>> = {};
     heatmapRecords.forEach(record => {
       if (!map[record.userId]) {
         map[record.userId] = {};
       }
       const dateKey = normalizeRecordDateKey(record.date);
-      map[record.userId][dateKey] = record;
+      
+      if (!map[record.userId][dateKey]) {
+        map[record.userId][dateKey] = {
+          totalHours: 0,
+          recordCount: 0,
+          records: [],
+          hasOpenSession: false,
+        };
+      }
+      
+      const hours = calculateHours(record.clockInTime, record.clockOutTime);
+      map[record.userId][dateKey].totalHours += hours;
+      map[record.userId][dateKey].recordCount += 1;
+      map[record.userId][dateKey].records.push(record);
+      
+      // Track if any record is missing clock-out
+      if (!record.clockOutTime) {
+        map[record.userId][dateKey].hasOpenSession = true;
+      }
     });
     return map;
   }, [heatmapRecords]);
@@ -264,6 +296,40 @@ export default function AdminAttendancePage() {
       userId: selectedEmployee.id,
       clockInTime,
       clockOutTime: clockOutTime || undefined,
+    });
+  };
+
+  // End clock-in mutation (nexaadmin only)
+  const endClockInMutation = useMutation({
+    mutationFn: async (data: { recordId: string; clockOutTime: string }) => {
+      const response = await apiRequest("POST", "/api/admin/attendance/end-clockin", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Clock-out Set",
+        description: data.message || "Clock-out time has been recorded",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      setShowEndClockInDialog(false);
+      setSelectedRecord(null);
+      setEndClockOutTime("18:00");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to end clock-in",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEndClockIn = () => {
+    if (!selectedRecord) return;
+    
+    endClockInMutation.mutate({
+      recordId: selectedRecord.id,
+      clockOutTime: endClockOutTime,
     });
   };
 
@@ -410,6 +476,10 @@ export default function AdminAttendancePage() {
                   <span>1-4</span>
                 </div>
                 <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-blue-500 dark:bg-blue-400"></div>
+                  <span>In Progress</span>
+                </div>
+                <div className="flex items-center gap-1">
                   <div className="w-4 h-4 rounded bg-muted border"></div>
                   <span>Absent</span>
                 </div>
@@ -464,12 +534,15 @@ export default function AdminAttendancePage() {
                             <div className="flex flex-1">
                               {daysInMonth.map((day, idx) => {
                                 const dateKey = getDateKey(day);
-                                const record = heatmapDataMap[user.id]?.[dateKey];
-                                const hours = record ? calculateHours(record.clockInTime, record.clockOutTime) : 0;
+                                const aggData = heatmapDataMap[user.id]?.[dateKey];
+                                const hours = aggData?.totalHours || 0;
+                                const recordCount = aggData?.recordCount || 0;
+                                const hasOpenSession = aggData?.hasOpenSession || false;
                                 const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                                 const today = new Date();
                                 today.setHours(0, 0, 0, 0);
                                 const isFuture = day > today;
+                                const hasRecord = aggData && recordCount > 0;
 
                                 return (
                                   <Tooltip key={idx}>
@@ -478,25 +551,56 @@ export default function AdminAttendancePage() {
                                         className={`flex-1 min-w-[28px] min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
                                           isFuture 
                                             ? 'bg-muted/30' 
-                                            : isWeekend && hours === 0 
+                                            : isWeekend && !hasRecord 
                                               ? 'bg-muted/50'
-                                              : getHeatmapColor(hours)
-                                        } ${hours > 0 ? getHeatmapTextColor(hours) : ''}`}
+                                              : getHeatmapColor(hours, hasOpenSession)
+                                        } ${(hours > 0 || hasOpenSession) ? 'text-white' : ''}`}
                                         data-testid={`cell-${user.id}-${dateKey}`}
                                       >
+                                        {!isFuture && hasOpenSession && hours === 0 && (
+                                          <Clock className="h-3 w-3" />
+                                        )}
                                         {hours > 0 && !isFuture && (
                                           <span className="font-medium">{Number.isInteger(hours) ? hours : hours.toFixed(1)}</span>
                                         )}
                                       </div>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">
+                                    <TooltipContent side="top" className="text-xs max-w-xs">
                                       <div className="font-medium">{user.name}</div>
                                       <div className="text-muted-foreground">{formatDate(day)}</div>
-                                      {record ? (
-                                        <div className="mt-1 space-y-0.5">
-                                          <div>In: {formatTime(record.clockInTime)}</div>
-                                          <div>Out: {formatTime(record.clockOutTime)}</div>
-                                          <div className="font-medium">{hours.toFixed(1)} hours</div>
+                                      {aggData ? (
+                                        <div className="mt-1 space-y-1">
+                                          {recordCount > 1 && (
+                                            <div className="text-yellow-600 dark:text-yellow-400 font-medium">
+                                              {recordCount} entries
+                                            </div>
+                                          )}
+                                          {aggData.records.map((record, rIdx) => (
+                                            <div key={record.id} className="border-t pt-1 first:border-t-0 first:pt-0">
+                                              {recordCount > 1 && <div className="text-muted-foreground">Entry {rIdx + 1}:</div>}
+                                              <div>In: {formatTime(record.clockInTime)}</div>
+                                              <div>Out: {record.clockOutTime ? formatTime(record.clockOutTime) : <span className="text-blue-500">In Progress</span>}</div>
+                                              <div>{record.clockOutTime ? `${calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs` : '-'}</div>
+                                              {!record.clockOutTime && (
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className="mt-1 h-6 text-xs"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedRecord(record);
+                                                    setShowEndClockInDialog(true);
+                                                  }}
+                                                  data-testid={`button-end-clockin-${record.id}`}
+                                                >
+                                                  End Clock-in
+                                                </Button>
+                                              )}
+                                            </div>
+                                          ))}
+                                          <div className="border-t pt-1 font-medium">
+                                            Total: {hours.toFixed(1)} hours
+                                          </div>
                                         </div>
                                       ) : isFuture ? (
                                         <div className="text-muted-foreground">Future date</div>
@@ -807,6 +911,69 @@ export default function AdminAttendancePage() {
               data-testid="button-confirm-add-attendance"
             >
               {addAttendanceMutation.isPending ? "Adding..." : "Add Attendance"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* End Clock-in Dialog (nexaadmin only) */}
+      <Dialog open={showEndClockInDialog} onOpenChange={(open) => {
+        setShowEndClockInDialog(open);
+        if (!open) {
+          setSelectedRecord(null);
+          setEndClockOutTime("18:00");
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>End Clock-in</DialogTitle>
+            <DialogDescription>
+              Set the clock-out time for this attendance record
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedRecord && (
+              <>
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">Record Details:</div>
+                  <div className="font-medium">
+                    {users.find(u => u.id === selectedRecord.userId)?.name || 'Unknown Employee'}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Date: {formatDate(selectedRecord.date)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Clock In: {formatTime(selectedRecord.clockInTime)}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="endClockOut">Clock Out Time</Label>
+                  <Input
+                    id="endClockOut"
+                    type="time"
+                    value={endClockOutTime}
+                    onChange={(e) => setEndClockOutTime(e.target.value)}
+                    data-testid="input-end-clock-out-time"
+                  />
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Note: Only master admin (nexaadmin) can end clock-ins. This action will be recorded in the audit log.
+                </p>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEndClockInDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEndClockIn}
+              disabled={!selectedRecord || !endClockOutTime || endClockInMutation.isPending}
+              data-testid="button-confirm-end-clockin"
+            >
+              {endClockInMutation.isPending ? "Saving..." : "Set Clock-out"}
             </Button>
           </DialogFooter>
         </DialogContent>
