@@ -2,11 +2,15 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useQuery } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, List, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, List, ChevronLeft, ChevronRight, Search, Plus } from "lucide-react";
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
 
@@ -106,6 +110,15 @@ export default function AdminAttendancePage() {
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  
+  // Add attendance dialog state
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addSearchQuery, setAddSearchQuery] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
+  const [clockInTime, setClockInTime] = useState("09:00");
+  const [clockOutTime, setClockOutTime] = useState("");
+  
+  const { toast } = useToast();
 
   // Fetch all users
   const { data: usersData } = useQuery<User[]>({
@@ -195,6 +208,65 @@ export default function AdminAttendancePage() {
     return acc;
   }, {} as Record<string, number>);
 
+  // Filter employees for add attendance dialog (exclude admins)
+  const addDialogFilteredEmployees = useMemo(() => {
+    if (!addSearchQuery.trim()) return [];
+    const query = addSearchQuery.toLowerCase();
+    return users
+      .filter(u => u.role !== "admin")
+      .filter(u => 
+        u.name?.toLowerCase().includes(query) ||
+        u.email?.toLowerCase().includes(query) ||
+        u.employeeCode?.toLowerCase().includes(query)
+      )
+      .slice(0, 10);
+  }, [users, addSearchQuery]);
+
+  // Get today's date string
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Check if employee already has attendance today
+  const employeeHasAttendanceToday = (userId: string) => {
+    return heatmapRecords.some(r => r.userId === userId && normalizeRecordDateKey(r.date) === todayStr);
+  };
+
+  // Add attendance mutation
+  const addAttendanceMutation = useMutation({
+    mutationFn: async (data: { userId: string; clockInTime: string; clockOutTime?: string }) => {
+      const response = await apiRequest("POST", "/api/admin/attendance/add", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Attendance Added",
+        description: data.message || "Attendance record created successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      setShowAddDialog(false);
+      setSelectedEmployee(null);
+      setAddSearchQuery("");
+      setClockInTime("09:00");
+      setClockOutTime("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add attendance",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddAttendance = () => {
+    if (!selectedEmployee) return;
+    
+    addAttendanceMutation.mutate({
+      userId: selectedEmployee.id,
+      clockInTime,
+      clockOutTime: clockOutTime || undefined,
+    });
+  };
+
   // Month navigation
   const goToPreviousMonth = () => {
     setHeatmapMonth(prev => {
@@ -231,6 +303,14 @@ export default function AdminAttendancePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setShowAddDialog(true)}
+            data-testid="button-add-attendance"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add Attendance
+          </Button>
           <Button
             variant={viewMode === 'list' ? 'default' : 'outline'}
             size="sm"

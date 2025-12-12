@@ -1112,6 +1112,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Add attendance record for an employee (today only)
+  app.post("/api/admin/attendance/add", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const schema = z.object({
+        userId: z.string().uuid(),
+        clockInTime: z.string(), // HH:mm format
+        clockOutTime: z.string().optional(), // HH:mm format, optional
+      });
+
+      const { userId, clockInTime, clockOutTime } = schema.parse(req.body);
+
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+
+      // Check if employee exists
+      const employee = await storage.getUser(userId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // Check if attendance already exists for this user today
+      const existingRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, todayStr, todayStr);
+      if (existingRecords.length > 0) {
+        return res.status(400).json({ message: "Attendance record already exists for this employee today" });
+      }
+
+      // Parse clock in time (HH:mm) to full datetime
+      const [clockInHour, clockInMinute] = clockInTime.split(':').map(Number);
+      const clockInDateTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), clockInHour, clockInMinute, 0);
+
+      // Parse clock out time if provided
+      let clockOutDateTime: Date | undefined;
+      if (clockOutTime) {
+        const [clockOutHour, clockOutMinute] = clockOutTime.split(':').map(Number);
+        clockOutDateTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), clockOutHour, clockOutMinute, 0);
+        
+        // Validate clock out is after clock in
+        if (clockOutDateTime <= clockInDateTime) {
+          return res.status(400).json({ message: "Clock out time must be after clock in time" });
+        }
+      }
+
+      // Create attendance record
+      const record = await storage.createAttendanceRecord({
+        userId,
+        date: todayStr,
+        clockInTime: clockInDateTime,
+        clockOutTime: clockOutDateTime || null,
+      });
+
+      // Create audit log entry - get admin identifier
+      let adminName = "Master Admin";
+      if (req.session.userId !== "admin") {
+        const adminUser = await storage.getUser(req.session.userId!);
+        adminName = adminUser ? `${adminUser.name} (${adminUser.email})` : req.session.userId!;
+      }
+      await storage.createAuditLog({
+        userId,
+        changedBy: adminName,
+        fieldChanged: "attendance",
+        oldValue: null,
+        newValue: JSON.stringify({
+          date: todayStr,
+          clockIn: clockInTime,
+          clockOut: clockOutTime || null,
+        }),
+        changeType: "create",
+      });
+
+      res.json({ 
+        success: true, 
+        record,
+        message: `Attendance added for ${employee.name}` 
+      });
+    } catch (error) {
+      console.error("Admin add attendance error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to add attendance record" });
+    }
+  });
+
   // Admin: Update attendance buffer settings
   app.put("/api/admin/attendance/buffer", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
