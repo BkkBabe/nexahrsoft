@@ -27,7 +27,7 @@ Preferred communication style: Simple, everyday language.
 ### Database Schema
 
 - **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent, mustChangePassword). Supports both password-based and OAuth, with approval-based access control, forced password change on first login, and full HR metadata.
-- **Company Settings Table**: Stores company branding and email settings (company_name, logo_url, favicon_url, senderEmail, senderName, appUrl, updated_at). Singleton pattern ensures one record.
+- **Company Settings Table**: Stores company branding, email settings, and timezone configuration (company_name, logo_url, favicon_url, senderEmail, senderName, appUrl, defaultTimezone, updated_at). Singleton pattern ensures one record.
 - **Attendance Records Table**: Stores clock-in/out times, user ID, date, calculated hours, location data, and photo metadata.
 - **Extensibility**: Designed to easily accommodate future tables for leave, claims, payroll, etc.
 
@@ -49,6 +49,7 @@ Preferred communication style: Simple, everyday language.
 - **Admin Settings**: Configure system-wide settings including:
   - Company branding (logo, favicon, name)
   - Email sender configuration for welcome messages
+  - Timezone settings for attendance calculations (default: Asia/Singapore)
   - QR code preview for verification
   - Admin Users Management: Promote employees to admin role, view/remove admin users
   - Admin users can log in via Admin Login page using their username/password
