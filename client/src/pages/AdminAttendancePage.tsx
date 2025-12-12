@@ -40,10 +40,18 @@ function formatDate(date: Date | string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// Helper to get date range for period
+// Helper to get date range for period (using local dates, not UTC)
 function getDateRange(period: 'daily' | 'weekly' | 'monthly'): { startDate: string; endDate: string } {
   const now = new Date();
-  const endDate = now.toISOString().split('T')[0];
+  // Use local date format YYYY-MM-DD
+  const formatLocalDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const endDate = formatLocalDate(now);
   let startDate: string;
 
   if (period === 'daily') {
@@ -51,11 +59,11 @@ function getDateRange(period: 'daily' | 'weekly' | 'monthly'): { startDate: stri
   } else if (period === 'weekly') {
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
-    startDate = weekAgo.toISOString().split('T')[0];
+    startDate = formatLocalDate(weekAgo);
   } else {
     // monthly
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    startDate = monthStart.toISOString().split('T')[0];
+    startDate = formatLocalDate(monthStart);
   }
 
   return { startDate, endDate };
@@ -137,15 +145,15 @@ export default function AdminAttendancePage() {
     queryKey: ['/api/admin/attendance/records', { startDate, endDate }],
   });
 
-  // Fetch attendance records for heatmap (full month)
-  const heatmapStartDate = new Date(heatmapMonth.year, heatmapMonth.month, 1).toISOString().split('T')[0];
-  const heatmapEndDate = new Date(heatmapMonth.year, heatmapMonth.month + 1, 0).toISOString().split('T')[0];
+  // Fetch attendance records for heatmap (full month) - use local dates
+  const heatmapStartDate = getDateKey(new Date(heatmapMonth.year, heatmapMonth.month, 1));
+  const heatmapEndDate = getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
   const { data: heatmapRecordsData, isLoading: heatmapLoading } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
   });
 
-  // Fetch today's attendance records
-  const todayDate = new Date().toISOString().split('T')[0];
+  // Fetch today's attendance records (use local date, not UTC)
+  const todayDate = getDateKey(new Date());
   const { data: todayRecordsData, isLoading: todayLoading } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: todayDate, endDate: todayDate }],
   });
