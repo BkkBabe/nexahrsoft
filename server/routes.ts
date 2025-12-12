@@ -80,6 +80,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Then check database users with role='admin'
       const user = await storage.getUserByUsername(username);
+      
+      // If user exists but is not an admin, reject with helpful message
+      if (user && user.role !== "admin") {
+        return res.status(403).json({ message: "Please use the Employee Login page to access your account" });
+      }
+      
       if (user && user.role === "admin" && user.isApproved) {
         // Security: Only allow login if user has a valid password hash
         if (!user.passwordHash) {
@@ -287,6 +293,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!user || !user.passwordHash) {
         return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Admin users cannot log in through user login - they must use admin login
+      if (user.role === "admin") {
+        return res.status(403).json({ message: "Please use the Admin Login page to access your account" });
       }
 
       // Check password
