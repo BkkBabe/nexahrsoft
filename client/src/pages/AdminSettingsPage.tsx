@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus, Globe } from "lucide-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,6 +44,7 @@ export default function AdminSettingsPage() {
   const [senderEmail, setSenderEmail] = useState<string>("");
   const [senderName, setSenderName] = useState<string>("");
   const [appUrl, setAppUrl] = useState<string>("https://app.nexahrms.com");
+  const [defaultTimezone, setDefaultTimezone] = useState<string>("Asia/Singapore");
   
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parsedEmployees, setParsedEmployees] = useState<ParsedEmployee[]>([]);
@@ -72,6 +73,9 @@ export default function AdminSettingsPage() {
     }
     if (settings?.appUrl) {
       setAppUrl(settings.appUrl);
+    }
+    if (settings?.defaultTimezone) {
+      setDefaultTimezone(settings.defaultTimezone);
     }
   }, [settings]);
 
@@ -418,6 +422,52 @@ export default function AdminSettingsPage() {
       appUrl: appUrl || undefined,
     });
   };
+
+  // Timezone mutation
+  const updateTimezoneMutation = useMutation({
+    mutationFn: async (timezone: string) => {
+      await apiRequest("PUT", "/api/company/timezone", { defaultTimezone: timezone });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });
+      toast({
+        title: "Success",
+        description: "Company timezone updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUpdateTimezone = () => {
+    updateTimezoneMutation.mutate(defaultTimezone);
+  };
+
+  // Common timezones for dropdown
+  const commonTimezones = [
+    { value: "Asia/Singapore", label: "Singapore (GMT+8)" },
+    { value: "Asia/Kuala_Lumpur", label: "Kuala Lumpur (GMT+8)" },
+    { value: "Asia/Hong_Kong", label: "Hong Kong (GMT+8)" },
+    { value: "Asia/Shanghai", label: "Shanghai (GMT+8)" },
+    { value: "Asia/Tokyo", label: "Tokyo (GMT+9)" },
+    { value: "Asia/Seoul", label: "Seoul (GMT+9)" },
+    { value: "Asia/Bangkok", label: "Bangkok (GMT+7)" },
+    { value: "Asia/Jakarta", label: "Jakarta (GMT+7)" },
+    { value: "Asia/Manila", label: "Manila (GMT+8)" },
+    { value: "Asia/Kolkata", label: "India (GMT+5:30)" },
+    { value: "Asia/Dubai", label: "Dubai (GMT+4)" },
+    { value: "Europe/London", label: "London (GMT+0/+1)" },
+    { value: "Europe/Paris", label: "Paris (GMT+1/+2)" },
+    { value: "America/New_York", label: "New York (GMT-5/-4)" },
+    { value: "America/Los_Angeles", label: "Los Angeles (GMT-8/-7)" },
+    { value: "Australia/Sydney", label: "Sydney (GMT+10/+11)" },
+    { value: "Pacific/Auckland", label: "Auckland (GMT+12/+13)" },
+  ];
 
   const parseCSV = (text: string): { employees: ParsedEmployee[]; errors: string[] } => {
     const lines = text.split('\n').filter(line => line.trim());
@@ -1061,6 +1111,43 @@ export default function AdminSettingsPage() {
               data-testid="button-update-email-settings"
             >
               {updateEmailSettingsMutation.isPending ? "Updating..." : "Update Email Settings"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Timezone Settings
+            </CardTitle>
+            <CardDescription>
+              Set the company timezone for attendance calculations
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="timezone">Company Timezone</Label>
+              <Select value={defaultTimezone} onValueChange={setDefaultTimezone}>
+                <SelectTrigger id="timezone" data-testid="select-timezone">
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent>
+                  {commonTimezones.map(tz => (
+                    <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                This timezone is used for Today's attendance view and date calculations
+              </p>
+            </div>
+            <Button
+              onClick={handleUpdateTimezone}
+              disabled={updateTimezoneMutation.isPending}
+              data-testid="button-update-timezone"
+            >
+              {updateTimezoneMutation.isPending ? "Updating..." : "Update Timezone"}
             </Button>
           </CardContent>
         </Card>

@@ -36,6 +36,7 @@ export const companySettings = pgTable("company_settings", {
   clockInLogoUrl: text("clock_in_logo_url"), // URL to company logo displayed during clock-in
   faviconUrl: text("favicon_url"), // URL to favicon in object storage
   attendanceBufferMinutes: integer("attendance_buffer_minutes").notNull().default(15), // Max minutes buffer for clock in/out
+  defaultTimezone: text("default_timezone").notNull().default("Asia/Singapore"), // IANA timezone for attendance calculations
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   // Email settings
   senderEmail: text("sender_email"), // Email address to send from

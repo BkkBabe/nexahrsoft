@@ -1954,6 +1954,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update company timezone (admin only)
+  app.put("/api/company/timezone", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        defaultTimezone: z.string().min(1, "Timezone is required"),
+      });
+
+      const data = schema.parse(req.body);
+      const updated = await storage.updateCompanySettings({ defaultTimezone: data.defaultTimezone });
+      res.json({ success: true, settings: updated });
+    } catch (error) {
+      console.error("Update timezone error:", error);
+      res.status(500).json({ message: "Failed to update timezone" });
+    }
+  });
+
   // Serve public objects
   app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
     const filePath = req.params.filePath;
