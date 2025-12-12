@@ -53,6 +53,14 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
   });
 
   useEffect(() => {
+    // Admin users should not access user dashboard - redirect to admin dashboard
+    if (session.authenticated && session.isAdmin) {
+      if (!location.startsWith("/admin")) {
+        setLocation("/admin/dashboard");
+      }
+      return;
+    }
+    
     // Redirect users who must change password
     if (session.authenticated && !session.isAdmin && session.user?.mustChangePassword) {
       if (location !== "/change-password") {
