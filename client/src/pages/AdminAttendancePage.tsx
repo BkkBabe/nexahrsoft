@@ -124,6 +124,10 @@ export default function AdminAttendancePage() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addSearchQuery, setAddSearchQuery] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [clockInTime, setClockInTime] = useState("09:00");
   const [clockOutTime, setClockOutTime] = useState("");
   
@@ -277,9 +281,14 @@ export default function AdminAttendancePage() {
     return heatmapRecords.some(r => r.userId === userId && normalizeRecordDateKey(r.date) === todayStr);
   };
 
+  // Check if employee already has attendance on selected date
+  const employeeHasAttendanceOnDate = (userId: string, date: string) => {
+    return heatmapRecords.some(r => r.userId === userId && normalizeRecordDateKey(r.date) === date);
+  };
+
   // Add attendance mutation
   const addAttendanceMutation = useMutation({
-    mutationFn: async (data: { userId: string; clockInTime: string; clockOutTime?: string }) => {
+    mutationFn: async (data: { userId: string; date: string; clockInTime: string; clockOutTime?: string }) => {
       const response = await apiRequest("POST", "/api/admin/attendance/add", data);
       return response.json();
     },
@@ -294,6 +303,9 @@ export default function AdminAttendancePage() {
       setAddSearchQuery("");
       setClockInTime("09:00");
       setClockOutTime("");
+      // Reset date to today
+      const now = new Date();
+      setSelectedDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
     },
     onError: (error: Error) => {
       toast({
@@ -305,10 +317,11 @@ export default function AdminAttendancePage() {
   });
 
   const handleAddAttendance = () => {
-    if (!selectedEmployee) return;
+    if (!selectedEmployee || !selectedDate) return;
     
     addAttendanceMutation.mutate({
       userId: selectedEmployee.id,
+      date: selectedDate,
       clockInTime,
       clockOutTime: clockOutTime || undefined,
     });
@@ -989,16 +1002,34 @@ export default function AdminAttendancePage() {
           setAddSearchQuery("");
           setClockInTime("09:00");
           setClockOutTime("");
+          // Reset date to today
+          const now = new Date();
+          setSelectedDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
         }
       }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Attendance Record</DialogTitle>
             <DialogDescription>
-              Add attendance for an employee for today ({new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })})
+              Add attendance for an employee for any date
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Date Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="attendanceDate">Date</Label>
+              <Input
+                id="attendanceDate"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setSelectedEmployee(null);
+                }}
+                data-testid="input-attendance-date"
+              />
+            </div>
+
             {/* Employee Search */}
             <div className="space-y-2">
               <Label>Search Employee</Label>
@@ -1023,7 +1054,7 @@ export default function AdminAttendancePage() {
                 ) : (
                   <div className="divide-y">
                     {addDialogFilteredEmployees.map((emp) => {
-                      const hasAttendance = employeeHasAttendanceToday(emp.id);
+                      const hasAttendance = employeeHasAttendanceOnDate(emp.id, selectedDate);
                       return (
                         <div
                           key={emp.id}
@@ -1044,7 +1075,7 @@ export default function AdminAttendancePage() {
                             </div>
                             {hasAttendance && (
                               <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                                Already clocked in
+                                Already has attendance
                               </span>
                             )}
                           </div>
@@ -1092,7 +1123,7 @@ export default function AdminAttendancePage() {
             )}
 
             <p className="text-xs text-muted-foreground">
-              Note: Attendance can only be added for today. This action will be recorded in the audit log.
+              Note: This action will be recorded in the audit log.
             </p>
           </div>
           <DialogFooter>
