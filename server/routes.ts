@@ -2194,6 +2194,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get payroll-leave summary (annual leave encashment and no-pay day deductions linked with leave balances)
+  app.get("/api/admin/payroll/leave-summary", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
+      const records = await storage.getPayrollRecords(year);
+      const allLeaveBalances = await storage.getAllLeaveBalances();
+      const allLeaveApplications = await storage.getAllLeaveApplications();
+      
+      const summary = records.reduce((acc, record) => {
+        const key = record.employeeCode;
+        if (!acc[key]) {
+          acc[key] = {
+            employeeCode: record.employeeCode,
+            employeeName: record.employeeName,
+            userId: record.userId,
+            totalLeaveEncashment: 0,
+            totalNoPayDeduction: 0,
+            monthsWithData: [] as { month: number; year: number; leaveEncashment: number; noPayDeduction: number }[],
+            leaveBalances: [] as { leaveType: string; totalDays: number; usedDays: number; remainingDays: number }[],
+            unpaidLeaveApplications: [] as { startDate: string; endDate: string; totalDays: number; status: string }[],
+          };
+        }
+        acc[key].totalLeaveEncashment += record.annualLeaveEncashment;
+        acc[key].totalNoPayDeduction += record.noPayDay;
+        if (record.annualLeaveEncashment > 0 || record.noPayDay > 0) {
+          acc[key].monthsWithData.push({
+            month: record.payPeriodMonth,
+            year: record.payPeriodYear,
+            leaveEncashment: record.annualLeaveEncashment,
+            noPayDeduction: record.noPayDay,
+          });
+        }
+        return acc;
+      }, {} as Record<string, { 
+        employeeCode: string; 
+        employeeName: string; 
+        userId: string | null;
+        totalLeaveEncashment: number; 
+        totalNoPayDeduction: number;
+        monthsWithData: { month: number; year: number; leaveEncashment: number; noPayDeduction: number }[];
+        leaveBalances: { leaveType: string; totalDays: number; usedDays: number; remainingDays: number }[];
+        unpaidLeaveApplications: { startDate: string; endDate: string; totalDays: number; status: string }[];
+      }>);
+      
+      // Enrich with leave balance data
+      for (const key of Object.keys(summary)) {
+        const emp = summary[key];
+        if (emp.userId) {
+          const balances = allLeaveBalances.filter(b => b.userId === emp.userId && b.year === year);
+          emp.leaveBalances = balances.map(b => ({
+            leaveType: b.leaveType,
+            totalDays: b.totalDays,
+            usedDays: b.usedDays,
+            remainingDays: b.totalDays - b.usedDays,
+          }));
+          
+          // Get unpaid leave applications for this year
+          const unpaidApps = allLeaveApplications.filter(a => 
+            a.userId === emp.userId && 
+            a.leaveType === 'unpaid' &&
+            a.startDate.startsWith(String(year))
+          );
+          emp.unpaidLeaveApplications = unpaidApps.map(a => ({
+            startDate: a.startDate,
+            endDate: a.endDate,
+            totalDays: a.totalDays,
+            status: a.status,
+          }));
+        }
+      }
+      
+      const employeeSummaries = Object.values(summary).filter(
+        s => s.totalLeaveEncashment > 0 || s.totalNoPayDeduction > 0
+      );
+      
+      res.json({
+        year,
+        totalLeaveEncashment: records.reduce((sum, r) => sum + r.annualLeaveEncashment, 0),
+        totalNoPayDeduction: records.reduce((sum, r) => sum + r.noPayDay, 0),
+        employees: employeeSummaries,
+      });
+    } catch (error) {
+      console.error("Get payroll leave summary error:", error);
+      res.status(500).json({ message: "Failed to fetch payroll leave summary" });
+    }
+  });
+
   // Delete payroll records for a specific period (admin only)
   app.delete("/api/admin/payroll/records/:year/:month", requireAdmin, async (req: Request, res: Response) => {
     try {
