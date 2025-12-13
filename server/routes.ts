@@ -1112,7 +1112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Add attendance record for an employee (today only)
+  // Admin: Add attendance record for an employee (any date)
   app.post("/api/admin/attendance/add", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -1121,15 +1121,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const schema = z.object({
         userId: z.string().uuid(),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
         clockInTime: z.string(), // HH:mm format
         clockOutTime: z.string().optional(), // HH:mm format, optional
       });
 
-      const { userId, clockInTime, clockOutTime } = schema.parse(req.body);
+      const { userId, date, clockInTime, clockOutTime } = schema.parse(req.body);
 
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      // Parse the provided date
+      const [year, month, day] = date.split('-').map(Number);
+      const targetDate = new Date(year, month - 1, day);
 
       // Check if employee exists
       const employee = await storage.getUser(userId);
@@ -1137,21 +1138,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Employee not found" });
       }
 
-      // Check if attendance already exists for this user today
-      const existingRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, todayStr, todayStr);
+      // Check if attendance already exists for this user on the target date
+      const existingRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, date, date);
       if (existingRecords.length > 0) {
-        return res.status(400).json({ message: "Attendance record already exists for this employee today" });
+        return res.status(400).json({ message: `Attendance record already exists for this employee on ${date}` });
       }
 
       // Parse clock in time (HH:mm) to full datetime
       const [clockInHour, clockInMinute] = clockInTime.split(':').map(Number);
-      const clockInDateTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), clockInHour, clockInMinute, 0);
+      const clockInDateTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), clockInHour, clockInMinute, 0);
 
       // Parse clock out time if provided
       let clockOutDateTime: Date | undefined;
       if (clockOutTime) {
         const [clockOutHour, clockOutMinute] = clockOutTime.split(':').map(Number);
-        clockOutDateTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), clockOutHour, clockOutMinute, 0);
+        clockOutDateTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), clockOutHour, clockOutMinute, 0);
         
         // Validate clock out is after clock in
         if (clockOutDateTime <= clockInDateTime) {
@@ -1162,7 +1163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create attendance record
       const record = await storage.createAttendanceRecord({
         userId,
-        date: todayStr,
+        date: date,
         clockInTime: clockInDateTime,
         clockOutTime: clockOutDateTime || null,
       });
@@ -1179,7 +1180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fieldChanged: "attendance",
         oldValue: null,
         newValue: JSON.stringify({
-          date: todayStr,
+          date: date,
           clockIn: clockInTime,
           clockOut: clockOutTime || null,
         }),
@@ -1189,7 +1190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         success: true, 
         record,
-        message: `Attendance added for ${employee.name}` 
+        message: `Attendance added for ${employee.name} on ${date}` 
       });
     } catch (error) {
       console.error("Admin add attendance error:", error);
@@ -1284,6 +1285,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to end clock-in" });
+    }
+  });
+
+  // Admin: Delete attendance record (nexaadmin only)
+  app.delete("/api/admin/attendance/:recordId", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    // Only master admin (nexaadmin) can delete attendance records
+    if (req.session.userId !== "admin") {
+      return res.status(403).json({ message: "Only master admin can delete attendance records" });
+    }
+
+    try {
+      const { recordId } = req.params;
+
+      // Get the attendance record first for audit logging
+      const record = await storage.getAttendanceRecord(recordId);
+      if (!record) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+
+      // Get employee info for the response message
+      const employee = await storage.getUser(record.userId);
+
+      // Delete the attendance record
+      await storage.deleteAttendanceRecord(recordId);
+
+      // Create audit log entry
+      await storage.createAuditLog({
+        userId: record.userId,
+        changedBy: "Master Admin (nexaadmin)",
+        fieldChanged: "attendance",
+        oldValue: JSON.stringify({
+          recordId,
+          date: record.date,
+          clockIn: record.clockInTime,
+          clockOut: record.clockOutTime,
+        }),
+        newValue: null,
+        changeType: "delete",
+      });
+
+      res.json({ 
+        success: true, 
+        message: `Attendance record deleted for ${employee?.name || 'Unknown'} on ${record.date}` 
+      });
+    } catch (error) {
+      console.error("Admin delete attendance error:", error);
+      res.status(500).json({ message: "Failed to delete attendance record" });
+    }
+  });
+
+  // Admin: Get attendance audit logs
+  app.get("/api/admin/attendance/audit-logs", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      // Get all audit logs for attendance-related changes
+      const allLogs = await storage.getAuditLogsByFieldPrefix("attendance");
+      
+      // Enrich logs with user information
+      const enrichedLogs = await Promise.all(allLogs.map(async (log) => {
+        const user = await storage.getUser(log.userId);
+        return {
+          ...log,
+          userName: user?.name || 'Unknown',
+          employeeCode: user?.employeeCode || null,
+        };
+      }));
+
+      res.json({ logs: enrichedLogs });
+    } catch (error) {
+      console.error("Get attendance audit logs error:", error);
+      res.status(500).json({ message: "Failed to get audit logs" });
     }
   });
 

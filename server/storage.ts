@@ -2,7 +2,7 @@ import { type User, type InsertUser, type CompanySettings, type AttendanceRecord
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs } from "@shared/schema";
-import { eq, or, and, gte, lte, desc, isNull, not } from "drizzle-orm";
+import { eq, or, and, gte, lte, desc, isNull, not, like } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -23,6 +23,7 @@ export interface IStorage {
   createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord>;
   getAttendanceRecord(id: string): Promise<AttendanceRecord | undefined>;
   updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined>;
+  deleteAttendanceRecord(id: string): Promise<void>;
   getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined>;
   getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
@@ -76,6 +77,7 @@ export interface IStorage {
   // Audit log methods
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogsByUser(userId: string): Promise<AuditLog[]>;
+  getAuditLogsByFieldPrefix(fieldPrefix: string): Promise<AuditLog[]>;
   getAllAuditLogs(): Promise<AuditLog[]>;
   
   // Password override log methods
@@ -199,6 +201,10 @@ export class MemStorage implements IStorage {
   }
 
   async updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async deleteAttendanceRecord(id: string): Promise<void> {
     throw new Error("MemStorage attendance not implemented");
   }
 
@@ -360,6 +366,10 @@ export class MemStorage implements IStorage {
     throw new Error("MemStorage getAuditLogsByUser not implemented");
   }
 
+  async getAuditLogsByFieldPrefix(fieldPrefix: string): Promise<AuditLog[]> {
+    throw new Error("MemStorage getAuditLogsByFieldPrefix not implemented");
+  }
+
   async getAllAuditLogs(): Promise<AuditLog[]> {
     throw new Error("MemStorage getAllAuditLogs not implemented");
   }
@@ -491,6 +501,11 @@ export class PgStorage implements IStorage {
       .where(eq(attendanceRecords.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteAttendanceRecord(id: string): Promise<void> {
+    await db.delete(attendanceRecords)
+      .where(eq(attendanceRecords.id, id));
   }
 
   async getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined> {
@@ -846,6 +861,13 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(auditLogs)
       .where(eq(auditLogs.userId, userId))
+      .orderBy(desc(auditLogs.createdAt));
+  }
+
+  async getAuditLogsByFieldPrefix(fieldPrefix: string): Promise<AuditLog[]> {
+    return await db.select()
+      .from(auditLogs)
+      .where(like(auditLogs.fieldChanged, `${fieldPrefix}%`))
       .orderBy(desc(auditLogs.createdAt));
   }
 
