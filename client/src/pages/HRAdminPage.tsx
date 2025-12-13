@@ -1,25 +1,25 @@
-import { Users, DollarSign, Download } from "lucide-react";
+import { Users, DollarSign, FileSpreadsheet, BarChart3 } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-//todo: remove mock functionality
-const mockEmployees = [
-  { id: "EMP001", name: "Faith Jr. Negapatan", department: "Engineering", role: "Developer", status: "active" },
-  { id: "EMP002", name: "John Doe", department: "Sales", role: "Manager", status: "active" },
-  { id: "EMP003", name: "Jane Smith", department: "Marketing", role: "Executive", status: "active" },
-];
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import type { User, PayrollRecord } from "@shared/schema";
 
 export default function HRAdminPage() {
-  const handleExportPayroll = () => {
-    console.log("Exporting payroll data");
-  };
-
-  const handleProcessPayroll = () => {
-    console.log("Processing payroll");
-  };
+  const { data: usersData } = useQuery<User[]>({
+    queryKey: ['/api/admin/users'],
+  });
+  
+  const { data: payrollData } = useQuery<{ records: PayrollRecord[] }>({
+    queryKey: ['/api/admin/payroll/records', String(new Date().getFullYear()), null],
+  });
+  
+  const employees = usersData?.filter(u => u.isApproved && u.role !== 'admin') || [];
+  const payrollRecords = payrollData?.records || [];
+  const totalPayroll = payrollRecords.reduce((sum, r) => sum + r.nett, 0) / 100;
 
   return (
     <div className="space-y-6">
@@ -35,19 +35,18 @@ export default function HRAdminPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
           title="Total Employees"
-          value="156"
+          value={String(employees.length)}
           icon={Users}
         />
         <StatCard
-          title="Monthly Payroll"
-          value="$487,250"
+          title="Payroll Records"
+          value={String(payrollRecords.length)}
           icon={DollarSign}
         />
         <StatCard
-          title="Pending Approvals"
-          value="12"
-          icon={Users}
-          trend={{ value: "+3 from last week", isPositive: false }}
+          title="Total Payroll"
+          value={`$${totalPayroll.toLocaleString()}`}
+          icon={DollarSign}
         />
       </div>
 
@@ -59,14 +58,16 @@ export default function HRAdminPage() {
                 <Users className="h-5 w-5" />
                 Employee Directory
               </span>
-              <Button size="sm" variant="outline" data-testid="button-add-employee">
-                Add Employee
-              </Button>
+              <Link href="/admin/employees">
+                <Button size="sm" variant="outline" data-testid="button-view-employees">
+                  View All
+                </Button>
+              </Link>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {mockEmployees.map((employee) => (
+              {employees.slice(0, 5).map((employee) => (
                 <div
                   key={employee.id}
                   className="flex items-center justify-between p-3 rounded-md bg-muted/50"
@@ -76,9 +77,9 @@ export default function HRAdminPage() {
                     <Avatar className="h-10 w-10">
                       <AvatarFallback>
                         {employee.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
+                          ?.split(" ")
+                          .map((n: string) => n[0])
+                          .join("") || "?"}
                       </AvatarFallback>
                     </Avatar>
                     <div>
@@ -86,15 +87,18 @@ export default function HRAdminPage() {
                         {employee.name}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {employee.role} • {employee.department}
+                        {employee.designation || "Staff"} • {employee.department || "Unassigned"}
                       </p>
                     </div>
                   </div>
                   <Badge variant="default" data-testid={`badge-employee-status-${employee.id}`}>
-                    {employee.status}
+                    Active
                   </Badge>
                 </div>
               ))}
+              {employees.length === 0 && (
+                <p className="text-muted-foreground text-center py-4">No employees found</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -105,31 +109,32 @@ export default function HRAdminPage() {
               <DollarSign className="h-5 w-5" />
               Payroll Management
             </CardTitle>
+            <CardDescription>
+              Import payroll data and view reports
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Current Period</p>
-              <p className="text-lg font-semibold">January 2024</p>
+              <p className="text-sm text-muted-foreground">Current Year</p>
+              <p className="text-lg font-semibold">{new Date().getFullYear()}</p>
             </div>
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Payroll Status</p>
-              <Badge variant="secondary">Not Processed</Badge>
+              <p className="text-sm text-muted-foreground">Records Imported</p>
+              <Badge variant="secondary">{payrollRecords.length} records</Badge>
             </div>
             <div className="flex flex-col gap-2 pt-4">
-              <Button
-                onClick={handleProcessPayroll}
-                data-testid="button-process-payroll"
-              >
-                Process Payroll
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleExportPayroll}
-                data-testid="button-export-payroll"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Export Payroll Data
-              </Button>
+              <Link href="/admin/payroll/import">
+                <Button className="w-full" data-testid="button-import-payroll">
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Import Payroll Data
+                </Button>
+              </Link>
+              <Link href="/admin/payroll/reports">
+                <Button variant="outline" className="w-full" data-testid="button-view-reports">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  View Payroll Reports
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
