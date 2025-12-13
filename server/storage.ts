@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords } from "@shared/schema";
 import { eq, or, and, gte, lte, desc, isNull, not, like } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -84,6 +84,13 @@ export interface IStorage {
   createPasswordOverrideLog(log: InsertPasswordOverrideLog): Promise<PasswordOverrideLog>;
   getPasswordOverrideLogsByUser(userId: string): Promise<PasswordOverrideLog[]>;
   getAllPasswordOverrideLogs(): Promise<PasswordOverrideLog[]>;
+  
+  // Payroll record methods (CSV import)
+  createPayrollRecord(record: InsertPayrollRecord): Promise<PayrollRecord>;
+  bulkCreatePayrollRecords(records: InsertPayrollRecord[]): Promise<PayrollRecord[]>;
+  getPayrollRecords(year?: number, month?: number): Promise<PayrollRecord[]>;
+  getPayrollRecordsByEmployee(employeeCode: string): Promise<PayrollRecord[]>;
+  deletePayrollRecordsByPeriod(year: number, month: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -99,6 +106,7 @@ export class MemStorage implements IStorage {
       clockInLogoUrl: null,
       faviconUrl: null,
       attendanceBufferMinutes: 15,
+      defaultTimezone: "Asia/Singapore",
       updatedAt: new Date(),
       senderEmail: null,
       senderName: null,
@@ -384,6 +392,26 @@ export class MemStorage implements IStorage {
   
   async getAllPasswordOverrideLogs(): Promise<PasswordOverrideLog[]> {
     throw new Error("MemStorage getAllPasswordOverrideLogs not implemented");
+  }
+  
+  async createPayrollRecord(record: InsertPayrollRecord): Promise<PayrollRecord> {
+    throw new Error("MemStorage createPayrollRecord not implemented");
+  }
+  
+  async bulkCreatePayrollRecords(records: InsertPayrollRecord[]): Promise<PayrollRecord[]> {
+    throw new Error("MemStorage bulkCreatePayrollRecords not implemented");
+  }
+  
+  async getPayrollRecords(year?: number, month?: number): Promise<PayrollRecord[]> {
+    throw new Error("MemStorage getPayrollRecords not implemented");
+  }
+  
+  async getPayrollRecordsByEmployee(employeeCode: string): Promise<PayrollRecord[]> {
+    throw new Error("MemStorage getPayrollRecordsByEmployee not implemented");
+  }
+  
+  async deletePayrollRecordsByPeriod(year: number, month: number): Promise<void> {
+    throw new Error("MemStorage deletePayrollRecordsByPeriod not implemented");
   }
 }
 
@@ -893,6 +921,61 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(passwordOverrideLogs)
       .orderBy(desc(passwordOverrideLogs.createdAt));
+  }
+  
+  // Payroll record methods (CSV import)
+  async createPayrollRecord(record: InsertPayrollRecord): Promise<PayrollRecord> {
+    const [created] = await db.insert(payrollRecords)
+      .values(record)
+      .returning();
+    return created;
+  }
+  
+  async bulkCreatePayrollRecords(records: InsertPayrollRecord[]): Promise<PayrollRecord[]> {
+    if (records.length === 0) return [];
+    const created = await db.insert(payrollRecords)
+      .values(records)
+      .returning();
+    return created;
+  }
+  
+  async getPayrollRecords(year?: number, month?: number): Promise<PayrollRecord[]> {
+    if (year !== undefined && month !== undefined) {
+      return await db.select()
+        .from(payrollRecords)
+        .where(
+          and(
+            eq(payrollRecords.payPeriodYear, year),
+            eq(payrollRecords.payPeriodMonth, month)
+          )
+        )
+        .orderBy(desc(payrollRecords.importedAt));
+    } else if (year !== undefined) {
+      return await db.select()
+        .from(payrollRecords)
+        .where(eq(payrollRecords.payPeriodYear, year))
+        .orderBy(desc(payrollRecords.importedAt));
+    }
+    return await db.select()
+      .from(payrollRecords)
+      .orderBy(desc(payrollRecords.importedAt));
+  }
+  
+  async getPayrollRecordsByEmployee(employeeCode: string): Promise<PayrollRecord[]> {
+    return await db.select()
+      .from(payrollRecords)
+      .where(eq(payrollRecords.employeeCode, employeeCode))
+      .orderBy(desc(payrollRecords.payPeriodYear), desc(payrollRecords.payPeriodMonth));
+  }
+  
+  async deletePayrollRecordsByPeriod(year: number, month: number): Promise<void> {
+    await db.delete(payrollRecords)
+      .where(
+        and(
+          eq(payrollRecords.payPeriodYear, year),
+          eq(payrollRecords.payPeriodMonth, month)
+        )
+      );
   }
 }
 

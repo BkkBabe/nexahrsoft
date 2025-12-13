@@ -25,6 +25,7 @@ import AdminPayslipPage from "@/pages/AdminPayslipPage";
 import AdminLeavePage from "@/pages/AdminLeavePage";
 import AdminReportsPage from "@/pages/AdminReportsPage";
 import AdminEmailsPage from "@/pages/AdminEmailsPage";
+import AdminPayrollImportPage from "@/pages/AdminPayrollImportPage";
 import UserLoginPage from "@/pages/UserLoginPage";
 import PendingApprovalPage from "@/pages/PendingApprovalPage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
@@ -215,6 +216,9 @@ function Router() {
       </Route>
       <Route path="/admin/emails">
         {() => <AdminProtected><AdminEmailsPage /></AdminProtected>}
+      </Route>
+      <Route path="/admin/payroll/import">
+        {() => <AdminProtected><AdminPayrollImportPage /></AdminProtected>}
       </Route>
       <Route path="/change-password">
         {() => session?.authenticated ? <ChangePasswordPage /> : <UserLoginPage />}

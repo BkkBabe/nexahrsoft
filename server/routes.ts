@@ -2096,6 +2096,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== PAYROLL IMPORT API ====================
+
+  // Import payroll records (admin only)
+  app.post("/api/admin/payroll/import", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        records: z.array(z.object({
+          userId: z.string().nullable().optional(),
+          payPeriod: z.string(),
+          payPeriodYear: z.number(),
+          payPeriodMonth: z.number(),
+          employeeCode: z.string(),
+          employeeName: z.string(),
+          deptCode: z.string().nullable().optional(),
+          deptName: z.string().nullable().optional(),
+          secCode: z.string().nullable().optional(),
+          secName: z.string().nullable().optional(),
+          catCode: z.string().nullable().optional(),
+          catName: z.string().nullable().optional(),
+          nric: z.string().nullable().optional(),
+          joinDate: z.string().nullable().optional(),
+          totSalary: z.number(),
+          basicSalary: z.number(),
+          monthlyVariablesComponent: z.number(),
+          flat: z.number(),
+          ot10: z.number(),
+          ot15: z.number(),
+          ot20: z.number(),
+          ot30: z.number(),
+          shiftAllowance: z.number(),
+          totRestPhAmount: z.number(),
+          mobileAllowance: z.number(),
+          transportAllowance: z.number(),
+          annualLeaveEncashment: z.number(),
+          serviceCallAllowances: z.number(),
+          otherAllowance: z.number(),
+          houseRentalAllowances: z.number(),
+          loanRepaymentTotal: z.number(),
+          loanRepaymentDetails: z.string().nullable().optional(),
+          noPayDay: z.number(),
+          cc: z.number(),
+          cdac: z.number(),
+          ecf: z.number(),
+          mbmf: z.number(),
+          sinda: z.number(),
+          bonus: z.number(),
+          grossWages: z.number(),
+          cpfWages: z.number(),
+          sdf: z.number(),
+          fwl: z.number(),
+          employerCpf: z.number(),
+          employeeCpf: z.number(),
+          totalCpf: z.number(),
+          total: z.number(),
+          nett: z.number(),
+          payMode: z.string().nullable().optional(),
+          chequeNo: z.string().nullable().optional(),
+          importedBy: z.string().nullable().optional(),
+        })),
+      });
+
+      const { records } = schema.parse(req.body);
+      
+      if (records.length === 0) {
+        return res.status(400).json({ message: "No records to import" });
+      }
+
+      // Bulk create payroll records
+      const created = await storage.bulkCreatePayrollRecords(records);
+      
+      res.json({
+        success: true,
+        message: `Successfully imported ${created.length} payroll records`,
+        count: created.length,
+      });
+    } catch (error) {
+      console.error("Payroll import error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid payroll data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to import payroll records" });
+    }
+  });
+
+  // Get payroll records with optional year/month filter (admin only)
+  app.get("/api/admin/payroll/records", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const month = req.query.month ? parseInt(req.query.month as string) : undefined;
+      
+      const records = await storage.getPayrollRecords(year, month);
+      res.json({ records });
+    } catch (error) {
+      console.error("Get payroll records error:", error);
+      res.status(500).json({ message: "Failed to fetch payroll records" });
+    }
+  });
+
+  // Delete payroll records for a specific period (admin only)
+  app.delete("/api/admin/payroll/records/:year/:month", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const year = parseInt(req.params.year);
+      const month = parseInt(req.params.month);
+      
+      if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+        return res.status(400).json({ message: "Invalid year or month" });
+      }
+      
+      await storage.deletePayrollRecordsByPeriod(year, month);
+      res.json({ 
+        success: true, 
+        message: `Deleted payroll records for ${month}/${year}` 
+      });
+    } catch (error) {
+      console.error("Delete payroll records error:", error);
+      res.status(500).json({ message: "Failed to delete payroll records" });
+    }
+  });
+
   // Serve public objects
   app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
     const filePath = req.params.filePath;
