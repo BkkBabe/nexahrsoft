@@ -146,11 +146,11 @@ export default function AdminPayrollImportPage() {
   const [fileName, setFileName] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
 
-  const { data: usersData } = useQuery<User[]>({
+  const { data: usersData } = useQuery<{ users: User[] }>({
     queryKey: ["/api/admin/users"],
   });
 
-  const users = usersData || [];
+  const users = usersData?.users || [];
 
   const importMutation = useMutation({
     mutationFn: async (records: Partial<InsertPayrollRecord>[]) => {
