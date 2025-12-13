@@ -387,6 +387,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Save employee code for user (admin only) - used when linking payroll records
+  app.post("/api/admin/users/:id/save-employee-code", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const schema = z.object({
+        employeeCode: z.string().min(1, "Employee code is required"),
+      });
+      
+      const { employeeCode } = schema.parse(req.body);
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const updatedUser = await storage.updateUser(id, { employeeCode });
+      
+      // Create audit log for this change
+      if (user.employeeCode !== employeeCode) {
+        await storage.createAuditLog({
+          userId: id,
+          changedBy: 'admin',
+          fieldChanged: 'employeeCode',
+          oldValue: user.employeeCode || null,
+          newValue: employeeCode,
+          changeType: 'update',
+        });
+      }
+      
+      res.json({ success: true, user: updatedUser });
+    } catch (error) {
+      console.error("Save employee code error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to save employee code" });
+    }
+  });
+
   // Update user (admin only) with audit logging
   app.put("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
     try {

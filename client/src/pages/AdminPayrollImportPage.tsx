@@ -197,7 +197,7 @@ export default function AdminPayrollImportPage() {
         : row
     ));
     
-    if (csvEmployeeCode && !user.employeeCode) {
+    if (csvEmployeeCode && user.employeeCode !== csvEmployeeCode) {
       saveEmployeeCodeMutation.mutate({ userId: user.id, employeeCode: csvEmployeeCode });
     }
     
@@ -638,11 +638,25 @@ export default function AdminPayrollImportPage() {
                         data-testid={`row-payroll-${idx}`}
                       >
                         <td className="p-2">
-                          {row.isMatched ? (
-                            <Check className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <X className="h-4 w-4 text-red-600" />
-                          )}
+                          <div className="flex items-center gap-1">
+                            {row.isMatched ? (
+                              <Check className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <>
+                                <X className="h-4 w-4 text-red-600" />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => openSearchDialog(idx)}
+                                  title="Find employee"
+                                  data-testid={`button-search-employee-${idx}`}
+                                >
+                                  <Search className="h-3 w-3" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </td>
                         <td className="p-2 font-mono">{row.employeeCode}</td>
                         <td className="p-2">{row.employeeName}</td>
@@ -660,6 +674,47 @@ export default function AdminPayrollImportPage() {
           </Card>
         </div>
       )}
+
+      <Dialog open={searchDialogOpen} onOpenChange={setSearchDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Find Employee</DialogTitle>
+            <DialogDescription>
+              Search for an employee to link with this payroll record
+            </DialogDescription>
+          </DialogHeader>
+          <Input 
+            placeholder="Search by name, email, or employee code..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="input-search-employee"
+          />
+          <div className="max-h-[400px] overflow-y-auto space-y-2">
+            {filteredUsers.slice(0, 20).map(user => (
+              <div 
+                key={user.id}
+                className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer"
+                onClick={() => handleSelectEmployee(user)}
+                data-testid={`employee-option-${user.id}`}
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarFallback>{user.name?.split(' ').map(n => n[0]).join('') || '?'}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">{user.name}</p>
+                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                  </div>
+                </div>
+                {user.employeeCode && <Badge variant="secondary">{user.employeeCode}</Badge>}
+              </div>
+            ))}
+            {filteredUsers.length === 0 && (
+              <p className="text-center text-muted-foreground py-4">No employees found</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
