@@ -246,11 +246,24 @@ export default function AdminPayrollImportPage() {
     },
   });
 
-  const matchEmployeeByCode = useCallback((code: string): User | undefined => {
-    return users.find(u => 
+  const normalizeNameForMatch = (name: string): string => {
+    return name.toLowerCase().replace(/\s+/g, ' ').trim();
+  };
+
+  const matchEmployeeByCodeOrName = useCallback((code: string, name: string): User | undefined => {
+    // First try to match by employee code
+    const byCode = users.find(u => 
       u.employeeCode?.toLowerCase() === code.toLowerCase() ||
       u.employeeCode === code
     );
+    if (byCode) return byCode;
+    
+    // Fallback: try to match by normalized name
+    const normalizedCsvName = normalizeNameForMatch(name);
+    const byName = users.find(u => 
+      u.name && normalizeNameForMatch(u.name) === normalizedCsvName
+    );
+    return byName;
   }, [users]);
 
   const handleFileUpload = useCallback((file: File) => {
@@ -287,7 +300,8 @@ export default function AdminPayrollImportPage() {
         .filter(row => row[1] && row[1].trim() !== '' && row[1] !== 'EMP CODE')
         .map(row => {
           const employeeCode = row[1]?.trim() || '';
-          const matchedUser = matchEmployeeByCode(employeeCode);
+          const employeeName = row[2]?.trim() || '';
+          const matchedUser = matchEmployeeByCodeOrName(employeeCode, employeeName);
           
           const loanCols = [25, 26, 27, 28, 29, 30].map(i => parseAmount(row[i] || ''));
           const loanTotal = loanCols.reduce((a, b) => a + b, 0);
@@ -351,7 +365,7 @@ export default function AdminPayrollImportPage() {
     };
     
     reader.readAsText(file);
-  }, [matchEmployeeByCode, toast]);
+  }, [matchEmployeeByCodeOrName, toast]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
