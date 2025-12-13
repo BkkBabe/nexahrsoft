@@ -10,7 +10,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, List, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, List, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
 
@@ -112,7 +113,7 @@ function getHeatmapTextColor(hours: number): string {
 
 export default function AdminAttendancePage() {
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
-  const [viewMode, setViewMode] = useState<'today' | 'list' | 'heatmap'>('today');
+  const [viewMode, setViewMode] = useState<'today' | 'list' | 'heatmap' | 'audit'>('today');
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -136,7 +137,19 @@ export default function AdminAttendancePage() {
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
   const [endClockOutTime, setEndClockOutTime] = useState("18:00");
   
+  // Delete confirmation dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState<AttendanceRecord | null>(null);
+  
   const { toast } = useToast();
+
+  // Fetch session to check if user is nexaadmin (master admin)
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; user?: { id: string; name: string; email: string } }>({
+    queryKey: ['/api/auth/session'],
+  });
+  
+  // Check if current user is nexaadmin (master admin has user.id === "admin")
+  const isNexaAdmin = sessionData?.user?.id === "admin";
 
   // Fetch all users
   const { data: usersData } = useQuery<User[]>({
@@ -161,6 +174,26 @@ export default function AdminAttendancePage() {
   const { data: todayRecordsData, isLoading: todayLoading } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: todayDate, endDate: todayDate }],
   });
+
+  // Fetch audit logs for attendance changes (only for nexaadmin view)
+  type AuditLogEntry = {
+    id: number;
+    action: string;
+    tableName: string;
+    recordId: string | null;
+    fieldName: string | null;
+    oldValue: string | null;
+    newValue: string | null;
+    changedBy: string | null;
+    changedAt: Date;
+    userName: string | null;
+    employeeCode: string | null;
+  };
+  const { data: auditLogsData, isLoading: auditLoading } = useQuery<{ logs: AuditLogEntry[] }>({
+    queryKey: ['/api/admin/attendance/audit-logs'],
+    enabled: viewMode === 'audit' && isNexaAdmin,
+  });
+  const auditLogs = auditLogsData?.logs || [];
 
   const users = usersData || [];
   const records = recordsData?.records || [];
@@ -361,6 +394,35 @@ export default function AdminAttendancePage() {
     });
   };
 
+  // Delete attendance mutation (nexaadmin only)
+  const deleteAttendanceMutation = useMutation({
+    mutationFn: async (recordId: string) => {
+      const response = await apiRequest("DELETE", `/api/admin/attendance/${recordId}`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Attendance Deleted",
+        description: data.message || "Attendance record has been deleted",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      setShowDeleteDialog(false);
+      setRecordToDelete(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete attendance record",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteAttendance = () => {
+    if (!recordToDelete || !isNexaAdmin) return;
+    deleteAttendanceMutation.mutate(recordToDelete.id);
+  };
+
   // Month navigation
   const goToPreviousMonth = () => {
     setHeatmapMonth(prev => {
@@ -432,6 +494,17 @@ export default function AdminAttendancePage() {
             <Grid3X3 className="h-4 w-4 mr-1" />
             Heatmap
           </Button>
+          {isNexaAdmin && (
+            <Button
+              variant={viewMode === 'audit' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('audit')}
+              data-testid="button-view-audit"
+            >
+              <History className="h-4 w-4 mr-1" />
+              Audit Log
+            </Button>
+          )}
           <Link href="/admin/dashboard">
             <Button variant="outline" size="sm" data-testid="button-back-dashboard">
               <ArrowLeft className="mr-1 h-4 w-4" />
@@ -553,21 +626,39 @@ export default function AdminAttendancePage() {
                                 <div className="font-medium mt-1">{hours.toFixed(1)} hours worked</div>
                               )}
                             </div>
-                            {isInProgress && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="mt-2 h-6 text-xs w-full"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedRecord(record);
-                                  setShowEndClockInDialog(true);
-                                }}
-                                data-testid={`button-end-clockin-today-${record.id}`}
-                              >
-                                End Clock-in
-                              </Button>
-                            )}
+                            <div className="flex flex-col gap-1 mt-2">
+                              {isInProgress && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-xs w-full"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedRecord(record);
+                                    setShowEndClockInDialog(true);
+                                  }}
+                                  data-testid={`button-end-clockin-today-${record.id}`}
+                                >
+                                  End Clock-in
+                                </Button>
+                              )}
+                              {isNexaAdmin && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-xs w-full text-destructive hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRecordToDelete(record);
+                                    setShowDeleteDialog(true);
+                                  }}
+                                  data-testid={`button-delete-attendance-today-${record.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3 mr-1" />
+                                  Delete
+                                </Button>
+                              )}
+                            </div>
                           </TooltipContent>
                         </Tooltip>
                       );
@@ -788,21 +879,39 @@ export default function AdminAttendancePage() {
                                               <div>In: {formatTime(record.clockInTime)}</div>
                                               <div>Out: {record.clockOutTime ? formatTime(record.clockOutTime) : <span className="text-blue-500">In Progress</span>}</div>
                                               <div>{record.clockOutTime ? `${calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs` : '-'}</div>
-                                              {!record.clockOutTime && (
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  className="mt-1 h-6 text-xs"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedRecord(record);
-                                                    setShowEndClockInDialog(true);
-                                                  }}
-                                                  data-testid={`button-end-clockin-${record.id}`}
-                                                >
-                                                  End Clock-in
-                                                </Button>
-                                              )}
+                                              <div className="flex flex-col gap-1 mt-1">
+                                                {!record.clockOutTime && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-6 text-xs"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setSelectedRecord(record);
+                                                      setShowEndClockInDialog(true);
+                                                    }}
+                                                    data-testid={`button-end-clockin-${record.id}`}
+                                                  >
+                                                    End Clock-in
+                                                  </Button>
+                                                )}
+                                                {isNexaAdmin && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-6 text-xs text-destructive hover:text-destructive"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setRecordToDelete(record);
+                                                      setShowDeleteDialog(true);
+                                                    }}
+                                                    data-testid={`button-delete-attendance-${record.id}`}
+                                                  >
+                                                    <Trash2 className="h-3 w-3 mr-1" />
+                                                    Delete
+                                                  </Button>
+                                                )}
+                                              </div>
                                             </div>
                                           ))}
                                           <div className="border-t pt-1 font-medium">
@@ -984,6 +1093,109 @@ export default function AdminAttendancePage() {
                             No attendance records for this period
                           </p>
                         )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {viewMode === 'audit' && isNexaAdmin && (
+        <>
+          {/* Audit Log View */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Attendance Audit Log
+              </CardTitle>
+              <CardDescription>
+                Track all attendance record changes made by administrators
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {auditLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading audit logs...</div>
+              ) : auditLogs.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No audit logs yet</p>
+                  <p className="text-sm">Changes to attendance records will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auditLogs.map((log) => {
+                    const actionColor = log.action === 'create' 
+                      ? 'text-green-600 dark:text-green-400' 
+                      : log.action === 'delete' 
+                        ? 'text-red-600 dark:text-red-400' 
+                        : 'text-yellow-600 dark:text-yellow-400';
+                    const actionIcon = log.action === 'create' 
+                      ? <Plus className="h-4 w-4" /> 
+                      : log.action === 'delete' 
+                        ? <Trash2 className="h-4 w-4" /> 
+                        : <FileText className="h-4 w-4" />;
+                    
+                    return (
+                      <div
+                        key={log.id}
+                        className="border rounded-lg p-3 space-y-2"
+                        data-testid={`audit-log-${log.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`${actionColor}`}>{actionIcon}</span>
+                            <span className={`font-medium capitalize ${actionColor}`}>{log.action}</span>
+                            <span className="text-muted-foreground">attendance record</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(log.changedAt).toLocaleString()}
+                          </span>
+                        </div>
+                        
+                        <div className="text-sm space-y-1">
+                          {log.userName && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Employee:</span>
+                              <span className="font-medium">{log.userName}</span>
+                              {log.employeeCode && (
+                                <span className="text-xs text-muted-foreground">({log.employeeCode})</span>
+                              )}
+                            </div>
+                          )}
+                          
+                          {log.changedBy && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Changed by:</span>
+                              <span className="font-medium">{log.changedBy === 'admin' ? 'nexaadmin' : log.changedBy}</span>
+                            </div>
+                          )}
+                          
+                          {log.fieldName && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Field:</span>
+                              <span>{log.fieldName}</span>
+                            </div>
+                          )}
+                          
+                          {(log.oldValue || log.newValue) && (
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              {log.oldValue && (
+                                <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2 py-0.5 rounded">
+                                  Old: {log.oldValue}
+                                </span>
+                              )}
+                              {log.newValue && (
+                                <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
+                                  New: {log.newValue}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1203,6 +1415,52 @@ export default function AdminAttendancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog (nexaadmin only) */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => {
+        setShowDeleteDialog(open);
+        if (!open) {
+          setRecordToDelete(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Attendance Record</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this attendance record? This action cannot be undone and will be recorded in the audit log.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {recordToDelete && (
+            <div className="p-3 bg-muted/50 rounded-lg text-sm">
+              <div className="font-medium">
+                {users.find(u => u.id === recordToDelete.userId)?.name || 'Unknown Employee'}
+              </div>
+              <div className="text-muted-foreground">
+                Date: {formatDate(recordToDelete.date)}
+              </div>
+              <div className="text-muted-foreground">
+                Clock In: {formatTime(recordToDelete.clockInTime)}
+              </div>
+              {recordToDelete.clockOutTime && (
+                <div className="text-muted-foreground">
+                  Clock Out: {formatTime(recordToDelete.clockOutTime)}
+                </div>
+              )}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAttendance}
+              disabled={deleteAttendanceMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteAttendanceMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
