@@ -1144,15 +1144,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: `Attendance record already exists for this employee on ${date}` });
       }
 
-      // Parse clock in time (HH:mm) to full datetime
-      const [clockInHour, clockInMinute] = clockInTime.split(':').map(Number);
-      const clockInDateTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), clockInHour, clockInMinute, 0);
+      // Get company timezone setting for proper time interpretation
+      const companySettings = await storage.getCompanySettings();
+      const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
+      
+      // Get timezone offset (Singapore is UTC+8)
+      const getTimezoneOffset = (tz: string): string => {
+        const offsets: Record<string, string> = {
+          'Asia/Singapore': '+08:00',
+          'Asia/Kuala_Lumpur': '+08:00',
+          'Asia/Hong_Kong': '+08:00',
+          'Asia/Shanghai': '+08:00',
+          'Asia/Tokyo': '+09:00',
+          'Asia/Seoul': '+09:00',
+          'Asia/Bangkok': '+07:00',
+          'Asia/Jakarta': '+07:00',
+          'Asia/Kolkata': '+05:30',
+          'Asia/Dubai': '+04:00',
+          'Europe/London': '+00:00',
+          'America/New_York': '-05:00',
+          'America/Los_Angeles': '-08:00',
+          'Australia/Sydney': '+11:00',
+        };
+        return offsets[tz] || '+08:00'; // Default to Singapore if unknown
+      };
+      
+      const tzOffset = getTimezoneOffset(timezone);
+
+      // Parse clock in time (HH:mm) to full datetime with timezone
+      const clockInISOString = `${date}T${clockInTime}:00${tzOffset}`;
+      const clockInDateTime = new Date(clockInISOString);
 
       // Parse clock out time if provided
       let clockOutDateTime: Date | undefined;
       if (clockOutTime) {
-        const [clockOutHour, clockOutMinute] = clockOutTime.split(':').map(Number);
-        clockOutDateTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), clockOutHour, clockOutMinute, 0);
+        const clockOutISOString = `${date}T${clockOutTime}:00${tzOffset}`;
+        clockOutDateTime = new Date(clockOutISOString);
         
         // Validate clock out is after clock in
         if (clockOutDateTime <= clockInDateTime) {
@@ -1237,17 +1264,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Employee not found" });
       }
 
-      // Parse clock out time to full datetime using the record's date
-      const recordDate = new Date(record.date);
-      const [clockOutHour, clockOutMinute] = clockOutTime.split(':').map(Number);
-      const clockOutDateTime = new Date(
-        recordDate.getFullYear(), 
-        recordDate.getMonth(), 
-        recordDate.getDate(), 
-        clockOutHour, 
-        clockOutMinute, 
-        0
-      );
+      // Get company timezone setting for proper time interpretation
+      const companySettings = await storage.getCompanySettings();
+      const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
+      
+      // Get timezone offset
+      const getTimezoneOffset = (tz: string): string => {
+        const offsets: Record<string, string> = {
+          'Asia/Singapore': '+08:00',
+          'Asia/Kuala_Lumpur': '+08:00',
+          'Asia/Hong_Kong': '+08:00',
+          'Asia/Shanghai': '+08:00',
+          'Asia/Tokyo': '+09:00',
+          'Asia/Seoul': '+09:00',
+          'Asia/Bangkok': '+07:00',
+          'Asia/Jakarta': '+07:00',
+          'Asia/Kolkata': '+05:30',
+          'Asia/Dubai': '+04:00',
+          'Europe/London': '+00:00',
+          'America/New_York': '-05:00',
+          'America/Los_Angeles': '-08:00',
+          'Australia/Sydney': '+11:00',
+        };
+        return offsets[tz] || '+08:00';
+      };
+      
+      const tzOffset = getTimezoneOffset(timezone);
+
+      // Parse clock out time to full datetime using the record's date with proper timezone
+      const recordDateStr = typeof record.date === 'string' ? record.date : new Date(record.date).toISOString().split('T')[0];
+      const clockOutISOString = `${recordDateStr}T${clockOutTime}:00${tzOffset}`;
+      const clockOutDateTime = new Date(clockOutISOString);
 
       // Validate clock out is after clock in
       const clockInDateTime = new Date(record.clockInTime);
