@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, Printer, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -19,6 +19,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -59,6 +67,8 @@ export default function AdminPayrollReportsPage() {
   const { toast } = useToast();
   const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
   const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
+  const [payslipDialogOpen, setPayslipDialogOpen] = useState(false);
 
   const buildQueryUrl = () => {
     let url = `/api/admin/payroll/records?year=${selectedYear}`;
@@ -494,6 +504,7 @@ export default function AdminPayrollReportsPage() {
                       <th className="text-right p-2 font-medium">Leave Enc.</th>
                       <th className="text-right p-2 font-medium">No Pay</th>
                       <th className="text-right p-2 font-medium">Nett</th>
+                      <th className="text-center p-2 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -517,6 +528,20 @@ export default function AdminPayrollReportsPage() {
                           {row.noPayDay > 0 ? formatCurrency(row.noPayDay) : '-'}
                         </td>
                         <td className="p-2 text-right font-mono font-medium" data-testid={`cell-nett-${idx}`}>{formatCurrency(row.nett)}</td>
+                        <td className="p-2 text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedPayslip(row);
+                              setPayslipDialogOpen(true);
+                            }}
+                            data-testid={`button-view-payslip-${idx}`}
+                          >
+                            <FileText className="h-4 w-4 mr-1" />
+                            View Payslip
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -526,6 +551,236 @@ export default function AdminPayrollReportsPage() {
           </Card>
         </>
       )}
+
+      {/* Individual Payslip Report Dialog */}
+      <Dialog open={payslipDialogOpen} onOpenChange={setPayslipDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-payslip">
+          {selectedPayslip && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <DialogTitle className="flex items-center gap-2" data-testid="text-payslip-title">
+                    <FileText className="h-5 w-5 print:hidden" />
+                    <span className="print:hidden">Payslip Report</span>
+                  </DialogTitle>
+                  <div className="flex items-center gap-2">
+                    <DialogClose asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        data-testid="button-close-payslip-header"
+                        autoFocus
+                      >
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Close</span>
+                      </Button>
+                    </DialogClose>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.print()}
+                      data-testid="button-print-payslip"
+                      className="print:hidden"
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Print
+                    </Button>
+                  </div>
+                </div>
+              </DialogHeader>
+              
+              <div className="space-y-6 print:p-8" id="payslip-content">
+                {/* Header Section */}
+                <div className="text-center border-b pb-4">
+                  <h2 className="text-xl font-bold" data-testid="text-payslip-company">NexaHR HRMS</h2>
+                  <p className="text-lg font-semibold mt-2" data-testid="text-payslip-period">
+                    Payslip for {selectedPayslip.payPeriod}
+                  </p>
+                </div>
+
+                {/* Employee Information */}
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Employee Name</p>
+                    <p className="font-medium" data-testid="text-payslip-name">{selectedPayslip.employeeName}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Employee Code</p>
+                    <p className="font-mono font-medium" data-testid="text-payslip-code">{selectedPayslip.employeeCode}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Department</p>
+                    <p className="font-medium" data-testid="text-payslip-dept">{selectedPayslip.deptName || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Section</p>
+                    <p className="font-medium" data-testid="text-payslip-section">{selectedPayslip.secName || '-'}</p>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Earnings Section */}
+                <div>
+                  <h3 className="font-semibold mb-3 text-green-600 dark:text-green-400">Earnings</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Basic Salary</span>
+                      <span className="font-mono" data-testid="text-payslip-basic">{formatCurrency(selectedPayslip.basicSalary)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Salary</span>
+                      <span className="font-mono" data-testid="text-payslip-totsal">{formatCurrency(selectedPayslip.totSalary)}</span>
+                    </div>
+                    {selectedPayslip.ot10 > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>OT 1.0x</span>
+                        <span className="font-mono" data-testid="text-payslip-ot10">{formatCurrency(selectedPayslip.ot10)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.ot15 > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>OT 1.5x</span>
+                        <span className="font-mono" data-testid="text-payslip-ot15">{formatCurrency(selectedPayslip.ot15)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.ot20 > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>OT 2.0x</span>
+                        <span className="font-mono" data-testid="text-payslip-ot20">{formatCurrency(selectedPayslip.ot20)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.ot30 > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>OT 3.0x</span>
+                        <span className="font-mono" data-testid="text-payslip-ot30">{formatCurrency(selectedPayslip.ot30)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.shiftAllowance > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Shift Allowance</span>
+                        <span className="font-mono" data-testid="text-payslip-shift">{formatCurrency(selectedPayslip.shiftAllowance)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.mobileAllowance > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Mobile Allowance</span>
+                        <span className="font-mono" data-testid="text-payslip-mobile">{formatCurrency(selectedPayslip.mobileAllowance)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.transportAllowance > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Transport Allowance</span>
+                        <span className="font-mono" data-testid="text-payslip-transport">{formatCurrency(selectedPayslip.transportAllowance)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.annualLeaveEncashment > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Annual Leave Encashment</span>
+                        <span className="font-mono" data-testid="text-payslip-leave-enc">{formatCurrency(selectedPayslip.annualLeaveEncashment)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.otherAllowance > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Other Allowance</span>
+                        <span className="font-mono" data-testid="text-payslip-other">{formatCurrency(selectedPayslip.otherAllowance)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.bonus > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Bonus</span>
+                        <span className="font-mono" data-testid="text-payslip-bonus">{formatCurrency(selectedPayslip.bonus)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold pt-2 border-t">
+                      <span>Gross Wages</span>
+                      <span className="font-mono text-green-600 dark:text-green-400" data-testid="text-payslip-gross">{formatCurrency(selectedPayslip.grossWages)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Deductions Section */}
+                <div>
+                  <h3 className="font-semibold mb-3 text-red-600 dark:text-red-400">Deductions</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Employee CPF</span>
+                      <span className="font-mono" data-testid="text-payslip-emp-cpf">{formatCurrency(selectedPayslip.employeeCpf)}</span>
+                    </div>
+                    {selectedPayslip.noPayDay > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>No Pay Day Deduction</span>
+                        <span className="font-mono" data-testid="text-payslip-nopay">{formatCurrency(selectedPayslip.noPayDay)}</span>
+                      </div>
+                    )}
+                    {selectedPayslip.loanRepaymentTotal > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Loan Repayment</span>
+                        <span className="font-mono" data-testid="text-payslip-loan">{formatCurrency(selectedPayslip.loanRepaymentTotal)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold pt-2 border-t">
+                      <span>Total Deductions</span>
+                      <span className="font-mono text-red-600 dark:text-red-400" data-testid="text-payslip-total-deductions">
+                        {formatCurrency(selectedPayslip.employeeCpf + selectedPayslip.noPayDay + selectedPayslip.loanRepaymentTotal)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* CPF Information */}
+                <div>
+                  <h3 className="font-semibold mb-3">CPF Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>CPF Wages</span>
+                      <span className="font-mono" data-testid="text-payslip-cpf-wages">{formatCurrency(selectedPayslip.cpfWages)}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Employer CPF Contribution</span>
+                      <span className="font-mono" data-testid="text-payslip-employer-cpf">{formatCurrency(selectedPayslip.employerCpf)}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Employee CPF Contribution</span>
+                      <span className="font-mono" data-testid="text-payslip-employee-cpf">{formatCurrency(selectedPayslip.employeeCpf)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Net Pay Section */}
+                <div className="p-4 bg-primary/10 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-semibold">Net Pay</span>
+                    <span className="text-2xl font-bold font-mono" data-testid="text-payslip-nett">{formatCurrency(selectedPayslip.nett)}</span>
+                  </div>
+                  {selectedPayslip.payMode && (
+                    <div className="flex justify-between text-sm text-muted-foreground mt-2">
+                      <span>Payment Mode</span>
+                      <span data-testid="text-payslip-paymode">{selectedPayslip.payMode}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-2 pt-4 print:hidden">
+                  <DialogClose asChild>
+                    <Button variant="outline" data-testid="button-close-payslip">
+                      <X className="h-4 w-4 mr-2" />
+                      Close
+                    </Button>
+                  </DialogClose>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
