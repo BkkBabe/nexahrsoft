@@ -683,12 +683,16 @@ export default function AdminPayrollImportPage() {
               Search for an employee to link with this payroll record
             </DialogDescription>
           </DialogHeader>
-          <Input 
-            placeholder="Search by name, email, or employee code..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            data-testid="input-search-employee"
-          />
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search by name, email, or employee code..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-employee"
+            />
+          </div>
           <div className="max-h-[400px] overflow-y-auto space-y-2">
             {filteredUsers.slice(0, 20).map(user => (
               <div 
