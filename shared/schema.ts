@@ -275,3 +275,122 @@ export const insertPasswordOverrideLogSchema = createInsertSchema(passwordOverri
 
 export type InsertPasswordOverrideLog = z.infer<typeof insertPasswordOverrideLogSchema>;
 export type PasswordOverrideLog = typeof passwordOverrideLogs.$inferSelect;
+
+// Comprehensive Payroll Records (from CSV import)
+export const payrollRecords = pgTable("payroll_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id), // Link to user (nullable if employee not in system)
+  payPeriod: text("pay_period").notNull(), // e.g., "NOV 2025", "JAN 2025"
+  payPeriodYear: integer("pay_period_year").notNull(), // 2025
+  payPeriodMonth: integer("pay_period_month").notNull(), // 1-12
+  
+  // Employee Info (from CSV)
+  employeeCode: text("employee_code").notNull(),
+  employeeName: text("employee_name").notNull(),
+  deptCode: text("dept_code"),
+  deptName: text("dept_name"),
+  secCode: text("sec_code"),
+  secName: text("sec_name"),
+  catCode: text("cat_code"),
+  catName: text("cat_name"),
+  nric: text("nric"),
+  joinDate: text("join_date"),
+  
+  // Salary Components (stored as cents to avoid floating point issues)
+  totSalary: integer("tot_salary").notNull().default(0), // cents
+  basicSalary: integer("basic_salary").notNull().default(0), // cents
+  monthlyVariablesComponent: integer("monthly_variables_component").notNull().default(0), // cents
+  
+  // Overtime
+  flat: integer("flat").notNull().default(0), // cents
+  ot10: integer("ot10").notNull().default(0), // cents - OT 1.0x
+  ot15: integer("ot15").notNull().default(0), // cents - OT 1.5x
+  ot20: integer("ot20").notNull().default(0), // cents - OT 2.0x
+  ot30: integer("ot30").notNull().default(0), // cents - OT 3.0x
+  shiftAllowance: integer("shift_allowance").notNull().default(0), // cents
+  totRestPhAmount: integer("tot_rest_ph_amount").notNull().default(0), // cents - Rest/PH Amount
+  
+  // Allowances with CPF (Ordinary)
+  mobileAllowance: integer("mobile_allowance").notNull().default(0), // cents
+  transportAllowance: integer("transport_allowance").notNull().default(0), // cents
+  
+  // Allowances with CPF (Additional)
+  annualLeaveEncashment: integer("annual_leave_encashment").notNull().default(0), // cents
+  serviceCallAllowances: integer("service_call_allowances").notNull().default(0), // cents
+  
+  // Allowances without CPF
+  otherAllowance: integer("other_allowance").notNull().default(0), // cents
+  houseRentalAllowances: integer("house_rental_allowances").notNull().default(0), // cents
+  
+  // Deductions - Loan Repayments (combined into single field as JSON or total)
+  loanRepaymentTotal: integer("loan_repayment_total").notNull().default(0), // cents - total of all loans
+  loanRepaymentDetails: text("loan_repayment_details"), // JSON string with breakdown if needed
+  
+  // Deductions without CPF
+  noPayDay: integer("no_pay_day").notNull().default(0), // cents - deduction for unpaid leave
+  
+  // Community Contributions
+  cc: integer("cc").notNull().default(0), // cents - Chinese Development Assistance Council
+  cdac: integer("cdac").notNull().default(0), // cents
+  ecf: integer("ecf").notNull().default(0), // cents - Eurasian Community Fund
+  mbmf: integer("mbmf").notNull().default(0), // cents - Mosque Building & Mendaki Fund
+  sinda: integer("sinda").notNull().default(0), // cents - Singapore Indian Development Association
+  
+  // Bonus
+  bonus: integer("bonus").notNull().default(0), // cents
+  
+  // Totals
+  grossWages: integer("gross_wages").notNull().default(0), // cents
+  cpfWages: integer("cpf_wages").notNull().default(0), // cents
+  
+  // Levies
+  sdf: integer("sdf").notNull().default(0), // cents - Skills Development Fund
+  fwl: integer("fwl").notNull().default(0), // cents - Foreign Worker Levy
+  
+  // CPF Contributions
+  employerCpf: integer("employer_cpf").notNull().default(0), // cents
+  employeeCpf: integer("employee_cpf").notNull().default(0), // cents (stored as negative)
+  totalCpf: integer("total_cpf").notNull().default(0), // cents - total CPF contribution
+  
+  // Final Amounts
+  total: integer("total").notNull().default(0), // cents - total before deductions
+  nett: integer("nett").notNull().default(0), // cents - final take-home pay
+  
+  // Payment Info
+  payMode: text("pay_mode"), // 'BANK DISK', 'CASH', 'CHEQUE'
+  chequeNo: text("cheque_no"),
+  
+  // Metadata
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+  importedBy: text("imported_by"), // Admin who imported
+});
+
+export const insertPayrollRecordSchema = createInsertSchema(payrollRecords).omit({
+  id: true,
+  importedAt: true,
+});
+
+export type InsertPayrollRecord = z.infer<typeof insertPayrollRecordSchema>;
+export type PayrollRecord = typeof payrollRecords.$inferSelect;
+
+// Attendance Audit Logs for tracking admin changes to attendance data
+export const attendanceAuditLogs = pgTable("attendance_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  action: text("action").notNull(), // 'add', 'update', 'delete', 'end_clockin'
+  tableName: text("table_name").notNull().default("attendance_records"),
+  recordId: text("record_id"), // ID of the affected attendance record
+  fieldName: text("field_name"), // Which field was changed (for updates)
+  oldValue: text("old_value"), // Previous value
+  newValue: text("new_value"), // New value
+  changedBy: text("changed_by"), // Admin username who made the change
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+  userId: varchar("user_id").references(() => users.id), // User whose attendance was affected
+});
+
+export const insertAttendanceAuditLogSchema = createInsertSchema(attendanceAuditLogs).omit({
+  id: true,
+  changedAt: true,
+});
+
+export type InsertAttendanceAuditLog = z.infer<typeof insertAttendanceAuditLogSchema>;
+export type AttendanceAuditLog = typeof attendanceAuditLogs.$inferSelect;
