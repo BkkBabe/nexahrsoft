@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { DollarSign, ArrowLeft, Calculator, CheckCircle } from "lucide-react";
+import { DollarSign, ArrowLeft, Calculator, CheckCircle, FileSpreadsheet, BarChart3 } from "lucide-react";
 import { Link } from "wouter";
 import type { User, PayslipRecord } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -316,8 +316,26 @@ export default function AdminPayslipPage() {
       {/* Payslips List */}
       <Card>
         <CardHeader>
-          <CardTitle>All Payslips</CardTitle>
-          <CardDescription>View and approve generated payslips</CardDescription>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <CardTitle>All Payslips</CardTitle>
+              <CardDescription>View and approve generated payslips</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/admin/payroll/import">
+                <Button variant="outline" size="sm" data-testid="button-import-payroll">
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Import Payroll
+                </Button>
+              </Link>
+              <Link href="/admin/payroll/reports">
+                <Button variant="outline" size="sm" data-testid="button-payroll-reports">
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Payroll Reports
+                </Button>
+              </Link>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {payslipsLoading ? (
