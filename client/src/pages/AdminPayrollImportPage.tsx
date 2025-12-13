@@ -159,11 +159,11 @@ export default function AdminPayrollImportPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
-  const { data: usersData } = useQuery<{ users: User[] }>({
+  const { data: usersData } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
   });
 
-  const users = usersData?.users || [];
+  const users = usersData || [];
 
   const saveEmployeeCodeMutation = useMutation({
     mutationFn: async ({ userId, employeeCode }: { userId: string; employeeCode: string }) => {
