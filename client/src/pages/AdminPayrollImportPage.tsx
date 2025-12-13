@@ -2,11 +2,21 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowLeft, Upload, FileSpreadsheet, Check, X, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, Upload, FileSpreadsheet, Check, X, AlertTriangle, Loader2, Search } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, InsertPayrollRecord } from "@shared/schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 interface ParsedPayrollRow {
   employeeCode: string;
@@ -145,12 +155,73 @@ export default function AdminPayrollImportPage() {
   const [payPeriod, setPayPeriod] = useState<PayPeriod | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
   const { data: usersData } = useQuery<{ users: User[] }>({
     queryKey: ["/api/admin/users"],
   });
 
   const users = usersData?.users || [];
+
+  const saveEmployeeCodeMutation = useMutation({
+    mutationFn: async ({ userId, employeeCode }: { userId: string; employeeCode: string }) => {
+      return apiRequest("POST", `/api/admin/users/${userId}/save-employee-code`, { employeeCode });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Employee Code Saved",
+        description: "The employee code has been saved for future matching.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to Save",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSelectEmployee = (user: User) => {
+    if (selectedRowIndex === null) return;
+    
+    const rowData = parsedData[selectedRowIndex];
+    const csvEmployeeCode = rowData.employeeCode;
+    
+    setParsedData(prev => prev.map((row, idx) => 
+      idx === selectedRowIndex 
+        ? { ...row, matchedUser: user, isMatched: true }
+        : row
+    ));
+    
+    if (csvEmployeeCode && !user.employeeCode) {
+      saveEmployeeCodeMutation.mutate({ userId: user.id, employeeCode: csvEmployeeCode });
+    }
+    
+    setSearchDialogOpen(false);
+    setSearchQuery("");
+    setSelectedRowIndex(null);
+  };
+
+  const openSearchDialog = (rowIndex: number) => {
+    setSelectedRowIndex(rowIndex);
+    setSearchQuery(parsedData[rowIndex]?.employeeName || "");
+    setSearchDialogOpen(true);
+  };
+
+  const filteredUsers = users.filter(u => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      u.name?.toLowerCase().includes(query) ||
+      u.email?.toLowerCase().includes(query) ||
+      u.employeeCode?.toLowerCase().includes(query) ||
+      u.department?.toLowerCase().includes(query)
+    );
+  });
 
   const importMutation = useMutation({
     mutationFn: async (records: Partial<InsertPayrollRecord>[]) => {
