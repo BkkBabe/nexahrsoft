@@ -40,9 +40,9 @@ export default function AdminDashboardPage() {
       iconColor: "bg-purple-500/10",
     },
     {
-      title: "All Payslip",
+      title: "Payroll Reports",
       icon: DollarSign,
-      href: "/admin/payslip",
+      href: "/admin/payroll/reports",
       iconColor: "bg-emerald-500/10",
     },
     {
