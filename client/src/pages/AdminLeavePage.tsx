@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Calendar, ArrowLeft, Plus, CheckCircle, XCircle, Upload, BarChart3, PieChart as PieChartIcon, Download, Users, TrendingUp, FileText } from "lucide-react";
+import { Calendar, ArrowLeft, Plus, CheckCircle, XCircle, Upload, BarChart3, PieChart as PieChartIcon, Download, Users, TrendingUp, FileText, AlertTriangle, Printer } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Link } from "wouter";
 import type { User, LeaveBalance, LeaveApplication } from "@shared/schema";
@@ -236,6 +236,34 @@ export default function AdminLeavePage() {
 
   const totalDaysTaken = analyticsData?.stats?.reduce((sum, s) => sum + s.totalDays, 0) || 0;
 
+  // Export balances to CSV
+  const exportBalancesToCSV = () => {
+    if (balances.length === 0) return;
+    
+    const headers = ['Employee', 'Leave Type', 'Total Days', 'Used Days', 'Remaining'];
+    const rows = balances.map(b => [
+      getUserName(b.userId),
+      b.leaveType,
+      b.totalDays.toString(),
+      b.usedDays.toString(),
+      (b.totalDays - b.usedDays).toString(),
+    ]);
+    
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'leave-balances.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Print function
+  const handlePrint = () => {
+    window.print();
+  };
+
   // Export CSV function
   const exportToCSV = () => {
     if (!analyticsData || employeeUtilizationList.length === 0) return;
@@ -337,6 +365,22 @@ export default function AdminLeavePage() {
     return user?.name || user?.username || "Unknown User";
   };
 
+  // Low balance alerts - employees with less than 20% of total leave remaining (or overdrawn)
+  const lowBalanceAlerts = balances.filter(b => {
+    const remaining = b.totalDays - b.usedDays;
+    const percentRemaining = b.totalDays > 0 ? (remaining / b.totalDays) * 100 : 100;
+    return percentRemaining <= 20;
+  }).map(b => {
+    const remaining = b.totalDays - b.usedDays;
+    return {
+      ...b,
+      remaining: Math.max(0, remaining),
+      percentRemaining: b.totalDays > 0 ? Math.max(0, (remaining / b.totalDays) * 100) : 100,
+      userName: getUserName(b.userId),
+      isOverdrawn: remaining < 0,
+    };
+  });
+
   // Group balances by user
   const balancesByUser = balances.reduce((acc, balance) => {
     if (!acc[balance.userId]) {
@@ -370,7 +414,15 @@ export default function AdminLeavePage() {
 
       <Tabs defaultValue="balances" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="balances" data-testid="tab-balances">Leave Balances</TabsTrigger>
+          <TabsTrigger value="balances" data-testid="tab-balances">
+            Leave Balances
+            {lowBalanceAlerts.length > 0 && (
+              <Badge variant="outline" className="ml-2 border-orange-500 text-orange-600">
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                {lowBalanceAlerts.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="applications" data-testid="tab-applications">
             Applications
             {pendingApplications.length > 0 && (
@@ -386,6 +438,46 @@ export default function AdminLeavePage() {
         </TabsList>
 
         <TabsContent value="balances" className="space-y-6">
+          {/* Low Balance Alerts */}
+          {lowBalanceAlerts.length > 0 && (
+            <Card className="border-orange-200 dark:border-orange-900" data-testid="card-low-balance-alerts">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-orange-600">
+                  <AlertTriangle className="h-5 w-5" />
+                  Low Balance Alerts
+                </CardTitle>
+                <CardDescription>Employees with 20% or less leave remaining</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {lowBalanceAlerts.map((alert) => (
+                    <div 
+                      key={alert.id} 
+                      className="flex items-center justify-between p-3 rounded-lg bg-orange-50 dark:bg-orange-950/30"
+                      data-testid={`alert-low-balance-${alert.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-4 w-4 text-orange-500" />
+                        <div>
+                          <p className="font-medium">{alert.userName}</p>
+                          <p className="text-sm text-muted-foreground">{alert.leaveType}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="outline" className="border-orange-500 text-orange-600">
+                          {alert.remaining.toFixed(1)} / {alert.totalDays} days
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {alert.percentRemaining.toFixed(0)}% remaining
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Set Leave Balance */}
           <Card>
             <CardHeader>
@@ -466,7 +558,30 @@ export default function AdminLeavePage() {
           {/* Leave Balances List */}
           <Card>
             <CardHeader>
-              <CardTitle>Employee Leave Balances</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Employee Leave Balances</CardTitle>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handlePrint}
+                    data-testid="button-print-balances"
+                  >
+                    <Printer className="h-4 w-4 mr-1" />
+                    Print
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={exportBalancesToCSV}
+                    disabled={balances.length === 0}
+                    data-testid="button-export-balances"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Export
+                  </Button>
+                </div>
+              </div>
               <CardDescription>Current leave entitlements for all employees</CardDescription>
             </CardHeader>
             <CardContent>
