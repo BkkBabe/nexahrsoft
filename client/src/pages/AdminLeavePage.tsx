@@ -119,7 +119,7 @@ export default function AdminLeavePage() {
     },
   });
 
-  // CSV Parser for specific format
+  // CSV Parser for multi-column format from leave management system
   const parseCSV = (text: string): LeaveHistoryRecord[] => {
     const records: LeaveHistoryRecord[] = [];
     const lines = text.split('\n');
@@ -127,42 +127,76 @@ export default function AdminLeavePage() {
     let currentEmployeeCode = "";
     let currentEmployeeName = "";
     let currentLeaveType = "";
-    let recordYear = new Date().getFullYear();
     
     for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) continue;
+      // Parse as CSV - split by comma
+      const columns = line.split(',').map(col => col.trim());
+      const fullLine = columns.join(' ');
+      
+      // Skip empty lines
+      if (!fullLine.replace(/,/g, '').trim()) continue;
       
       // Parse employee header: "Emp Code: 07001   Employee: NAME   Leave Calculation Date: 01-10-2024"
-      if (trimmedLine.includes("Emp Code:") && trimmedLine.includes("Employee:")) {
-        const empCodeMatch = trimmedLine.match(/Emp Code:\s*(\d+)/);
-        const empNameMatch = trimmedLine.match(/Employee:\s*([A-Z\s@]+?)(?:\s{2,}|Leave)/);
-        const dateMatch = trimmedLine.match(/Leave Calculation Date:\s*(\d{2})-(\d{2})-(\d{4})/);
+      if (fullLine.includes("Emp Code:") && fullLine.includes("Employee:")) {
+        const empCodeMatch = fullLine.match(/Emp Code:\s*(\d+)/);
+        const empNameMatch = fullLine.match(/Employee:\s*([A-Z\s@]+?)(?:\s{2,}|Leave)/i);
         
         if (empCodeMatch) currentEmployeeCode = empCodeMatch[1];
         if (empNameMatch) currentEmployeeName = empNameMatch[1].trim();
-        if (dateMatch) recordYear = parseInt(dateMatch[3]);
         continue;
       }
       
-      // Parse leave type header: "Leave Type:   AL - ANNUAL LEAVE"
-      if (trimmedLine.startsWith("Leave Type:")) {
-        const typeMatch = trimmedLine.match(/Leave Type:\s*([A-Z]+)\s*-/);
-        if (typeMatch) currentLeaveType = typeMatch[1];
+      // Parse leave type header from columns - look for "Leave Type:" and then find the type code
+      if (fullLine.includes("Leave Type:")) {
+        // Look for pattern like "AL - ANNUAL LEAVE" or "ML - MEDICAL LEAVE"
+        const typeMatch = fullLine.match(/([A-Z]{2,4})\s*-\s*[A-Z\s]+LEAVE/i);
+        if (typeMatch) currentLeaveType = typeMatch[1].toUpperCase();
         continue;
       }
       
-      // Skip headers and summary lines
-      if (trimmedLine.startsWith("Row#") || trimmedLine.startsWith("Total:") || 
-          trimmedLine.includes("ML Claims") || trimmedLine.includes("Total Leave:")) {
+      // Skip header, total, and summary lines
+      if (fullLine.includes("S No.") || fullLine.includes("Total :") || 
+          fullLine.includes("ML Claims") || fullLine.includes("Total Leave:") ||
+          fullLine.includes("Eligible") || fullLine.includes("Credit") ||
+          fullLine.includes("Bring Fwd") || fullLine.includes("Earned") ||
+          fullLine.includes("Balance") || fullLine.includes("Leave History Report") ||
+          fullLine.includes("Period From:") || fullLine.includes("Date :") ||
+          fullLine.includes("Page :") || fullLine.includes("Unnamed:")) {
         continue;
       }
       
-      // Parse leave entry line: "1   15-01-2024   Mon      1.00 day" or with remarks
-      const entryMatch = trimmedLine.match(/^\d+\s+(\d{2})-(\d{2})-(\d{4})\s+([A-Za-z]+)\s*(.*?)\s*([\d.]+\s*(?:day|days|hours?))/i);
-      if (entryMatch && currentEmployeeCode && currentLeaveType) {
-        const [, day, month, year, dayOfWeek, remarks, daysOrHours] = entryMatch;
+      // Parse leave entry - look for date pattern DD-MM-YYYY in columns
+      const dateMatch = fullLine.match(/(\d{2})-(\d{2})-(\d{4})/);
+      const daysMatch = fullLine.match(/([\d.]+)\s*day/i);
+      
+      // Check if first column is a number (row number) and we have a date
+      const rowNum = parseInt(columns[1] || columns[0]);
+      
+      if (dateMatch && daysMatch && currentEmployeeCode && currentLeaveType && !isNaN(rowNum)) {
+        const [, day, month, year] = dateMatch;
         const leaveDate = `${year}-${month}-${day}`;
+        const daysOrHours = daysMatch[0];
+        
+        // Extract day of week and remarks from columns
+        let dayOfWeek = "";
+        let remarks = "";
+        
+        // Day of week is typically in column 9-10 area
+        for (const col of columns) {
+          if (/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i.test(col)) {
+            dayOfWeek = col;
+            break;
+          }
+        }
+        
+        // Remarks are typically after the day of week, look for text content
+        const remarksCol = columns.find((col, idx) => 
+          idx > 10 && col.length > 2 && 
+          !/^\d/.test(col) && 
+          !/day$/i.test(col) &&
+          !/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i.test(col)
+        );
+        if (remarksCol) remarks = remarksCol;
         
         records.push({
           employeeCode: currentEmployeeCode,
@@ -170,7 +204,7 @@ export default function AdminLeavePage() {
           leaveType: currentLeaveType,
           leaveDate,
           dayOfWeek,
-          remarks: remarks?.trim() || undefined,
+          remarks: remarks || undefined,
           daysOrHours: daysOrHours.trim(),
           year: parseInt(year),
         });
