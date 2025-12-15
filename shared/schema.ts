@@ -230,6 +230,29 @@ export type LeaveBalance = typeof leaveBalances.$inferSelect;
 export type InsertLeaveApplication = z.infer<typeof insertLeaveApplicationSchema>;
 export type LeaveApplication = typeof leaveApplications.$inferSelect;
 
+// Leave History (for imported historical leave data)
+export const leaveHistory = pgTable("leave_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeCode: text("employee_code").notNull(),
+  employeeName: text("employee_name").notNull(),
+  leaveType: text("leave_type").notNull(), // 'AL', 'ML', 'OIL', 'UL', 'CL', etc.
+  leaveDate: text("leave_date").notNull(), // Format: YYYY-MM-DD
+  dayOfWeek: text("day_of_week"), // Monday, Tuesday, etc.
+  remarks: text("remarks"),
+  daysOrHours: text("days_or_hours").notNull().default("1.00 day"), // "1.00 day" or "4.00 hr"
+  mlClaimAmount: integer("ml_claim_amount").default(0), // cents for medical leave claims
+  year: integer("year").notNull(), // Year of the leave
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+});
+
+export const insertLeaveHistorySchema = createInsertSchema(leaveHistory).omit({
+  id: true,
+  importedAt: true,
+});
+
+export type InsertLeaveHistory = z.infer<typeof insertLeaveHistorySchema>;
+export type LeaveHistory = typeof leaveHistory.$inferSelect;
+
 // Email log types
 export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
   id: true,

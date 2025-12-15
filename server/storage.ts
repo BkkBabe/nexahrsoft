@@ -1,8 +1,8 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords } from "@shared/schema";
-import { eq, or, and, gte, lte, desc, isNull, not, like } from "drizzle-orm";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory } from "@shared/schema";
+import { eq, or, and, gte, lte, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -91,6 +91,13 @@ export interface IStorage {
   getPayrollRecords(year?: number, month?: number): Promise<PayrollRecord[]>;
   getPayrollRecordsByEmployee(employeeCode: string): Promise<PayrollRecord[]>;
   deletePayrollRecordsByPeriod(year: number, month: number): Promise<void>;
+  
+  // Leave history methods (CSV import)
+  bulkCreateLeaveHistory(records: InsertLeaveHistory[]): Promise<LeaveHistory[]>;
+  getLeaveHistory(year?: number): Promise<LeaveHistory[]>;
+  getLeaveHistoryByEmployee(employeeCode: string): Promise<LeaveHistory[]>;
+  deleteLeaveHistoryByYear(year: number): Promise<void>;
+  getLeaveHistoryStats(year: number): Promise<{ leaveType: string; totalDays: number; count: number }[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -412,6 +419,26 @@ export class MemStorage implements IStorage {
   
   async deletePayrollRecordsByPeriod(year: number, month: number): Promise<void> {
     throw new Error("MemStorage deletePayrollRecordsByPeriod not implemented");
+  }
+  
+  async bulkCreateLeaveHistory(records: InsertLeaveHistory[]): Promise<LeaveHistory[]> {
+    throw new Error("MemStorage bulkCreateLeaveHistory not implemented");
+  }
+  
+  async getLeaveHistory(year?: number): Promise<LeaveHistory[]> {
+    throw new Error("MemStorage getLeaveHistory not implemented");
+  }
+  
+  async getLeaveHistoryByEmployee(employeeCode: string): Promise<LeaveHistory[]> {
+    throw new Error("MemStorage getLeaveHistoryByEmployee not implemented");
+  }
+  
+  async deleteLeaveHistoryByYear(year: number): Promise<void> {
+    throw new Error("MemStorage deleteLeaveHistoryByYear not implemented");
+  }
+  
+  async getLeaveHistoryStats(year: number): Promise<{ leaveType: string; totalDays: number; count: number }[]> {
+    throw new Error("MemStorage getLeaveHistoryStats not implemented");
   }
 }
 
@@ -976,6 +1003,63 @@ export class PgStorage implements IStorage {
           eq(payrollRecords.payPeriodMonth, month)
         )
       );
+  }
+  
+  // Leave history methods (CSV import)
+  async bulkCreateLeaveHistory(records: InsertLeaveHistory[]): Promise<LeaveHistory[]> {
+    if (records.length === 0) return [];
+    const created = await db.insert(leaveHistory)
+      .values(records)
+      .returning();
+    return created;
+  }
+  
+  async getLeaveHistory(year?: number): Promise<LeaveHistory[]> {
+    if (year !== undefined) {
+      return await db.select()
+        .from(leaveHistory)
+        .where(eq(leaveHistory.year, year))
+        .orderBy(desc(leaveHistory.leaveDate));
+    }
+    return await db.select()
+      .from(leaveHistory)
+      .orderBy(desc(leaveHistory.leaveDate));
+  }
+  
+  async getLeaveHistoryByEmployee(employeeCode: string): Promise<LeaveHistory[]> {
+    return await db.select()
+      .from(leaveHistory)
+      .where(eq(leaveHistory.employeeCode, employeeCode))
+      .orderBy(desc(leaveHistory.leaveDate));
+  }
+  
+  async deleteLeaveHistoryByYear(year: number): Promise<void> {
+    await db.delete(leaveHistory)
+      .where(eq(leaveHistory.year, year));
+  }
+  
+  async getLeaveHistoryStats(year: number): Promise<{ leaveType: string; totalDays: number; count: number }[]> {
+    const results = await db.select({
+      leaveType: leaveHistory.leaveType,
+      count: sql<number>`count(*)::int`,
+      totalDays: sql<number>`sum(
+        CASE 
+          WHEN ${leaveHistory.daysOrHours} LIKE '%day%' THEN 
+            CAST(REGEXP_REPLACE(${leaveHistory.daysOrHours}, '[^0-9.]', '', 'g') AS DECIMAL)
+          WHEN ${leaveHistory.daysOrHours} LIKE '%hr%' THEN 
+            CAST(REGEXP_REPLACE(${leaveHistory.daysOrHours}, '[^0-9.]', '', 'g') AS DECIMAL) / 8
+          ELSE 1
+        END
+      )::numeric(10,2)`,
+    })
+      .from(leaveHistory)
+      .where(eq(leaveHistory.year, year))
+      .groupBy(leaveHistory.leaveType);
+    return results.map(r => ({ 
+      leaveType: r.leaveType, 
+      totalDays: Number(r.totalDays) || 0, 
+      count: r.count 
+    }));
   }
 }
 

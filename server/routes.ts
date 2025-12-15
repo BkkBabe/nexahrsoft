@@ -1739,6 +1739,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Import leave history from CSV
+  app.post("/api/admin/leave/history/import", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const schema = z.object({
+        records: z.array(z.object({
+          employeeCode: z.string(),
+          employeeName: z.string(),
+          leaveType: z.string(),
+          leaveDate: z.string(),
+          dayOfWeek: z.string().optional(),
+          remarks: z.string().optional(),
+          daysOrHours: z.string().default("1.00 day"),
+          mlClaimAmount: z.number().optional().default(0),
+          year: z.number(),
+        })),
+        replaceExisting: z.boolean().optional().default(false),
+      });
+
+      const { records, replaceExisting } = schema.parse(req.body);
+
+      if (records.length === 0) {
+        return res.status(400).json({ message: "No records to import" });
+      }
+
+      // If replaceExisting, delete records for the year(s) being imported
+      if (replaceExisting) {
+        const years = [...new Set(records.map(r => r.year))];
+        for (const year of years) {
+          await storage.deleteLeaveHistoryByYear(year);
+        }
+      }
+
+      const created = await storage.bulkCreateLeaveHistory(records);
+      res.json({ 
+        success: true, 
+        message: `Imported ${created.length} leave records`,
+        count: created.length 
+      });
+    } catch (error) {
+      console.error("Import leave history error:", error);
+      res.status(500).json({ message: "Failed to import leave history" });
+    }
+  });
+
+  // Admin: Get leave history
+  app.get("/api/admin/leave/history", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { year } = req.query as { year?: string };
+      const yearNum = year ? parseInt(year) : undefined;
+      const records = await storage.getLeaveHistory(yearNum);
+      res.json({ records });
+    } catch (error) {
+      console.error("Get leave history error:", error);
+      res.status(500).json({ message: "Failed to get leave history" });
+    }
+  });
+
+  // Admin: Get leave analytics/statistics
+  app.get("/api/admin/leave/analytics", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { year } = req.query as { year?: string };
+      const yearNum = year ? parseInt(year) : new Date().getFullYear();
+      
+      const stats = await storage.getLeaveHistoryStats(yearNum);
+      const records = await storage.getLeaveHistory(yearNum);
+      
+      // Calculate additional analytics
+      const uniqueEmployees = [...new Set(records.map(r => r.employeeCode))].length;
+      const totalRecords = records.length;
+      
+      // Group by month for chart data
+      const monthlyData: Record<string, Record<string, number>> = {};
+      for (const record of records) {
+        const date = new Date(record.leaveDate);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = {};
+        }
+        if (!monthlyData[monthKey][record.leaveType]) {
+          monthlyData[monthKey][record.leaveType] = 0;
+        }
+        // Parse days/hours
+        const match = record.daysOrHours.match(/(\d+\.?\d*)/);
+        const value = match ? parseFloat(match[1]) : 1;
+        const days = record.daysOrHours.includes('hr') ? value / 8 : value;
+        monthlyData[monthKey][record.leaveType] += days;
+      }
+      
+      // Employee utilization data
+      const employeeUtilization: Record<string, { name: string; total: number; byType: Record<string, number> }> = {};
+      for (const record of records) {
+        if (!employeeUtilization[record.employeeCode]) {
+          employeeUtilization[record.employeeCode] = { name: record.employeeName, total: 0, byType: {} };
+        }
+        const match = record.daysOrHours.match(/(\d+\.?\d*)/);
+        const value = match ? parseFloat(match[1]) : 1;
+        const days = record.daysOrHours.includes('hr') ? value / 8 : value;
+        employeeUtilization[record.employeeCode].total += days;
+        if (!employeeUtilization[record.employeeCode].byType[record.leaveType]) {
+          employeeUtilization[record.employeeCode].byType[record.leaveType] = 0;
+        }
+        employeeUtilization[record.employeeCode].byType[record.leaveType] += days;
+      }
+
+      res.json({
+        year: yearNum,
+        stats,
+        uniqueEmployees,
+        totalRecords,
+        monthlyData,
+        employeeUtilization,
+      });
+    } catch (error) {
+      console.error("Get leave analytics error:", error);
+      res.status(500).json({ message: "Failed to get leave analytics" });
+    }
+  });
+
   // User: Get leave balances
   app.get("/api/leave/balances", async (req: Request, res: Response) => {
     if (!req.session?.userId || req.session.isAdmin) {
