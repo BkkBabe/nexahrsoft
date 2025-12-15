@@ -417,3 +417,27 @@ export const insertAttendanceAuditLogSchema = createInsertSchema(attendanceAudit
 
 export type InsertAttendanceAuditLog = z.infer<typeof insertAttendanceAuditLogSchema>;
 export type AttendanceAuditLog = typeof attendanceAuditLogs.$inferSelect;
+
+// Leave Audit Logs for tracking admin changes to leave records
+export const leaveAuditLogs = pgTable("leave_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  action: text("action").notNull(), // 'import', 'create', 'update', 'delete', 'balance_update', 'application_review'
+  tableName: text("table_name").notNull(), // 'leave_history', 'leave_balances', 'leave_applications'
+  recordId: text("record_id"), // ID of the affected record
+  employeeCode: text("employee_code"), // For leave history records
+  employeeName: text("employee_name"), // For leave history records
+  fieldName: text("field_name"), // Which field was changed (for updates)
+  oldValue: text("old_value"), // Previous value
+  newValue: text("new_value"), // New value
+  details: text("details"), // JSON string with additional details
+  changedBy: text("changed_by").notNull(), // Admin username who made the change
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+});
+
+export const insertLeaveAuditLogSchema = createInsertSchema(leaveAuditLogs).omit({
+  id: true,
+  changedAt: true,
+});
+
+export type InsertLeaveAuditLog = z.infer<typeof insertLeaveAuditLogSchema>;
+export type LeaveAuditLog = typeof leaveAuditLogs.$inferSelect;

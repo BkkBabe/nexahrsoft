@@ -1776,10 +1776,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const created = await storage.bulkCreateLeaveHistory(records);
+      
+      // Log the import action
+      const adminUsername = req.session.adminUsername || req.session.userId || "admin";
+      const years = [...new Set(records.map(r => r.year))];
+      await storage.createLeaveAuditLog({
+        action: "import",
+        tableName: "leave_history",
+        details: JSON.stringify({ count: created.length, years, replaceExisting }),
+        changedBy: adminUsername,
+      });
+
       res.json({ 
         success: true, 
         message: `Imported ${created.length} leave records`,
-        count: created.length 
+        imported: created.length 
       });
     } catch (error) {
       console.error("Import leave history error:", error);
@@ -1866,6 +1877,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get leave analytics error:", error);
       res.status(500).json({ message: "Failed to get leave analytics" });
+    }
+  });
+
+  // Admin: Update leave history record
+  app.patch("/api/admin/leave/history/:id", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { id } = req.params;
+      const existing = await storage.getLeaveHistoryById(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Leave record not found" });
+      }
+
+      const schema = z.object({
+        employeeCode: z.string().optional(),
+        employeeName: z.string().optional(),
+        leaveType: z.string().optional(),
+        leaveDate: z.string().optional(),
+        daysOrHours: z.string().optional(),
+        remarks: z.string().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const updated = await storage.updateLeaveHistory(id, data);
+      
+      // Log the change
+      const adminUsername = req.session.adminUsername || req.session.userId || "admin";
+      const changedFields = Object.keys(data).filter(k => data[k as keyof typeof data] !== undefined);
+      
+      await storage.createLeaveAuditLog({
+        action: "update",
+        tableName: "leave_history",
+        recordId: id,
+        employeeCode: existing.employeeCode,
+        employeeName: existing.employeeName,
+        fieldName: changedFields.join(", "),
+        oldValue: JSON.stringify(changedFields.reduce((acc, k) => ({ ...acc, [k]: existing[k as keyof typeof existing] }), {})),
+        newValue: JSON.stringify(data),
+        details: `Updated leave record for ${existing.employeeName}`,
+        changedBy: adminUsername,
+      });
+
+      res.json({ success: true, record: updated });
+    } catch (error) {
+      console.error("Update leave history error:", error);
+      res.status(500).json({ message: "Failed to update leave record" });
+    }
+  });
+
+  // Admin: Delete leave history record
+  app.delete("/api/admin/leave/history/:id", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { id } = req.params;
+      const existing = await storage.getLeaveHistoryById(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Leave record not found" });
+      }
+
+      await storage.deleteLeaveHistory(id);
+      
+      // Log the deletion
+      const adminUsername = req.session.adminUsername || req.session.userId || "admin";
+      await storage.createLeaveAuditLog({
+        action: "delete",
+        tableName: "leave_history",
+        recordId: id,
+        employeeCode: existing.employeeCode,
+        employeeName: existing.employeeName,
+        oldValue: JSON.stringify(existing),
+        details: `Deleted leave record for ${existing.employeeName} on ${existing.leaveDate}`,
+        changedBy: adminUsername,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete leave history error:", error);
+      res.status(500).json({ message: "Failed to delete leave record" });
+    }
+  });
+
+  // Admin: Get leave audit logs
+  app.get("/api/admin/leave/audit-logs", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { limit } = req.query as { limit?: string };
+      const limitNum = limit ? parseInt(limit) : 100;
+      const logs = await storage.getLeaveAuditLogs(limitNum);
+      res.json({ logs });
+    } catch (error) {
+      console.error("Get leave audit logs error:", error);
+      res.status(500).json({ message: "Failed to get audit logs" });
     }
   });
 

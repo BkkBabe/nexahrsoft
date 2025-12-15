@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs } from "@shared/schema";
 import { eq, or, and, gte, lte, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -95,9 +95,16 @@ export interface IStorage {
   // Leave history methods (CSV import)
   bulkCreateLeaveHistory(records: InsertLeaveHistory[]): Promise<LeaveHistory[]>;
   getLeaveHistory(year?: number): Promise<LeaveHistory[]>;
+  getLeaveHistoryById(id: string): Promise<LeaveHistory | undefined>;
   getLeaveHistoryByEmployee(employeeCode: string): Promise<LeaveHistory[]>;
+  updateLeaveHistory(id: string, updates: Partial<LeaveHistory>): Promise<LeaveHistory | undefined>;
+  deleteLeaveHistory(id: string): Promise<void>;
   deleteLeaveHistoryByYear(year: number): Promise<void>;
   getLeaveHistoryStats(year: number): Promise<{ leaveType: string; totalDays: number; count: number }[]>;
+  
+  // Leave audit log methods
+  createLeaveAuditLog(log: InsertLeaveAuditLog): Promise<LeaveAuditLog>;
+  getLeaveAuditLogs(limit?: number): Promise<LeaveAuditLog[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -439,6 +446,26 @@ export class MemStorage implements IStorage {
   
   async getLeaveHistoryStats(year: number): Promise<{ leaveType: string; totalDays: number; count: number }[]> {
     throw new Error("MemStorage getLeaveHistoryStats not implemented");
+  }
+  
+  async getLeaveHistoryById(id: string): Promise<LeaveHistory | undefined> {
+    throw new Error("MemStorage getLeaveHistoryById not implemented");
+  }
+  
+  async updateLeaveHistory(id: string, updates: Partial<LeaveHistory>): Promise<LeaveHistory | undefined> {
+    throw new Error("MemStorage updateLeaveHistory not implemented");
+  }
+  
+  async deleteLeaveHistory(id: string): Promise<void> {
+    throw new Error("MemStorage deleteLeaveHistory not implemented");
+  }
+  
+  async createLeaveAuditLog(log: InsertLeaveAuditLog): Promise<LeaveAuditLog> {
+    throw new Error("MemStorage createLeaveAuditLog not implemented");
+  }
+  
+  async getLeaveAuditLogs(limit?: number): Promise<LeaveAuditLog[]> {
+    throw new Error("MemStorage getLeaveAuditLogs not implemented");
   }
 }
 
@@ -1060,6 +1087,45 @@ export class PgStorage implements IStorage {
       totalDays: Number(r.totalDays) || 0, 
       count: r.count 
     }));
+  }
+  
+  async getLeaveHistoryById(id: string): Promise<LeaveHistory | undefined> {
+    const [record] = await db.select()
+      .from(leaveHistory)
+      .where(eq(leaveHistory.id, id));
+    return record;
+  }
+  
+  async updateLeaveHistory(id: string, updates: Partial<LeaveHistory>): Promise<LeaveHistory | undefined> {
+    const [updated] = await db.update(leaveHistory)
+      .set(updates)
+      .where(eq(leaveHistory.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteLeaveHistory(id: string): Promise<void> {
+    await db.delete(leaveHistory)
+      .where(eq(leaveHistory.id, id));
+  }
+  
+  async createLeaveAuditLog(log: InsertLeaveAuditLog): Promise<LeaveAuditLog> {
+    const [created] = await db.insert(leaveAuditLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+  
+  async getLeaveAuditLogs(limit?: number): Promise<LeaveAuditLog[]> {
+    if (limit) {
+      return await db.select()
+        .from(leaveAuditLogs)
+        .orderBy(desc(leaveAuditLogs.changedAt))
+        .limit(limit);
+    }
+    return await db.select()
+      .from(leaveAuditLogs)
+      .orderBy(desc(leaveAuditLogs.changedAt));
   }
 }
 
