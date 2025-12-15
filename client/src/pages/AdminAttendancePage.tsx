@@ -113,7 +113,7 @@ function getHeatmapTextColor(hours: number): string {
 
 export default function AdminAttendancePage() {
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
-  const [viewMode, setViewMode] = useState<'today' | 'list' | 'heatmap' | 'audit'>('today');
+  const [viewMode, setViewMode] = useState<'today' | 'list' | 'heatmap' | 'details'>('today');
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -175,7 +175,7 @@ export default function AdminAttendancePage() {
     queryKey: ['/api/admin/attendance/records', { startDate: todayDate, endDate: todayDate }],
   });
 
-  // Fetch audit logs for attendance changes (only for nexaadmin view)
+  // Fetch audit logs for attendance changes (for details and audit views)
   type AuditLogEntry = {
     id: number;
     action: string;
@@ -191,7 +191,7 @@ export default function AdminAttendancePage() {
   };
   const { data: auditLogsData, isLoading: auditLoading } = useQuery<{ logs: AuditLogEntry[] }>({
     queryKey: ['/api/admin/attendance/audit-logs'],
-    enabled: viewMode === 'audit' && isNexaAdmin,
+    enabled: viewMode === 'details',
   });
   const auditLogs = auditLogsData?.logs || [];
 
@@ -494,17 +494,15 @@ export default function AdminAttendancePage() {
             <Grid3X3 className="h-4 w-4 mr-1" />
             Heatmap
           </Button>
-          {isNexaAdmin && (
-            <Button
-              variant={viewMode === 'audit' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('audit')}
-              data-testid="button-view-audit"
-            >
-              <History className="h-4 w-4 mr-1" />
-              Audit Log
-            </Button>
-          )}
+          <Button
+            variant={viewMode === 'details' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('details')}
+            data-testid="button-view-details"
+          >
+            <History className="h-4 w-4 mr-1" />
+            Attendance Details
+          </Button>
           <Link href="/admin/dashboard">
             <Button variant="outline" size="sm" data-testid="button-back-dashboard">
               <ArrowLeft className="mr-1 h-4 w-4" />
@@ -1103,27 +1101,27 @@ export default function AdminAttendancePage() {
         </>
       )}
 
-      {viewMode === 'audit' && isNexaAdmin && (
+      {viewMode === 'details' && (
         <>
-          {/* Audit Log View */}
+          {/* Attendance Details View */}
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Attendance Audit Log
+                <FileText className="h-5 w-5" />
+                Attendance Details
               </CardTitle>
               <CardDescription>
-                Track all attendance record changes made by administrators
+                View detailed attendance record information and changes
               </CardDescription>
             </CardHeader>
             <CardContent>
               {auditLoading ? (
-                <div className="text-center py-8 text-muted-foreground">Loading audit logs...</div>
+                <div className="text-center py-8 text-muted-foreground">Loading attendance details...</div>
               ) : auditLogs.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">No audit logs yet</p>
-                  <p className="text-sm">Changes to attendance records will appear here</p>
+                  <p className="text-lg font-medium">No attendance details yet</p>
+                  <p className="text-sm">Attendance record changes will appear here</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1143,7 +1141,7 @@ export default function AdminAttendancePage() {
                       <div
                         key={log.id}
                         className="border rounded-lg p-3 space-y-2"
-                        data-testid={`audit-log-${log.id}`}
+                        data-testid={`details-log-${log.id}`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
