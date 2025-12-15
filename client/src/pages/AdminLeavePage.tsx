@@ -2,10 +2,20 @@ import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Calendar, ArrowLeft, Plus, CheckCircle, XCircle, Upload, BarChart3, PieChart as PieChartIcon, Download, Users, TrendingUp, FileText, AlertTriangle, Printer } from "lucide-react";
+import { Calendar, ArrowLeft, Plus, CheckCircle, XCircle, Upload, BarChart3, PieChart as PieChartIcon, Download, Users, TrendingUp, FileText, AlertTriangle, Printer, Settings, History, Pencil, Trash2, Eye, ChevronDown, ChevronUp } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Link } from "wouter";
-import type { User, LeaveBalance, LeaveApplication } from "@shared/schema";
+import type { User, LeaveBalance, LeaveApplication, LeaveHistory } from "@shared/schema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -50,6 +60,21 @@ interface AnalyticsData {
   employeeUtilization: Record<string, { name: string; total: number; byType: Record<string, number> }>;
 }
 
+interface LeaveAuditLog {
+  id: string;
+  action: string;
+  tableName: string;
+  recordId?: string;
+  employeeCode?: string;
+  employeeName?: string;
+  fieldName?: string;
+  oldValue?: string;
+  newValue?: string;
+  details?: string;
+  changedBy: string;
+  changedAt: string;
+}
+
 const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF6B6B'];
 
 export default function AdminLeavePage() {
@@ -67,6 +92,18 @@ export default function AdminLeavePage() {
   const [parsedRecords, setParsedRecords] = useState<LeaveHistoryRecord[]>([]);
   const [csvFileName, setCsvFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Edit/Delete leave history state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<LeaveHistory | null>(null);
+  const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
+  
+  // Edit form state
+  const [editLeaveType, setEditLeaveType] = useState("");
+  const [editLeaveDate, setEditLeaveDate] = useState("");
+  const [editDaysOrHours, setEditDaysOrHours] = useState("");
+  const [editRemarks, setEditRemarks] = useState("");
 
   // Fetch all approved users
   const { data: usersData } = useQuery<{ users: User[] }>({
@@ -92,6 +129,20 @@ export default function AdminLeavePage() {
     queryKey: ['/api/admin/leave/analytics', analyticsYear],
   });
 
+  // Fetch leave audit logs
+  const { data: auditLogsData, isLoading: auditLogsLoading } = useQuery<{ logs: LeaveAuditLog[] }>({
+    queryKey: ['/api/admin/leave/audit-logs'],
+  });
+
+  const auditLogs = auditLogsData?.logs || [];
+  
+  // Fetch leave history records for the selected year
+  const { data: historyData, isLoading: historyLoading } = useQuery<{ records: LeaveHistory[] }>({
+    queryKey: ['/api/admin/leave/history', analyticsYear],
+  });
+  
+  const historyRecords = historyData?.records || [];
+
   // Import leave history mutation
   const importMutation = useMutation({
     mutationFn: async (records: LeaveHistoryRecord[]) => {
@@ -106,6 +157,7 @@ export default function AdminLeavePage() {
         description: `Successfully imported ${data.imported} leave records`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/analytics', analyticsYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/audit-logs'] });
       setParsedRecords([]);
       setCsvFileName("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -114,6 +166,56 @@ export default function AdminLeavePage() {
       toast({
         title: "Import Error",
         description: error.message || "Failed to import leave records",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Update leave history mutation
+  const updateHistoryMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { leaveType?: string; leaveDate?: string; daysOrHours?: string; remarks?: string } }) => {
+      return apiRequest("PATCH", `/api/admin/leave/history/${id}`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Leave record updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/history', analyticsYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/analytics', analyticsYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/audit-logs'] });
+      setEditDialogOpen(false);
+      setSelectedHistoryRecord(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update leave record",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Delete leave history mutation
+  const deleteHistoryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/admin/leave/history/${id}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Leave record deleted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/history', analyticsYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/analytics', analyticsYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/audit-logs'] });
+      setDeleteDialogOpen(false);
+      setSelectedHistoryRecord(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete leave record",
         variant: "destructive",
       });
     },
@@ -398,6 +500,47 @@ export default function AdminLeavePage() {
     const user = users.find(u => u.id === userId);
     return user?.name || user?.username || "Unknown User";
   };
+  
+  // Handle opening edit dialog
+  const handleOpenEdit = (record: LeaveHistory) => {
+    setSelectedHistoryRecord(record);
+    setEditLeaveType(record.leaveType);
+    setEditLeaveDate(record.leaveDate);
+    setEditDaysOrHours(record.daysOrHours);
+    setEditRemarks(record.remarks || "");
+    setEditDialogOpen(true);
+  };
+  
+  // Handle saving edit
+  const handleSaveEdit = () => {
+    if (!selectedHistoryRecord) return;
+    updateHistoryMutation.mutate({
+      id: selectedHistoryRecord.id,
+      data: {
+        leaveType: editLeaveType,
+        leaveDate: editLeaveDate,
+        daysOrHours: editDaysOrHours,
+        remarks: editRemarks || undefined,
+      },
+    });
+  };
+  
+  // Handle opening delete dialog
+  const handleOpenDelete = (record: LeaveHistory) => {
+    setSelectedHistoryRecord(record);
+    setDeleteDialogOpen(true);
+  };
+  
+  // Handle confirming delete
+  const handleConfirmDelete = () => {
+    if (!selectedHistoryRecord) return;
+    deleteHistoryMutation.mutate(selectedHistoryRecord.id);
+  };
+  
+  // Get leave records for a specific employee
+  const getEmployeeRecords = (employeeCode: string) => {
+    return historyRecords.filter(r => r.employeeCode === employeeCode);
+  };
 
   // Low balance alerts - employees with less than 20% of total leave remaining (or overdrawn)
   const lowBalanceAlerts = balances.filter(b => {
@@ -447,7 +590,7 @@ export default function AdminLeavePage() {
       </div>
 
       <Tabs defaultValue="balances" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="balances" data-testid="tab-balances">
             Leave Balances
             {lowBalanceAlerts.length > 0 && (
@@ -468,6 +611,14 @@ export default function AdminLeavePage() {
           <TabsTrigger value="analytics" data-testid="tab-analytics">
             <BarChart3 className="mr-2 h-4 w-4" />
             Analytics
+          </TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-leave-settings">
+            <Settings className="mr-2 h-4 w-4" />
+            Settings
+          </TabsTrigger>
+          <TabsTrigger value="logs" data-testid="tab-leave-logs">
+            <History className="mr-2 h-4 w-4" />
+            Logs
           </TabsTrigger>
         </TabsList>
 
@@ -807,49 +958,6 @@ export default function AdminLeavePage() {
             </div>
           </div>
 
-          {/* CSV Import Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Import Leave History
-              </CardTitle>
-              <CardDescription>
-                Upload a CSV file with leave records to populate the analytics dashboard
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
-                  <div className="space-y-2 flex-1">
-                    <Label htmlFor="csv-file">CSV File</Label>
-                    <Input
-                      ref={fileInputRef}
-                      id="csv-file"
-                      type="file"
-                      accept=".csv,.txt"
-                      onChange={handleFileUpload}
-                      data-testid="input-csv-file"
-                    />
-                    {csvFileName && (
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <FileText className="h-4 w-4" />
-                        {csvFileName} - {parsedRecords.length} records parsed
-                      </p>
-                    )}
-                  </div>
-                  <Button 
-                    onClick={handleImport}
-                    disabled={parsedRecords.length === 0 || importMutation.isPending}
-                    data-testid="button-import-csv"
-                  >
-                    {importMutation.isPending ? "Importing..." : "Import Records"}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Statistics Cards */}
           {analyticsLoading ? (
             <div className="grid gap-4 md:grid-cols-3">
@@ -968,13 +1076,14 @@ export default function AdminLeavePage() {
             <Card data-testid="card-employee-utilization">
               <CardHeader>
                 <CardTitle>Employee Leave Utilization</CardTitle>
-                <CardDescription>Leave days taken by each employee in {analyticsYear}</CardDescription>
+                <CardDescription>Leave days taken by each employee in {analyticsYear}. Click a row to view and edit individual records.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
+                        <th className="text-left py-3 px-2 font-medium w-8"></th>
                         <th className="text-left py-3 px-2 font-medium">Employee Code</th>
                         <th className="text-left py-3 px-2 font-medium">Name</th>
                         <th className="text-right py-3 px-2 font-medium">Total Days</th>
@@ -982,22 +1091,98 @@ export default function AdminLeavePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {employeeUtilizationList.slice(0, 20).map((emp, idx) => (
-                        <tr key={emp.code} className="border-b" data-testid={`row-employee-${idx}`}>
-                          <td className="py-3 px-2 font-mono">{emp.code}</td>
-                          <td className="py-3 px-2">{emp.name}</td>
-                          <td className="py-3 px-2 text-right font-medium">{emp.total.toFixed(1)}</td>
-                          <td className="py-3 px-2">
-                            <div className="flex flex-wrap gap-1">
-                              {Object.entries(emp.byType).map(([type, days]) => (
-                                <Badge key={type} variant="outline" className="text-xs">
-                                  {type}: {days}
-                                </Badge>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {employeeUtilizationList.slice(0, 20).map((emp, idx) => {
+                        const isExpanded = expandedEmployee === emp.code;
+                        const empRecords = isExpanded ? getEmployeeRecords(emp.code) : [];
+                        return (
+                          <>
+                            <tr 
+                              key={emp.code} 
+                              className="border-b hover-elevate cursor-pointer" 
+                              data-testid={`row-employee-${idx}`}
+                              onClick={() => setExpandedEmployee(isExpanded ? null : emp.code)}
+                            >
+                              <td className="py-3 px-2">
+                                <Button size="icon" variant="ghost" className="h-6 w-6" data-testid={`button-expand-${idx}`}>
+                                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </Button>
+                              </td>
+                              <td className="py-3 px-2 font-mono">{emp.code}</td>
+                              <td className="py-3 px-2">{emp.name}</td>
+                              <td className="py-3 px-2 text-right font-medium">{emp.total.toFixed(1)}</td>
+                              <td className="py-3 px-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(emp.byType).map(([type, days]) => (
+                                    <Badge key={type} variant="outline" className="text-xs">
+                                      {type}: {days}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr key={`${emp.code}-details`}>
+                                <td colSpan={5} className="bg-muted/50 p-4">
+                                  <div className="space-y-2">
+                                    <p className="text-sm font-medium mb-3">Leave Records for {emp.name}</p>
+                                    {historyLoading ? (
+                                      <Skeleton className="h-20 w-full" />
+                                    ) : empRecords.length === 0 ? (
+                                      <p className="text-sm text-muted-foreground">No individual records found</p>
+                                    ) : (
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b">
+                                            <th className="text-left py-2 px-2 font-medium">Date</th>
+                                            <th className="text-left py-2 px-2 font-medium">Type</th>
+                                            <th className="text-left py-2 px-2 font-medium">Duration</th>
+                                            <th className="text-left py-2 px-2 font-medium">Remarks</th>
+                                            <th className="text-right py-2 px-2 font-medium">Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {empRecords.map((record) => (
+                                            <tr key={record.id} className="border-b" data-testid={`row-record-${record.id}`}>
+                                              <td className="py-2 px-2">{new Date(record.leaveDate).toLocaleDateString()}</td>
+                                              <td className="py-2 px-2">
+                                                <Badge variant="outline" className="text-xs">{record.leaveType}</Badge>
+                                              </td>
+                                              <td className="py-2 px-2">{record.daysOrHours}</td>
+                                              <td className="py-2 px-2 text-muted-foreground">{record.remarks || "-"}</td>
+                                              <td className="py-2 px-2 text-right">
+                                                <div className="flex gap-1 justify-end">
+                                                  <Button 
+                                                    size="icon" 
+                                                    variant="ghost" 
+                                                    className="h-7 w-7"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenEdit(record); }}
+                                                    data-testid={`button-edit-${record.id}`}
+                                                  >
+                                                    <Pencil className="h-3 w-3" />
+                                                  </Button>
+                                                  <Button 
+                                                    size="icon" 
+                                                    variant="ghost" 
+                                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenDelete(record); }}
+                                                    data-testid={`button-delete-${record.id}`}
+                                                  >
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </Button>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                      })}
                     </tbody>
                   </table>
                   {employeeUtilizationList.length > 20 && (
@@ -1022,6 +1207,134 @@ export default function AdminLeavePage() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Leave Settings Tab */}
+        <TabsContent value="settings" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Import Leave History
+              </CardTitle>
+              <CardDescription>
+                Upload a CSV file with historical leave records from your previous system
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                  <div className="space-y-2 flex-1">
+                    <Label htmlFor="csv-file">CSV File</Label>
+                    <Input
+                      ref={fileInputRef}
+                      id="csv-file"
+                      type="file"
+                      accept=".csv,.txt"
+                      onChange={handleFileUpload}
+                      data-testid="input-csv-file"
+                    />
+                    {csvFileName && (
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <FileText className="h-4 w-4" />
+                        {csvFileName} - {parsedRecords.length} records parsed
+                      </p>
+                    )}
+                  </div>
+                  <Button 
+                    onClick={handleImport}
+                    disabled={parsedRecords.length === 0 || importMutation.isPending}
+                    data-testid="button-import-csv"
+                  >
+                    {importMutation.isPending ? "Importing..." : "Import Records"}
+                  </Button>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium mb-2">Expected CSV Format:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Employee code and name in header row format</li>
+                    <li>Leave type headers (e.g., AL - ANNUAL LEAVE)</li>
+                    <li>Date in DD-MM-YYYY format</li>
+                    <li>Duration in days (e.g., 1.00 day)</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Leave Logs Tab */}
+        <TabsContent value="logs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Leave Audit Trail
+              </CardTitle>
+              <CardDescription>
+                Track all changes made to leave records, balances, and applications
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {auditLogsLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium mb-2">No Audit Logs Yet</p>
+                  <p>Changes to leave records will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auditLogs.map((log) => (
+                    <div 
+                      key={log.id} 
+                      className="flex items-start gap-4 p-4 rounded-lg border"
+                      data-testid={`log-entry-${log.id}`}
+                    >
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant={
+                            log.action === 'import' ? 'default' :
+                            log.action === 'delete' ? 'destructive' :
+                            log.action === 'update' ? 'secondary' : 'outline'
+                          }>
+                            {log.action}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            {log.tableName.replace('_', ' ')}
+                          </span>
+                          {log.employeeName && (
+                            <span className="text-sm font-medium">
+                              {log.employeeName} ({log.employeeCode})
+                            </span>
+                          )}
+                        </div>
+                        {log.fieldName && (
+                          <p className="text-sm">
+                            <span className="text-muted-foreground">{log.fieldName}:</span>{' '}
+                            {log.oldValue && <span className="line-through text-muted-foreground">{log.oldValue}</span>}
+                            {log.oldValue && log.newValue && ' → '}
+                            {log.newValue && <span className="font-medium">{log.newValue}</span>}
+                          </p>
+                        )}
+                        {log.details && (
+                          <p className="text-sm text-muted-foreground">{log.details}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          By {log.changedBy} • {new Date(log.changedAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -1090,6 +1403,108 @@ export default function AdminLeavePage() {
           )}
         </DialogContent>
       </Dialog>
+      
+      {/* Edit Leave Record Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Leave Record</DialogTitle>
+          </DialogHeader>
+          {selectedHistoryRecord && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Employee: <span className="font-medium text-foreground">{selectedHistoryRecord.employeeName}</span> ({selectedHistoryRecord.employeeCode})
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-leave-type">Leave Type</Label>
+                <Input
+                  id="edit-leave-type"
+                  value={editLeaveType}
+                  onChange={(e) => setEditLeaveType(e.target.value)}
+                  placeholder="AL, ML, UL, etc."
+                  data-testid="input-edit-leave-type"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-leave-date">Leave Date</Label>
+                <Input
+                  id="edit-leave-date"
+                  type="date"
+                  value={editLeaveDate}
+                  onChange={(e) => setEditLeaveDate(e.target.value)}
+                  data-testid="input-edit-leave-date"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-days-hours">Duration</Label>
+                <Input
+                  id="edit-days-hours"
+                  value={editDaysOrHours}
+                  onChange={(e) => setEditDaysOrHours(e.target.value)}
+                  placeholder="1.00 day or 4.00 hr"
+                  data-testid="input-edit-days-hours"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-remarks">Remarks (Optional)</Label>
+                <Input
+                  id="edit-remarks"
+                  value={editRemarks}
+                  onChange={(e) => setEditRemarks(e.target.value)}
+                  placeholder="Optional remarks"
+                  data-testid="input-edit-remarks"
+                />
+              </div>
+              
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setEditDialogOpen(false)} data-testid="button-cancel-edit">
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSaveEdit} 
+                  disabled={updateHistoryMutation.isPending}
+                  data-testid="button-save-edit"
+                >
+                  {updateHistoryMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Leave Record</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this leave record? This action cannot be undone.
+              {selectedHistoryRecord && (
+                <span className="block mt-2 text-foreground font-medium">
+                  {selectedHistoryRecord.employeeName} - {selectedHistoryRecord.leaveType} on {new Date(selectedHistoryRecord.leaveDate).toLocaleDateString()}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteHistoryMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
