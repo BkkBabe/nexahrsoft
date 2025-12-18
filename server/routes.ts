@@ -70,12 +70,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const { username, password } = schema.parse(req.body);
+      console.log('Admin login attempt:', { username, passwordLength: password.length });
 
       // First check hardcoded master admin credentials
       if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
         req.session.userId = "admin";
         req.session.isAdmin = true;
-        return res.json({ success: true, message: "Admin login successful" });
+        console.log('Master admin login successful, session:', { userId: req.session.userId, isAdmin: req.session.isAdmin });
+        // Ensure session is saved before responding
+        return req.session.save((err) => {
+          if (err) {
+            console.error('Session save error:', err);
+            return res.status(500).json({ message: "Session save failed" });
+          }
+          return res.json({ success: true, message: "Admin login successful" });
+        });
       }
 
       // Then check database users with role='admin' or 'viewonly_admin'
@@ -356,6 +365,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin middleware - check if user is admin
   const requireAdmin = (req: Request, res: Response, next: any) => {
+    console.log('requireAdmin check:', { 
+      path: req.path, 
+      userId: req.session.userId, 
+      isAdmin: req.session.isAdmin,
+      sessionId: req.sessionID 
+    });
     if (!req.session.isAdmin) {
       return res.status(403).json({ message: "Unauthorized - Admin access required" });
     }
