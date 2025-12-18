@@ -133,6 +133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.json({
             authenticated: true,
             isAdmin: true,
+            isMasterAdmin: true,
             user: { id: "admin", name: "Admin", email: "admin@nexahr.com" },
           });
         }
@@ -782,6 +783,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Update user role error:", error);
       res.status(500).json({ message: error.message || "Failed to update user role" });
+    }
+  });
+
+  // Change admin user password (nexadmin/master admin only)
+  app.patch("/api/admin/users/:id/password", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      // Only master admin (nexadmin) can change other admin passwords
+      if (req.session.userId !== "admin") {
+        return res.status(403).json({ message: "Only the master admin can change other admin passwords" });
+      }
+
+      const { id } = req.params;
+      const schema = z.object({
+        newPassword: z.string().min(6, "Password must be at least 6 characters"),
+      });
+      const { newPassword } = schema.parse(req.body);
+
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.role !== "admin") {
+        return res.status(400).json({ message: "This operation is only for admin users" });
+      }
+
+      // Hash the new password
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(id, { passwordHash, mustChangePassword: true });
+      
+      // Log the password change
+      await storage.createAuditLog({
+        userId: id,
+        changedBy: "master_admin (nexaadmin)",
+        fieldChanged: "password",
+        oldValue: null,
+        newValue: "[password changed]",
+        changeType: "update",
+      });
+
+      res.json({ 
+        success: true, 
+        message: `Password changed for ${user.name}. They will be required to change it on next login.` 
+      });
+    } catch (error: any) {
+      console.error("Change admin password error:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: error.message || "Failed to change password" });
     }
   });
 

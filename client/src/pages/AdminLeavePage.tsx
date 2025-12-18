@@ -146,12 +146,13 @@ export default function AdminLeavePage() {
   // Import leave history mutation
   const importMutation = useMutation({
     mutationFn: async (records: LeaveHistoryRecord[]) => {
-      return apiRequest("POST", "/api/admin/leave/history/import", {
+      const res = await apiRequest("POST", "/api/admin/leave/history/import", {
         records,
         replaceExisting: false,
       });
+      return res.json() as Promise<{ imported: number }>;
     },
-    onSuccess: (data: { imported: number }) => {
+    onSuccess: (data) => {
       toast({
         title: "Success",
         description: `Successfully imported ${data.imported} leave records`,
@@ -404,7 +405,7 @@ export default function AdminLeavePage() {
   const exportToCSV = () => {
     if (!analyticsData || employeeUtilizationList.length === 0) return;
     
-    const leaveTypes = [...new Set(analyticsData.stats.map(s => s.leaveType))];
+    const leaveTypes = Array.from(new Set(analyticsData.stats.map(s => s.leaveType)));
     const headers = ['Employee Code', 'Employee Name', ...leaveTypes, 'Total Days'];
     
     const rows = employeeUtilizationList.map(emp => [

@@ -53,6 +53,7 @@ Preferred communication style: Simple, everyday language.
   - QR code preview for verification
   - Admin Users Management: Promote employees to admin role, view/remove admin users
   - Admin users can log in via Admin Login page using their username/password
+  - **Master Admin Password Management**: The master admin (nexaadmin) can change passwords for other admin users. Changed users will be required to update their password on next login.
 
 ### Key Architectural Patterns
 

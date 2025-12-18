@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus, Globe } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus, Globe, KeyRound } from "lucide-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -55,6 +55,18 @@ export default function AdminSettingsPage() {
   const [showAddAdminDialog, setShowAddAdminDialog] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [adminSearchQuery, setAdminSearchQuery] = useState<string>("");
+  
+  // Password change state (for nexadmin only)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [passwordTargetUser, setPasswordTargetUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState<string>("");
+  
+  // Fetch session to check if current user is master admin
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isMasterAdmin?: boolean }>({
+    queryKey: ["/api/auth/session"],
+  });
+  
+  const isMasterAdmin = sessionData?.isMasterAdmin === true;
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
@@ -120,6 +132,29 @@ export default function AdminSettingsPage() {
       setShowAddAdminDialog(false);
       setSelectedUserId("");
       setAdminSearchQuery("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation to change admin password (nexadmin only)
+  const changePasswordMutation = useMutation({
+    mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
+      await apiRequest("PATCH", `/api/admin/users/${userId}/password`, { newPassword });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Password Changed",
+        description: `Password updated successfully. The user will be required to change it on next login.`,
+      });
+      setShowPasswordDialog(false);
+      setPasswordTargetUser(null);
+      setNewPassword("");
     },
     onError: (error: Error) => {
       toast({
@@ -1250,16 +1285,32 @@ export default function AdminSettingsPage() {
                         <TableCell className="font-mono text-sm">{admin.username}</TableCell>
                         <TableCell>{admin.department || "-"}</TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => updateRoleMutation.mutate({ userId: admin.id, role: "user" })}
-                            disabled={updateRoleMutation.isPending}
-                            data-testid={`button-remove-admin-${admin.id}`}
-                          >
-                            <ShieldOff className="h-4 w-4 mr-1" />
-                            Remove Admin
-                          </Button>
+                          <div className="flex gap-2 justify-end">
+                            {isMasterAdmin && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setPasswordTargetUser(admin);
+                                  setShowPasswordDialog(true);
+                                }}
+                                data-testid={`button-change-password-${admin.id}`}
+                              >
+                                <KeyRound className="h-4 w-4 mr-1" />
+                                Change Password
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateRoleMutation.mutate({ userId: admin.id, role: "user" })}
+                              disabled={updateRoleMutation.isPending}
+                              data-testid={`button-remove-admin-${admin.id}`}
+                            >
+                              <ShieldOff className="h-4 w-4 mr-1" />
+                              Remove Admin
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1368,6 +1419,58 @@ export default function AdminSettingsPage() {
               data-testid="button-confirm-add-admin"
             >
               {updateRoleMutation.isPending ? "Adding..." : "Add as Admin"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog (nexadmin only) */}
+      <Dialog open={showPasswordDialog} onOpenChange={(open) => {
+        setShowPasswordDialog(open);
+        if (!open) {
+          setPasswordTargetUser(null);
+          setNewPassword("");
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change Admin Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for {passwordTargetUser?.name}. They will be required to change it on their next login.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="Enter new password (min 6 characters)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                data-testid="input-new-password"
+              />
+            </div>
+            {passwordTargetUser && (
+              <div className="text-sm text-muted-foreground">
+                Changing password for: <span className="font-medium text-foreground">{passwordTargetUser.name}</span> ({passwordTargetUser.email})
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPasswordDialog(false)} data-testid="button-cancel-password">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (passwordTargetUser && newPassword.length >= 6) {
+                  changePasswordMutation.mutate({ userId: passwordTargetUser.id, newPassword });
+                }
+              }}
+              disabled={!passwordTargetUser || newPassword.length < 6 || changePasswordMutation.isPending}
+              data-testid="button-confirm-password"
+            >
+              {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
             </Button>
           </DialogFooter>
         </DialogContent>
