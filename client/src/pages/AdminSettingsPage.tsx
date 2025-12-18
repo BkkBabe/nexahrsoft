@@ -55,18 +55,20 @@ export default function AdminSettingsPage() {
   const [showAddAdminDialog, setShowAddAdminDialog] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [adminSearchQuery, setAdminSearchQuery] = useState<string>("");
+  const [selectedRoleType, setSelectedRoleType] = useState<"admin" | "viewonly_admin">("admin");
   
   // Password change state (for nexadmin only)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [passwordTargetUser, setPasswordTargetUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState<string>("");
   
-  // Fetch session to check if current user is master admin
-  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isMasterAdmin?: boolean }>({
+  // Fetch session to check if current user is master admin or view-only admin
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isMasterAdmin?: boolean; isViewOnlyAdmin?: boolean }>({
     queryKey: ["/api/auth/session"],
   });
   
   const isMasterAdmin = sessionData?.isMasterAdmin === true;
+  const isViewOnlyAdmin = sessionData?.isViewOnlyAdmin === true;
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
@@ -105,8 +107,8 @@ export default function AdminSettingsPage() {
     queryKey: ["/api/admin/users"],
   });
 
-  // Filter out users who are already admins for the add dialog
-  const nonAdminUsers = allUsers.filter(u => u.role !== "admin");
+  // Filter out users who are already admins (either full admin or view-only) for the add dialog
+  const nonAdminUsers = allUsers.filter(u => u.role !== "admin" && u.role !== "viewonly_admin");
   
   // Filter non-admin users by search query
   const filteredNonAdminUsers = nonAdminUsers.filter(u => 
@@ -119,7 +121,7 @@ export default function AdminSettingsPage() {
 
   // Mutation to update user role
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: "user" | "admin" }) => {
+    mutationFn: async ({ userId, role }: { userId: string; role: "user" | "admin" | "viewonly_admin" }) => {
       await apiRequest("PATCH", `/api/admin/users/${userId}/role`, { role });
     },
     onSuccess: () => {
@@ -1083,7 +1085,7 @@ export default function AdminSettingsPage() {
 
             <Button
               onClick={handleUpdateAttendanceBuffer}
-              disabled={updateAttendanceBufferMutation.isPending}
+              disabled={updateAttendanceBufferMutation.isPending || isViewOnlyAdmin}
               data-testid="button-update-buffer"
             >
               {updateAttendanceBufferMutation.isPending ? "Updating..." : "Update Buffer"}
@@ -1142,7 +1144,7 @@ export default function AdminSettingsPage() {
             </div>
             <Button
               onClick={handleUpdateEmailSettings}
-              disabled={updateEmailSettingsMutation.isPending}
+              disabled={updateEmailSettingsMutation.isPending || isViewOnlyAdmin}
               data-testid="button-update-email-settings"
             >
               {updateEmailSettingsMutation.isPending ? "Updating..." : "Update Email Settings"}
@@ -1179,7 +1181,7 @@ export default function AdminSettingsPage() {
             </div>
             <Button
               onClick={handleUpdateTimezone}
-              disabled={updateTimezoneMutation.isPending}
+              disabled={updateTimezoneMutation.isPending || isViewOnlyAdmin}
               data-testid="button-update-timezone"
             >
               {updateTimezoneMutation.isPending ? "Updating..." : "Update Timezone"}
@@ -1243,6 +1245,7 @@ export default function AdminSettingsPage() {
             <div className="flex justify-end">
               <Button
                 onClick={() => setShowAddAdminDialog(true)}
+                disabled={isViewOnlyAdmin}
                 data-testid="button-add-admin"
               >
                 <UserPlus className="h-4 w-4 mr-2" />
@@ -1266,6 +1269,7 @@ export default function AdminSettingsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
+                      <TableHead>Role</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Username</TableHead>
                       <TableHead>Department</TableHead>
@@ -1280,6 +1284,11 @@ export default function AdminSettingsPage() {
                             <Shield className="h-4 w-4 text-primary" />
                             {admin.name}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={admin.role === "admin" ? "default" : "secondary"}>
+                            {admin.role === "admin" ? "Full Admin" : "View-Only"}
+                          </Badge>
                         </TableCell>
                         <TableCell>{admin.email}</TableCell>
                         <TableCell className="font-mono text-sm">{admin.username}</TableCell>
@@ -1304,7 +1313,7 @@ export default function AdminSettingsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => updateRoleMutation.mutate({ userId: admin.id, role: "user" })}
-                              disabled={updateRoleMutation.isPending}
+                              disabled={updateRoleMutation.isPending || isViewOnlyAdmin}
                               data-testid={`button-remove-admin-${admin.id}`}
                             >
                               <ShieldOff className="h-4 w-4 mr-1" />
@@ -1391,10 +1400,49 @@ export default function AdminSettingsPage() {
             )}
             
             {selectedUserId && (
-              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
-                <div className="text-sm text-muted-foreground">Selected:</div>
-                <div className="font-medium">
-                  {nonAdminUsers.find(u => u.id === selectedUserId)?.name}
+              <div className="space-y-3">
+                <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  <div className="text-sm text-muted-foreground">Selected:</div>
+                  <div className="font-medium">
+                    {nonAdminUsers.find(u => u.id === selectedUserId)?.name}
+                  </div>
+                </div>
+                
+                {/* Role type selection */}
+                <div className="space-y-2">
+                  <Label>Admin Type</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="roleType"
+                        value="admin"
+                        checked={selectedRoleType === "admin"}
+                        onChange={() => setSelectedRoleType("admin")}
+                        className="w-4 h-4"
+                        data-testid="radio-full-admin"
+                      />
+                      <div>
+                        <div className="font-medium">Full Admin</div>
+                        <div className="text-xs text-muted-foreground">Can view and edit all data</div>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="roleType"
+                        value="viewonly_admin"
+                        checked={selectedRoleType === "viewonly_admin"}
+                        onChange={() => setSelectedRoleType("viewonly_admin")}
+                        className="w-4 h-4"
+                        data-testid="radio-viewonly-admin"
+                      />
+                      <div>
+                        <div className="font-medium">View-Only Admin</div>
+                        <div className="text-xs text-muted-foreground">Can view but not edit data</div>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
@@ -1412,13 +1460,13 @@ export default function AdminSettingsPage() {
             <Button
               onClick={() => {
                 if (selectedUserId) {
-                  updateRoleMutation.mutate({ userId: selectedUserId, role: "admin" });
+                  updateRoleMutation.mutate({ userId: selectedUserId, role: selectedRoleType });
                 }
               }}
               disabled={!selectedUserId || updateRoleMutation.isPending}
               data-testid="button-confirm-add-admin"
             >
-              {updateRoleMutation.isPending ? "Adding..." : "Add as Admin"}
+              {updateRoleMutation.isPending ? "Adding..." : `Add as ${selectedRoleType === "admin" ? "Admin" : "View-Only Admin"}`}
             </Button>
           </DialogFooter>
         </DialogContent>

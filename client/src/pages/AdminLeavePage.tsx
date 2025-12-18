@@ -136,6 +136,13 @@ export default function AdminLeavePage() {
 
   const auditLogs = auditLogsData?.logs || [];
   
+  // Fetch session to check if current user is view-only admin
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isViewOnlyAdmin?: boolean }>({
+    queryKey: ["/api/auth/session"],
+  });
+  
+  const isViewOnlyAdmin = sessionData?.isViewOnlyAdmin === true;
+  
   // Fetch leave history records for the selected year
   const { data: historyData, isLoading: historyLoading } = useQuery<{ records: LeaveHistory[] }>({
     queryKey: ['/api/admin/leave/history', analyticsYear],
@@ -1157,6 +1164,8 @@ export default function AdminLeavePage() {
                                                     variant="ghost" 
                                                     className="h-7 w-7"
                                                     onClick={(e) => { e.stopPropagation(); handleOpenEdit(record); }}
+                                                    disabled={isViewOnlyAdmin}
+                                                    title={isViewOnlyAdmin ? "View-only admins cannot edit" : "Edit record"}
                                                     data-testid={`button-edit-${record.id}`}
                                                   >
                                                     <Pencil className="h-3 w-3" />
@@ -1166,6 +1175,8 @@ export default function AdminLeavePage() {
                                                     variant="ghost" 
                                                     className="h-7 w-7 text-destructive hover:text-destructive"
                                                     onClick={(e) => { e.stopPropagation(); handleOpenDelete(record); }}
+                                                    disabled={isViewOnlyAdmin}
+                                                    title={isViewOnlyAdmin ? "View-only admins cannot delete" : "Delete record"}
                                                     data-testid={`button-delete-${record.id}`}
                                                   >
                                                     <Trash2 className="h-3 w-3" />
@@ -1244,7 +1255,7 @@ export default function AdminLeavePage() {
                   </div>
                   <Button 
                     onClick={handleImport}
-                    disabled={parsedRecords.length === 0 || importMutation.isPending}
+                    disabled={parsedRecords.length === 0 || importMutation.isPending || isViewOnlyAdmin}
                     data-testid="button-import-csv"
                   >
                     {importMutation.isPending ? "Importing..." : "Import Records"}
@@ -1382,7 +1393,7 @@ export default function AdminLeavePage() {
               <div className="flex gap-2">
                 <Button
                   onClick={() => handleReviewApplication("approved")}
-                  disabled={reviewMutation.isPending}
+                  disabled={reviewMutation.isPending || isViewOnlyAdmin}
                   data-testid="button-approve-application"
                   className="flex-1"
                 >
@@ -1392,7 +1403,7 @@ export default function AdminLeavePage() {
                 <Button
                   variant="destructive"
                   onClick={() => handleReviewApplication("rejected")}
-                  disabled={reviewMutation.isPending}
+                  disabled={reviewMutation.isPending || isViewOnlyAdmin}
                   data-testid="button-reject-application"
                   className="flex-1"
                 >

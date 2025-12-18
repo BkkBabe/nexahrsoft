@@ -37,6 +37,8 @@ import type { CompanySettings } from "@shared/schema";
 interface SessionData {
   authenticated: boolean;
   isAdmin?: boolean;
+  isViewOnlyAdmin?: boolean;
+  isMasterAdmin?: boolean;
   user?: {
     id: string;
     name: string;

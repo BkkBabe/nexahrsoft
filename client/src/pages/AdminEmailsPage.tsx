@@ -73,6 +73,13 @@ export default function AdminEmailsPage() {
   const { data: auditLogsData, isLoading: isLoadingAuditLogs, refetch: refetchAuditLogs } = useQuery<{ logs: AuditLog[] }>({
     queryKey: ["/api/admin/audit-logs"],
   });
+  
+  // Fetch session to check if current user is view-only admin
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isViewOnlyAdmin?: boolean }>({
+    queryKey: ["/api/auth/session"],
+  });
+  
+  const isViewOnlyAdmin = sessionData?.isViewOnlyAdmin === true;
 
   const { data: passwordOverrideLogsData, isLoading: isLoadingOverrideLogs, refetch: refetchOverrideLogs } = useQuery<{ logs: PasswordOverrideLog[] }>({
     queryKey: ["/api/admin/password-override-logs"],
@@ -411,6 +418,7 @@ export default function AdminEmailsPage() {
                   setShowAddForm(!showAddForm);
                   setCreatedUserInfo(null);
                 }}
+                disabled={isViewOnlyAdmin}
                 data-testid="button-toggle-add-form"
               >
                 <UserPlus className="mr-2 h-4 w-4" />
@@ -694,7 +702,7 @@ export default function AdminEmailsPage() {
                     </div>
                     <Button
                       onClick={handleBatchSend}
-                      disabled={selectedUsers.size === 0 || sendEmailMutation.isPending || !emailConfigured}
+                      disabled={selectedUsers.size === 0 || sendEmailMutation.isPending || !emailConfigured || isViewOnlyAdmin}
                       data-testid="button-batch-send"
                     >
                       <Send className="mr-2 h-4 w-4" />
@@ -771,7 +779,8 @@ export default function AdminEmailsPage() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleOpenEdit(user)}
-                                  title="Edit employee"
+                                  disabled={isViewOnlyAdmin}
+                                  title={isViewOnlyAdmin ? "View-only admins cannot edit" : "Edit employee"}
                                   data-testid={`button-edit-${user.id}`}
                                 >
                                   <Pencil className="h-4 w-4" />
@@ -780,7 +789,8 @@ export default function AdminEmailsPage() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => setResetPasswordUser(user)}
-                                  title="Reset password"
+                                  disabled={isViewOnlyAdmin}
+                                  title={isViewOnlyAdmin ? "View-only admins cannot reset passwords" : "Reset password"}
                                   data-testid={`button-reset-password-${user.id}`}
                                 >
                                   <Key className="h-4 w-4" />
@@ -789,7 +799,7 @@ export default function AdminEmailsPage() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleResend(user.id)}
-                                  disabled={resendEmailMutation.isPending || !emailConfigured}
+                                  disabled={resendEmailMutation.isPending || !emailConfigured || isViewOnlyAdmin}
                                   data-testid={`button-resend-${user.id}`}
                                 >
                                   <RefreshCw className={`mr-1 h-4 w-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />

@@ -78,15 +78,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ success: true, message: "Admin login successful" });
       }
 
-      // Then check database users with role='admin'
+      // Then check database users with role='admin' or 'viewonly_admin'
       const user = await storage.getUserByUsername(username);
       
-      // If user exists but is not an admin, reject with helpful message
-      if (user && user.role !== "admin") {
+      // If user exists but is not an admin or viewonly_admin, reject with helpful message
+      if (user && user.role !== "admin" && user.role !== "viewonly_admin") {
         return res.status(403).json({ message: "Please use the Employee Login page to access your account" });
       }
       
-      if (user && user.role === "admin" && user.isApproved) {
+      if (user && (user.role === "admin" || user.role === "viewonly_admin") && user.isApproved) {
         // Security: Only allow login if user has a valid password hash
         if (!user.passwordHash) {
           console.log(`Admin login rejected: User ${username} has no password set`);
@@ -96,6 +96,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (passwordValid) {
           req.session.userId = user.id;
           req.session.isAdmin = true;
+          req.session.isViewOnlyAdmin = user.role === "viewonly_admin";
           return res.json({ success: true, message: "Admin login successful" });
         }
       }
@@ -137,12 +138,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             user: { id: "admin", name: "Admin", email: "admin@nexahr.com" },
           });
         }
-        // Database admin user
+        // Database admin user (admin or viewonly_admin)
         const adminUser = await storage.getUser(req.session.userId);
         if (adminUser) {
           return res.json({
             authenticated: true,
             isAdmin: true,
+            isViewOnlyAdmin: req.session.isViewOnlyAdmin || false,
             user: {
               id: adminUser.id,
               name: adminUser.name,
@@ -359,6 +361,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     next();
   };
+  
+  // Middleware to block view-only admins from write operations
+  const requireWriteAccess = (req: Request, res: Response, next: any) => {
+    if (req.session.isViewOnlyAdmin) {
+      return res.status(403).json({ message: "View-only admins cannot perform this action" });
+    }
+    next();
+  };
 
   // Get all users (admin only)
   app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
@@ -371,8 +381,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Approve user (admin only)
-  app.post("/api/admin/users/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+  // Approve user (admin only, write access required)
+  app.post("/api/admin/users/:id/approve", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const user = await storage.approveUser(id);
@@ -388,8 +398,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Save employee code for user (admin only) - used when linking payroll records
-  app.post("/api/admin/users/:id/save-employee-code", requireAdmin, async (req: Request, res: Response) => {
+  // Save employee code for user (admin only, write access required) - used when linking payroll records
+  app.post("/api/admin/users/:id/save-employee-code", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -429,7 +439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user (admin only) with audit logging
-  app.put("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.put("/api/admin/users/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -508,7 +518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reset user password (admin only) - manual override
-  app.post("/api/admin/users/:id/reset-password", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/users/:id/reset-password", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -569,7 +579,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk import employees (admin only)
-  app.post("/api/admin/users/import", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/users/import", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         employees: z.array(z.object({
@@ -652,7 +662,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create individual user (admin only)
-  app.post("/api/admin/users/create", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/users/create", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         employeeCode: z.string().min(1, "Employee code is required"),
@@ -721,11 +731,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get admin users (admin only)
+  // Get admin users (admin only) - includes both 'admin' and 'viewonly_admin' roles
   app.get("/api/admin/admins", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const users = await storage.getAllUsers();
-      const adminUsers = users.filter((u: { role: string }) => u.role === "admin");
+      const adminUsers = users.filter((u: { role: string }) => u.role === "admin" || u.role === "viewonly_admin");
       res.json(adminUsers);
     } catch (error) {
       console.error("Get admin users error:", error);
@@ -733,12 +743,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update user role (promote/demote admin) - admin only
-  app.patch("/api/admin/users/:id/role", requireAdmin, async (req: Request, res: Response) => {
+  // Update user role (promote/demote admin) - admin only (view-only admins cannot change roles)
+  app.patch("/api/admin/users/:id/role", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const schema = z.object({
-        role: z.enum(["user", "admin"]),
+        role: z.enum(["user", "admin", "viewonly_admin"]),
       });
       const { role } = schema.parse(req.body);
 
@@ -805,7 +815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      if (user.role !== "admin") {
+      if (user.role !== "admin" && user.role !== "viewonly_admin") {
         return res.status(400).json({ message: "This operation is only for admin users" });
       }
 
@@ -1203,10 +1213,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Add attendance record for an employee (any date)
+  // Admin: Add attendance record for an employee (any date) - write access required
   app.post("/api/admin/attendance/add", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    // View-only admins cannot add attendance records
+    if (req.session.isViewOnlyAdmin) {
+      return res.status(403).json({ message: "View-only admins cannot add attendance records" });
     }
 
     try {
@@ -2124,7 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== EMAIL ENDPOINTS ====================
 
   // Send welcome emails to selected users (admin only)
-  app.post("/api/admin/users/send-welcome-email", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/users/send-welcome-email", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         userIds: z.array(z.string()),
@@ -2246,7 +2261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Resend welcome email to a single user (regenerates password)
-  app.post("/api/admin/users/resend-welcome-email", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/users/resend-welcome-email", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         userId: z.string(),
@@ -2396,7 +2411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update email settings (admin only)
-  app.put("/api/company/email-settings", requireAdmin, async (req: Request, res: Response) => {
+  app.put("/api/company/email-settings", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         senderEmail: z.string().email().optional(),
@@ -2414,7 +2429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update company timezone (admin only)
-  app.put("/api/company/timezone", requireAdmin, async (req: Request, res: Response) => {
+  app.put("/api/company/timezone", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         defaultTimezone: z.string().min(1, "Timezone is required"),
@@ -2432,7 +2447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== PAYROLL IMPORT API ====================
 
   // Import payroll records (admin only)
-  app.post("/api/admin/payroll/import", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/import", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         records: z.array(z.object({
@@ -2615,7 +2630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete payroll records for a specific period (admin only)
-  app.delete("/api/admin/payroll/records/:year/:month", requireAdmin, async (req: Request, res: Response) => {
+  app.delete("/api/admin/payroll/records/:year/:month", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const year = parseInt(req.params.year);
       const month = parseInt(req.params.month);

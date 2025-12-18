@@ -44,6 +44,7 @@ declare module 'express-session' {
   interface SessionData {
     userId?: string;
     isAdmin?: boolean;
+    isViewOnlyAdmin?: boolean;
     codeVerifier?: string;
   }
 }

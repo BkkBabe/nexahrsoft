@@ -143,13 +143,14 @@ export default function AdminAttendancePage() {
   
   const { toast } = useToast();
 
-  // Fetch session to check if user is nexaadmin (master admin)
-  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; user?: { id: string; name: string; email: string } }>({
+  // Fetch session to check if user is nexaadmin (master admin) or view-only admin
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isViewOnlyAdmin?: boolean; user?: { id: string; name: string; email: string } }>({
     queryKey: ['/api/auth/session'],
   });
   
   // Check if current user is nexaadmin (master admin has user.id === "admin")
   const isNexaAdmin = sessionData?.user?.id === "admin";
+  const isViewOnlyAdmin = sessionData?.isViewOnlyAdmin === true;
 
   // Fetch all users
   const { data: usersData } = useQuery<User[]>({
@@ -462,6 +463,7 @@ export default function AdminAttendancePage() {
           <Button
             size="sm"
             onClick={() => setShowAddDialog(true)}
+            disabled={isViewOnlyAdmin}
             data-testid="button-add-attendance"
           >
             <Plus className="h-4 w-4 mr-1" />
@@ -635,12 +637,13 @@ export default function AdminAttendancePage() {
                                     setSelectedRecord(record);
                                     setShowEndClockInDialog(true);
                                   }}
+                                  disabled={isViewOnlyAdmin}
                                   data-testid={`button-end-clockin-today-${record.id}`}
                                 >
                                   End Clock-in
                                 </Button>
                               )}
-                              {isNexaAdmin && (
+                              {isNexaAdmin && !isViewOnlyAdmin && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -888,12 +891,13 @@ export default function AdminAttendancePage() {
                                                       setSelectedRecord(record);
                                                       setShowEndClockInDialog(true);
                                                     }}
+                                                    disabled={isViewOnlyAdmin}
                                                     data-testid={`button-end-clockin-${record.id}`}
                                                   >
                                                     End Clock-in
                                                   </Button>
                                                 )}
-                                                {isNexaAdmin && (
+                                                {isNexaAdmin && !isViewOnlyAdmin && (
                                                   <Button
                                                     size="sm"
                                                     variant="outline"
