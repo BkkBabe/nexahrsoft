@@ -10,7 +10,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, List, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
@@ -112,14 +112,28 @@ function getHeatmapTextColor(hours: number): string {
 }
 
 export default function AdminAttendancePage() {
-  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
-  const [viewMode, setViewMode] = useState<'today' | 'list' | 'heatmap' | 'details'>('today');
+  const [viewMode, setViewMode] = useState<'today' | 'heatmap' | 'details'>('today');
+  const [heatmapViewType, setHeatmapViewType] = useState<'week' | 'month'>('week');
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
   });
+  // For week view - track the start of the current week
+  const [heatmapWeekStart, setHeatmapWeekStart] = useState(() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust for Monday start
+    const weekStart = new Date(now.setDate(diff));
+    weekStart.setHours(0, 0, 0, 0);
+    return weekStart;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  // Selected date for clock-ins view (defaults to today)
+  const [clockInsDate, setClockInsDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   
   // Add attendance dialog state
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -157,23 +171,20 @@ export default function AdminAttendancePage() {
     queryKey: ['/api/admin/users'],
   });
 
-  // Fetch attendance records based on period (for list view)
-  const { startDate, endDate } = getDateRange(selectedPeriod);
-  const { data: recordsData, isLoading: recordsLoading } = useQuery<{ records: AttendanceRecord[] }>({
-    queryKey: ['/api/admin/attendance/records', { startDate, endDate }],
+  // Fetch attendance records for selected clock-ins date
+  const { data: clockInsRecordsData, isLoading: clockInsLoading } = useQuery<{ records: AttendanceRecord[] }>({
+    queryKey: ['/api/admin/attendance/records', { startDate: clockInsDate, endDate: clockInsDate }],
   });
 
-  // Fetch attendance records for heatmap (full month) - use local dates
-  const heatmapStartDate = getDateKey(new Date(heatmapMonth.year, heatmapMonth.month, 1));
-  const heatmapEndDate = getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
+  // Fetch attendance records for heatmap (week or month) - use local dates
+  const heatmapStartDate = heatmapViewType === 'week' 
+    ? getDateKey(heatmapWeekStart)
+    : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month, 1));
+  const heatmapEndDate = heatmapViewType === 'week'
+    ? getDateKey(new Date(heatmapWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000)) // 6 days after start
+    : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
   const { data: heatmapRecordsData, isLoading: heatmapLoading } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
-  });
-
-  // Fetch today's attendance records (use local date, not UTC)
-  const todayDate = getDateKey(new Date());
-  const { data: todayRecordsData, isLoading: todayLoading } = useQuery<{ records: AttendanceRecord[] }>({
-    queryKey: ['/api/admin/attendance/records', { startDate: todayDate, endDate: todayDate }],
   });
 
   // Fetch audit logs for attendance changes (for details and audit views)
@@ -197,9 +208,12 @@ export default function AdminAttendancePage() {
   const auditLogs = auditLogsData?.logs || [];
 
   const users = usersData || [];
-  const records = recordsData?.records || [];
   const heatmapRecords = heatmapRecordsData?.records || [];
-  const todayRecords = todayRecordsData?.records || [];
+  const clockInsRecords = clockInsRecordsData?.records || [];
+  
+  // Check if selected date is today
+  const todayDate = getDateKey(new Date());
+  const isViewingToday = clockInsDate === todayDate;
 
   // Get unique departments for filter
   const departments = useMemo(() => {
@@ -231,10 +245,20 @@ export default function AdminAttendancePage() {
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [users, searchQuery, departmentFilter]);
 
-  // Days in selected month for heatmap
-  const daysInMonth = useMemo(() => {
-    return getDaysInMonth(heatmapMonth.year, heatmapMonth.month);
-  }, [heatmapMonth]);
+  // Days in selected period for heatmap (week or month)
+  const heatmapDays = useMemo(() => {
+    if (heatmapViewType === 'week') {
+      const days: Date[] = [];
+      for (let i = 0; i < 7; i++) {
+        const day = new Date(heatmapWeekStart);
+        day.setDate(heatmapWeekStart.getDate() + i);
+        days.push(day);
+      }
+      return days;
+    } else {
+      return getDaysInMonth(heatmapMonth.year, heatmapMonth.month);
+    }
+  }, [heatmapViewType, heatmapWeekStart, heatmapMonth]);
 
   // Aggregated data type for heatmap cells
   type AggregatedAttendance = {
@@ -275,23 +299,6 @@ export default function AdminAttendancePage() {
     return map;
   }, [heatmapRecords]);
 
-  // Group records by user (for list view)
-  const userRecordsMap = records.reduce((acc, record) => {
-    if (!acc[record.userId]) {
-      acc[record.userId] = [];
-    }
-    acc[record.userId].push(record);
-    return acc;
-  }, {} as Record<string, AttendanceRecord[]>);
-
-  // Calculate total hours per user
-  const userHoursMap = Object.entries(userRecordsMap).reduce((acc, [userId, userRecords]) => {
-    const totalHours = userRecords.reduce((sum, record) => {
-      return sum + calculateHours(record.clockInTime, record.clockOutTime);
-    }, 0);
-    acc[userId] = totalHours;
-    return acc;
-  }, {} as Record<string, number>);
 
   // Filter employees for add attendance dialog (exclude admins)
   const addDialogFilteredEmployees = useMemo(() => {
@@ -424,6 +431,23 @@ export default function AdminAttendancePage() {
     deleteAttendanceMutation.mutate(recordToDelete.id);
   };
 
+  // Week navigation
+  const goToPreviousWeek = () => {
+    setHeatmapWeekStart(prev => {
+      const newDate = new Date(prev);
+      newDate.setDate(newDate.getDate() - 7);
+      return newDate;
+    });
+  };
+
+  const goToNextWeek = () => {
+    setHeatmapWeekStart(prev => {
+      const newDate = new Date(prev);
+      newDate.setDate(newDate.getDate() + 7);
+      return newDate;
+    });
+  };
+
   // Month navigation
   const goToPreviousMonth = () => {
     setHeatmapMonth(prev => {
@@ -447,6 +471,16 @@ export default function AdminAttendancePage() {
     month: 'long', 
     year: 'numeric' 
   });
+
+  // Format week range
+  const weekEndDate = new Date(heatmapWeekStart);
+  weekEndDate.setDate(heatmapWeekStart.getDate() + 6);
+  const weekRangeName = `${heatmapWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+  // Navigate heatmap based on view type
+  const goToPrevious = heatmapViewType === 'week' ? goToPreviousWeek : goToPreviousMonth;
+  const goToNext = heatmapViewType === 'week' ? goToNextWeek : goToNextMonth;
+  const periodLabel = heatmapViewType === 'week' ? weekRangeName : monthName;
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -476,16 +510,7 @@ export default function AdminAttendancePage() {
             data-testid="button-view-today"
           >
             <CalendarCheck className="h-4 w-4 mr-1" />
-            Today
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('list')}
-            data-testid="button-view-list"
-          >
-            <List className="h-4 w-4 mr-1" />
-            List
+            Clock-ins
           </Button>
           <Button
             variant={viewMode === 'heatmap' ? 'default' : 'outline'}
@@ -516,22 +541,39 @@ export default function AdminAttendancePage() {
 
       {viewMode === 'today' ? (
         <>
-          {/* Today's Clock-ins View */}
+          {/* Clock-ins View with Date Selection */}
           <Card>
             <CardHeader className="pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <CalendarCheck className="h-5 w-5" />
-                    Today's Clock-ins
+                    {isViewingToday ? "Today's Clock-ins" : "Clock-ins"}
                   </CardTitle>
                   <CardDescription>
-                    {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    {new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={clockInsDate}
+                    onChange={(e) => setClockInsDate(e.target.value)}
+                    className="w-[160px]"
+                    data-testid="input-clockins-date"
+                  />
+                  {!isViewingToday && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setClockInsDate(todayDate)}
+                      data-testid="button-clockins-today"
+                    >
+                      Today
+                    </Button>
+                  )}
                   <div className="text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground" data-testid="text-today-clocked-in-count">{todayRecords.length}</span> clock-ins today
+                    <span className="font-medium text-foreground" data-testid="text-today-clocked-in-count">{clockInsRecords.length}</span> clock-ins
                   </div>
                 </div>
               </div>
@@ -562,18 +604,18 @@ export default function AdminAttendancePage() {
                 </div>
               </div>
 
-              {/* Today's Grid */}
-              {todayLoading ? (
-                <div className="text-center py-8 text-muted-foreground">Loading today's records...</div>
-              ) : todayRecords.length === 0 ? (
+              {/* Clock-ins Grid */}
+              {clockInsLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading records...</div>
+              ) : clockInsRecords.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">No clock-ins yet today</p>
-                  <p className="text-sm">Employees who clock in will appear here</p>
+                  <p className="text-lg font-medium">No clock-ins on this date</p>
+                  <p className="text-sm">No attendance records found for the selected date</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                  {todayRecords
+                  {clockInsRecords
                     .sort((a, b) => new Date(a.clockInTime).getTime() - new Date(b.clockInTime).getTime())
                     .map((record) => {
                       const user = users.find(u => u.id === record.userId);
@@ -615,15 +657,51 @@ export default function AdminAttendancePage() {
                             {user?.employeeCode && (
                               <div className="text-muted-foreground">{user.employeeCode}</div>
                             )}
-                            <div className="mt-1">
-                              <div>Clock In: {formatTime(record.clockInTime)}</div>
-                              <div>
-                                Clock Out: {record.clockOutTime 
-                                  ? formatTime(record.clockOutTime) 
-                                  : <span className="text-blue-500">In Progress</span>}
+                            <div className="mt-1 space-y-1">
+                              <div className="flex items-start gap-1">
+                                <span className="font-medium">In:</span>
+                                <div>
+                                  <div>{formatTime(record.clockInTime)}</div>
+                                  {record.latitude && record.longitude && (
+                                    <a 
+                                      href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 text-blue-500 hover:underline text-[10px]"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <MapPin className="h-2.5 w-2.5" />
+                                      View location
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-1">
+                                <span className="font-medium">Out:</span>
+                                <div>
+                                  {record.clockOutTime ? (
+                                    <>
+                                      <div>{formatTime(record.clockOutTime)}</div>
+                                      {record.clockOutLatitude && record.clockOutLongitude && (
+                                        <a 
+                                          href={`https://www.google.com/maps?q=${record.clockOutLatitude},${record.clockOutLongitude}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1 text-blue-500 hover:underline text-[10px]"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <MapPin className="h-2.5 w-2.5" />
+                                          View location
+                                        </a>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-blue-500">In Progress</span>
+                                  )}
+                                </div>
                               </div>
                               {record.clockOutTime && (
-                                <div className="font-medium mt-1">{hours.toFixed(1)} hours worked</div>
+                                <div className="font-medium">{hours.toFixed(1)} hours worked</div>
                               )}
                             </div>
                             <div className="flex flex-col gap-1 mt-2">
@@ -672,29 +750,29 @@ export default function AdminAttendancePage() {
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Total Clock-ins</p>
                   <p className="text-xl font-bold" data-testid="text-today-total-clockins">
-                    {todayRecords.length}
+                    {clockInsRecords.length}
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">In Progress</p>
                   <p className="text-xl font-bold text-blue-500" data-testid="text-today-in-progress">
-                    {todayRecords.filter(r => !r.clockOutTime).length}
+                    {clockInsRecords.filter(r => !r.clockOutTime).length}
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Completed</p>
                   <p className="text-xl font-bold text-green-600" data-testid="text-today-completed">
-                    {todayRecords.filter(r => r.clockOutTime).length}
+                    {clockInsRecords.filter(r => r.clockOutTime).length}
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Avg Hours</p>
                   <p className="text-xl font-bold" data-testid="text-today-avg-hours">
-                    {todayRecords.filter(r => r.clockOutTime).length > 0
-                      ? (todayRecords
+                    {clockInsRecords.filter(r => r.clockOutTime).length > 0
+                      ? (clockInsRecords
                           .filter(r => r.clockOutTime)
                           .reduce((sum, r) => sum + calculateHours(r.clockInTime, r.clockOutTime), 0) / 
-                         todayRecords.filter(r => r.clockOutTime).length
+                         clockInsRecords.filter(r => r.clockOutTime).length
                         ).toFixed(1)
                       : '-'}
                   </p>
@@ -716,16 +794,40 @@ export default function AdminAttendancePage() {
                   </CardTitle>
                   <CardDescription>Visual overview of attendance for all employees</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={goToPreviousMonth} data-testid="button-prev-month">
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm font-medium min-w-[140px] text-center" data-testid="text-current-month">
-                    {monthName}
-                  </span>
-                  <Button variant="outline" size="icon" onClick={goToNextMonth} data-testid="button-next-month">
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                <div className="flex items-center gap-3">
+                  {/* Week/Month Toggle */}
+                  <div className="flex items-center gap-1 bg-muted rounded-md p-1">
+                    <Button
+                      variant={heatmapViewType === 'week' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-7 px-3"
+                      onClick={() => setHeatmapViewType('week')}
+                      data-testid="button-heatmap-week"
+                    >
+                      Week
+                    </Button>
+                    <Button
+                      variant={heatmapViewType === 'month' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-7 px-3"
+                      onClick={() => setHeatmapViewType('month')}
+                      data-testid="button-heatmap-month"
+                    >
+                      Month
+                    </Button>
+                  </div>
+                  {/* Navigation */}
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" onClick={goToPrevious} data-testid="button-prev-period">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm font-medium min-w-[180px] text-center" data-testid="text-current-period">
+                      {periodLabel}
+                    </span>
+                    <Button variant="outline" size="icon" onClick={goToNext} data-testid="button-next-period">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -796,16 +898,18 @@ export default function AdminAttendancePage() {
                         Employee
                       </div>
                       <div className="flex flex-1">
-                        {daysInMonth.map((day, idx) => {
+                        {heatmapDays.map((day, idx) => {
                           const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                           return (
                             <div
                               key={idx}
-                              className={`flex-1 min-w-[28px] p-1 text-center text-xs border-r last:border-r-0 ${isWeekend ? 'bg-muted/50' : ''}`}
+                              className={`flex-1 ${heatmapViewType === 'week' ? 'min-w-[80px]' : 'min-w-[28px]'} p-1 text-center text-xs border-r last:border-r-0 ${isWeekend ? 'bg-muted/50' : ''}`}
                             >
                               <div className="font-medium">{day.getDate()}</div>
                               <div className="text-muted-foreground text-[10px]">
-                                {day.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
+                                {heatmapViewType === 'week' 
+                                  ? day.toLocaleDateString('en-US', { weekday: 'short' })
+                                  : day.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
                               </div>
                             </div>
                           );
@@ -831,7 +935,7 @@ export default function AdminAttendancePage() {
                               </div>
                             </div>
                             <div className="flex flex-1">
-                              {daysInMonth.map((day, idx) => {
+                              {heatmapDays.map((day, idx) => {
                                 const dateKey = getDateKey(day);
                                 const aggData = heatmapDataMap[user.id]?.[dateKey];
                                 const hours = aggData?.totalHours || 0;
@@ -847,7 +951,7 @@ export default function AdminAttendancePage() {
                                   <Tooltip key={idx}>
                                     <TooltipTrigger asChild>
                                       <div
-                                        className={`flex-1 min-w-[28px] min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
+                                        className={`flex-1 ${heatmapViewType === 'week' ? 'min-w-[80px]' : 'min-w-[28px]'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
                                           isFuture 
                                             ? 'bg-muted/30' 
                                             : isWeekend && !hasRecord 
@@ -953,7 +1057,7 @@ export default function AdminAttendancePage() {
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">
-                  <p className="text-xs text-muted-foreground mb-1">Active This Month</p>
+                  <p className="text-xs text-muted-foreground mb-1">Active This {heatmapViewType === 'week' ? 'Week' : 'Month'}</p>
                   <p className="text-xl font-bold" data-testid="text-heatmap-active">
                     {new Set(heatmapRecords.filter(r => filteredUsers.some(u => u.id === r.userId)).map(r => r.userId)).size}
                   </p>
@@ -961,7 +1065,7 @@ export default function AdminAttendancePage() {
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Working Days</p>
                   <p className="text-xl font-bold" data-testid="text-heatmap-working-days">
-                    {daysInMonth.filter(d => {
+                    {heatmapDays.filter(d => {
                       const today = new Date();
                       today.setHours(23, 59, 59, 999);
                       return d.getDay() !== 0 && d.getDay() !== 6 && d <= today;
@@ -972,140 +1076,7 @@ export default function AdminAttendancePage() {
             </CardContent>
           </Card>
         </>
-      ) : (
-        <>
-          {/* List View (Original) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Period Overview
-              </CardTitle>
-              <CardDescription>Select a period to view attendance data</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs value={selectedPeriod} onValueChange={(v) => setSelectedPeriod(v as any)}>
-                <TabsList className="grid w-full grid-cols-3 mb-6">
-                  <TabsTrigger value="daily" data-testid="tab-daily">Daily</TabsTrigger>
-                  <TabsTrigger value="weekly" data-testid="tab-weekly">Weekly</TabsTrigger>
-                  <TabsTrigger value="monthly" data-testid="tab-monthly">Monthly</TabsTrigger>
-                </TabsList>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-muted/50 p-4 rounded-md">
-                    <p className="text-xs text-muted-foreground mb-1">Total Users</p>
-                    <p className="text-2xl font-bold" data-testid="text-total-users">
-                      {users.filter(u => !u.id.includes('admin')).length}
-                    </p>
-                  </div>
-                  <div className="bg-muted/50 p-4 rounded-md">
-                    <p className="text-xs text-muted-foreground mb-1">Total Records</p>
-                    <p className="text-2xl font-bold" data-testid="text-total-records">
-                      {records.length}
-                    </p>
-                  </div>
-                  <div className="bg-muted/50 p-4 rounded-md">
-                    <p className="text-xs text-muted-foreground mb-1">Active Users</p>
-                    <p className="text-2xl font-bold" data-testid="text-active-users">
-                      {Object.keys(userRecordsMap).length}
-                    </p>
-                  </div>
-                  <div className="bg-muted/50 p-4 rounded-md">
-                    <p className="text-xs text-muted-foreground mb-1">Period</p>
-                    <p className="text-sm font-semibold" data-testid="text-period-label">
-                      {selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'This Week' : 'This Month'}
-                    </p>
-                  </div>
-                </div>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* User Attendance Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                User Attendance Details
-              </CardTitle>
-              <CardDescription>Hours worked by each employee</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {recordsLoading ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Loading attendance data...</p>
-              ) : users.filter(u => !u.id.includes('admin')).length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No users found</p>
-              ) : (
-                <div className="space-y-4">
-                  {users.filter(u => !u.id.includes('admin')).map((user) => {
-                    const userRecords = userRecordsMap[user.id] || [];
-                    const totalHours = userHoursMap[user.id] || 0;
-                    const hasRecords = userRecords.length > 0;
-
-                    return (
-                      <div
-                        key={user.id}
-                        className="border rounded-md p-4 space-y-3"
-                        data-testid={`user-attendance-${user.id}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-semibold" data-testid={`text-user-name-${user.id}`}>
-                              {user.name}
-                            </p>
-                            <p className="text-sm text-muted-foreground">{user.email}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-bold text-primary" data-testid={`text-user-hours-${user.id}`}>
-                              {totalHours.toFixed(1)} hrs
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {userRecords.length} {userRecords.length === 1 ? 'day' : 'days'}
-                            </p>
-                          </div>
-                        </div>
-
-                        {hasRecords && (
-                          <div className="space-y-2 pt-2 border-t">
-                            {userRecords.map((record) => (
-                              <div
-                                key={record.id}
-                                className="flex items-center justify-between text-sm bg-muted/30 p-2 rounded"
-                                data-testid={`record-${record.id}`}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                                  <div>
-                                    <p className="font-medium">{formatDate(record.date)}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {formatTime(record.clockInTime)} - {formatTime(record.clockOutTime)}
-                                    </p>
-                                  </div>
-                                </div>
-                                <p className="font-semibold">
-                                  {calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {!hasRecords && (
-                          <p className="text-sm text-muted-foreground text-center py-2">
-                            No attendance records for this period
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      {viewMode === 'details' && (
+      ) : viewMode === 'details' ? (
         <>
           {/* Attendance Details View */}
           <Card>
@@ -1206,7 +1177,7 @@ export default function AdminAttendancePage() {
             </CardContent>
           </Card>
         </>
-      )}
+      ) : null}
 
       {/* Add Attendance Dialog */}
       <Dialog open={showAddDialog} onOpenChange={(open) => {
