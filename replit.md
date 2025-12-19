@@ -33,6 +33,13 @@ Preferred communication style: Simple, everyday language.
 
 ### Admin Features (MVP)
 
+- **Admin Attendance Page**: Comprehensive attendance tracking with:
+  - Clock-ins view with date picker for viewing any date (not just today)
+  - Clock-in/out location display with Google Maps links in tooltips
+  - Heatmap view with week/month toggle (default: week view)
+  - Attendance details view with audit logging
+  - Department and employee filtering
+  
 - **Admin Reports Page**: Generate and export attendance and employee reports with:
   - Date range filtering for attendance data
   - Print functionality for physical records
