@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,10 +10,63 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
+
+// Address cache to avoid repeated API calls
+const addressCache: Record<string, string> = {};
+
+// Reverse geocode coordinates to address using OpenStreetMap Nominatim
+async function reverseGeocode(lat: string, lng: string): Promise<string> {
+  const cacheKey = `${lat},${lng}`;
+  if (addressCache[cacheKey]) {
+    return addressCache[cacheKey];
+  }
+  
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          'Accept-Language': 'en',
+          'User-Agent': 'NexaHR-HRMS/1.0'
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Geocoding failed');
+    }
+    
+    const data = await response.json();
+    
+    // Build a short address from components
+    const address = data.address || {};
+    const parts: string[] = [];
+    
+    // Add building/road info
+    if (address.road || address.street) {
+      parts.push(address.road || address.street);
+    }
+    if (address.suburb || address.neighbourhood) {
+      parts.push(address.suburb || address.neighbourhood);
+    }
+    if (address.city || address.town || address.village) {
+      parts.push(address.city || address.town || address.village);
+    }
+    
+    const shortAddress = parts.length > 0 ? parts.join(', ') : data.display_name?.split(',').slice(0, 3).join(',') || 'Unknown location';
+    addressCache[cacheKey] = shortAddress;
+    return shortAddress;
+  } catch (error) {
+    console.error('Reverse geocoding error:', error);
+    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
+    addressCache[cacheKey] = fallback;
+    return fallback;
+  }
+}
 
 // Helper function to calculate hours worked (to nearest 0.5 hour)
 function calculateHours(clockInTime: Date | string, clockOutTime: Date | string | null): number {
@@ -155,6 +208,9 @@ export default function AdminAttendancePage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<AttendanceRecord | null>(null);
   
+  // Address state for reverse geocoding
+  const [addresses, setAddresses] = useState<Record<string, string>>({});
+  
   const { toast } = useToast();
 
   // Fetch session to check if user is nexaadmin (master admin) or view-only admin
@@ -210,6 +266,50 @@ export default function AdminAttendancePage() {
   const users = usersData || [];
   const heatmapRecords = heatmapRecordsData?.records || [];
   const clockInsRecords = clockInsRecordsData?.records || [];
+  
+  // Fetch addresses for clock-in/out locations
+  useEffect(() => {
+    if (clockInsRecords.length === 0 || viewMode !== 'today') return;
+    
+    const fetchAllAddresses = async () => {
+      const recordsWithLocation = clockInsRecords.filter(r => 
+        (r.latitude && r.longitude) || (r.clockOutLatitude && r.clockOutLongitude)
+      );
+      
+      for (const record of recordsWithLocation) {
+        // Fetch clock-in address
+        if (record.latitude && record.longitude) {
+          const clockInKey = `${record.id}-in`;
+          // Check if we already have this address (using functional update to avoid stale closure)
+          setAddresses(prev => {
+            if (prev[clockInKey]) return prev; // Already have it
+            // Trigger async fetch
+            reverseGeocode(record.latitude!, record.longitude!)
+              .then(address => {
+                setAddresses(p => ({ ...p, [clockInKey]: address }));
+              })
+              .catch(() => {});
+            return prev;
+          });
+        }
+        // Fetch clock-out address
+        if (record.clockOutLatitude && record.clockOutLongitude) {
+          const clockOutKey = `${record.id}-out`;
+          setAddresses(prev => {
+            if (prev[clockOutKey]) return prev;
+            reverseGeocode(record.clockOutLatitude!, record.clockOutLongitude!)
+              .then(address => {
+                setAddresses(p => ({ ...p, [clockOutKey]: address }));
+              })
+              .catch(() => {});
+            return prev;
+          });
+        }
+      }
+    };
+    
+    fetchAllAddresses();
+  }, [clockInsRecords, viewMode]);
   
   // Check if selected date is today
   const todayDate = getDateKey(new Date());
@@ -657,28 +757,31 @@ export default function AdminAttendancePage() {
                             {user?.employeeCode && (
                               <div className="text-muted-foreground">{user.employeeCode}</div>
                             )}
-                            <div className="mt-1 space-y-1">
+                            <div className="mt-1 space-y-2">
                               <div className="flex items-start gap-1">
-                                <span className="font-medium">In:</span>
-                                <div>
+                                <span className="font-medium shrink-0">In:</span>
+                                <div className="min-w-0">
                                   <div>{formatTime(record.clockInTime)}</div>
                                   {record.latitude && record.longitude && (
                                     <a 
                                       href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-1 text-blue-500 hover:underline text-[10px]"
+                                      className="flex items-start gap-1 text-blue-500 hover:underline text-[10px] mt-0.5"
                                       onClick={(e) => e.stopPropagation()}
                                     >
-                                      <MapPin className="h-2.5 w-2.5" />
-                                      View location
+                                      <MapPin className="h-2.5 w-2.5 shrink-0 mt-0.5" />
+                                      <span className="break-words">
+                                        {addresses[`${record.id}-in`] || 'Loading address...'}
+                                      </span>
+                                      <ExternalLink className="h-2.5 w-2.5 shrink-0 mt-0.5" />
                                     </a>
                                   )}
                                 </div>
                               </div>
                               <div className="flex items-start gap-1">
-                                <span className="font-medium">Out:</span>
-                                <div>
+                                <span className="font-medium shrink-0">Out:</span>
+                                <div className="min-w-0">
                                   {record.clockOutTime ? (
                                     <>
                                       <div>{formatTime(record.clockOutTime)}</div>
@@ -687,11 +790,14 @@ export default function AdminAttendancePage() {
                                           href={`https://www.google.com/maps?q=${record.clockOutLatitude},${record.clockOutLongitude}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="flex items-center gap-1 text-blue-500 hover:underline text-[10px]"
+                                          className="flex items-start gap-1 text-blue-500 hover:underline text-[10px] mt-0.5"
                                           onClick={(e) => e.stopPropagation()}
                                         >
-                                          <MapPin className="h-2.5 w-2.5" />
-                                          View location
+                                          <MapPin className="h-2.5 w-2.5 shrink-0 mt-0.5" />
+                                          <span className="break-words">
+                                            {addresses[`${record.id}-out`] || 'Loading address...'}
+                                          </span>
+                                          <ExternalLink className="h-2.5 w-2.5 shrink-0 mt-0.5" />
                                         </a>
                                       )}
                                     </>

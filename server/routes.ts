@@ -1447,12 +1447,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         record: updatedRecord,
         message: `Clock-out set for ${employee.name}` 
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Admin end clock-in error:", error);
+      console.error("Error context - recordId:", req.body?.recordId);
+      
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+        const errorMessages = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Invalid input: ${errorMessages}`, errors: error.errors });
       }
-      res.status(500).json({ message: "Failed to end clock-in" });
+      
+      // Keep user-facing message generic for security
+      res.status(500).json({ message: "Failed to end clock-in. Please try again or contact support." });
     }
   });
 
