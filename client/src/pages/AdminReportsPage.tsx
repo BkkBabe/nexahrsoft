@@ -121,8 +121,9 @@ export default function AdminReportsPage() {
     }
   }, [attendanceRecords, reportType]);
 
-  const getUserById = (userId: string): User | undefined => {
-    return users.find(u => u.id === userId);
+  const getUserById = (userId: string | number): User | undefined => {
+    const userIdStr = String(userId);
+    return users.find(u => String(u.id) === userIdStr);
   };
 
   const calculateHours = (clockIn: string | Date, clockOut: string | Date | null): number => {
@@ -307,16 +308,15 @@ export default function AdminReportsPage() {
               <tbody>
                 {attendanceRecords.map(record => {
                   const user = getUserById(record.userId);
-                  if (!user) return null;
                   const hours = calculateHours(record.clockInTime, record.clockOutTime);
                   const clockInAddress = addresses[`in-${record.id}`];
                   const clockOutAddress = addresses[`out-${record.id}`];
                   return (
                     <tr key={record.id} data-testid={`row-detail-${record.id}`}>
                       <td className="border p-2">{record.date}</td>
-                      <td className="border p-2">{user.employeeCode || "-"}</td>
-                      <td className="border p-2">{user.name}</td>
-                      <td className="border p-2">{user.department || "-"}</td>
+                      <td className="border p-2">{user?.employeeCode || "-"}</td>
+                      <td className="border p-2">{user?.name || `User ${record.userId}`}</td>
+                      <td className="border p-2">{user?.department || "-"}</td>
                       <td className="border p-2 text-center">{format(new Date(record.clockInTime), "HH:mm")}</td>
                       <td className="border p-2 text-sm">
                         {record.latitude && record.longitude ? (
