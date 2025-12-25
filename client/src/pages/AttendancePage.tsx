@@ -40,11 +40,15 @@ function calculateHours(clockInTime: Date | string, clockOutTime: Date | string 
   return Math.round(diffHours * 2) / 2;
 }
 
-// Helper function to format time
+// Helper function to format time in Singapore timezone
 function formatTime(date: Date | string | null): string {
   if (!date) return "-";
   const d = new Date(date);
-  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    timeZone: 'Asia/Singapore' // Always display in Singapore timezone
+  });
 }
 
 // Helper function to format date
