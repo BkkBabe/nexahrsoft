@@ -718,110 +718,106 @@ export default function AdminAttendancePage() {
                   <p className="text-sm">No attendance records found for the selected date</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {clockInsRecords
                     .sort((a, b) => new Date(a.clockInTime).getTime() - new Date(b.clockInTime).getTime())
                     .map((record) => {
                       const user = users.find(u => u.id === record.userId);
                       const hours = calculateHours(record.clockInTime, record.clockOutTime);
                       const isInProgress = !record.clockOutTime;
-                      const bgColor = isInProgress 
-                        ? "bg-blue-500 dark:bg-blue-400" 
-                        : getHeatmapColor(hours, false);
+                      const statusColor = isInProgress 
+                        ? "border-l-blue-500" 
+                        : hours >= 8 ? "border-l-green-600" : hours >= 6 ? "border-l-green-400" : hours >= 4 ? "border-l-yellow-400" : "border-l-orange-400";
                       
                       return (
-                        <Tooltip key={record.id}>
-                          <TooltipTrigger asChild>
-                            <div
-                              className={`${bgColor} rounded-lg p-3 cursor-pointer transition-opacity hover:opacity-80 text-white`}
-                              data-testid={`card-today-${record.id}`}
-                            >
-                              <div className="font-medium text-sm truncate">
-                                {user?.name || 'Unknown'}
-                              </div>
-                              <div className="text-xs opacity-90 mt-1">
-                                {isInProgress ? (
-                                  <span className="flex items-center gap-1">
-                                    <Clock className="h-3 w-3" />
-                                    In: {formatTime(record.clockInTime)}
-                                  </span>
-                                ) : (
-                                  <span>{hours.toFixed(1)} hrs</span>
+                        <Card 
+                          key={record.id} 
+                          className={`border-l-4 ${statusColor}`}
+                          data-testid={`card-today-${record.id}`}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <div>
+                                <div className="font-semibold text-sm">
+                                  {user?.name || 'Unknown'}
+                                </div>
+                                {user?.employeeCode && (
+                                  <div className="text-xs text-muted-foreground">{user.employeeCode}</div>
                                 )}
                               </div>
-                              {user?.department && (
-                                <div className="text-[10px] opacity-75 mt-1 truncate">
-                                  {user.department}
-                                </div>
-                              )}
+                              <div className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                isInProgress 
+                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" 
+                                  : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                              }`}>
+                                {isInProgress ? "In Progress" : `${hours.toFixed(1)} hrs`}
+                              </div>
                             </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs max-w-xs">
-                            <div className="font-medium">{user?.name || 'Unknown'}</div>
-                            {user?.employeeCode && (
-                              <div className="text-muted-foreground">{user.employeeCode}</div>
-                            )}
-                            <div className="mt-1 space-y-2">
-                              <div className="flex items-start gap-1">
-                                <span className="font-medium shrink-0">In:</span>
-                                <div className="min-w-0">
-                                  <div>{formatTime(record.clockInTime)}</div>
-                                  {record.latitude && record.longitude && (
+                            
+                            <div className="space-y-2 text-xs">
+                              {/* Clock In */}
+                              <div className="flex items-start gap-2">
+                                <span className="font-medium text-muted-foreground w-8 shrink-0">In:</span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium">{formatTime(record.clockInTime)}</div>
+                                  {record.latitude && record.longitude ? (
                                     <a 
                                       href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-start gap-1 text-blue-500 hover:underline text-[10px] mt-0.5"
-                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex items-start gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-0.5"
                                     >
-                                      <MapPin className="h-2.5 w-2.5 shrink-0 mt-0.5" />
+                                      <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
                                       <span className="break-words">
-                                        {addresses[`${record.id}-in`] || 'Loading address...'}
+                                        {addresses[`${record.id}-in`] || 'Loading...'}
                                       </span>
-                                      <ExternalLink className="h-2.5 w-2.5 shrink-0 mt-0.5" />
+                                      <ExternalLink className="h-3 w-3 shrink-0 mt-0.5" />
                                     </a>
+                                  ) : (
+                                    <span className="text-muted-foreground">No location</span>
                                   )}
                                 </div>
                               </div>
-                              <div className="flex items-start gap-1">
-                                <span className="font-medium shrink-0">Out:</span>
-                                <div className="min-w-0">
+                              
+                              {/* Clock Out */}
+                              <div className="flex items-start gap-2">
+                                <span className="font-medium text-muted-foreground w-8 shrink-0">Out:</span>
+                                <div className="min-w-0 flex-1">
                                   {record.clockOutTime ? (
                                     <>
-                                      <div>{formatTime(record.clockOutTime)}</div>
-                                      {record.clockOutLatitude && record.clockOutLongitude && (
+                                      <div className="font-medium">{formatTime(record.clockOutTime)}</div>
+                                      {record.clockOutLatitude && record.clockOutLongitude ? (
                                         <a 
                                           href={`https://www.google.com/maps?q=${record.clockOutLatitude},${record.clockOutLongitude}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="flex items-start gap-1 text-blue-500 hover:underline text-[10px] mt-0.5"
-                                          onClick={(e) => e.stopPropagation()}
+                                          className="flex items-start gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-0.5"
                                         >
-                                          <MapPin className="h-2.5 w-2.5 shrink-0 mt-0.5" />
+                                          <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
                                           <span className="break-words">
-                                            {addresses[`${record.id}-out`] || 'Loading address...'}
+                                            {addresses[`${record.id}-out`] || 'Loading...'}
                                           </span>
-                                          <ExternalLink className="h-2.5 w-2.5 shrink-0 mt-0.5" />
+                                          <ExternalLink className="h-3 w-3 shrink-0 mt-0.5" />
                                         </a>
+                                      ) : (
+                                        <span className="text-muted-foreground">No location</span>
                                       )}
                                     </>
                                   ) : (
-                                    <span className="text-blue-500">In Progress</span>
+                                    <span className="text-blue-600 dark:text-blue-400 font-medium">Not clocked out</span>
                                   )}
                                 </div>
                               </div>
-                              {record.clockOutTime && (
-                                <div className="font-medium">{hours.toFixed(1)} hours worked</div>
-                              )}
                             </div>
-                            <div className="flex flex-col gap-1 mt-2">
+                            
+                            {/* Action Buttons */}
+                            <div className="flex gap-2 mt-3 pt-3 border-t">
                               {isInProgress && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-6 text-xs w-full"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                  className="h-7 text-xs flex-1"
+                                  onClick={() => {
                                     setSelectedRecord(record);
                                     setShowEndClockInDialog(true);
                                   }}
@@ -835,21 +831,19 @@ export default function AdminAttendancePage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-6 text-xs w-full text-destructive hover:text-destructive"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                  className="h-7 text-xs text-destructive hover:text-destructive"
+                                  onClick={() => {
                                     setRecordToDelete(record);
                                     setShowDeleteDialog(true);
                                   }}
                                   data-testid={`button-delete-attendance-today-${record.id}`}
                                 >
-                                  <Trash2 className="h-3 w-3 mr-1" />
-                                  Delete
+                                  <Trash2 className="h-3 w-3" />
                                 </Button>
                               )}
                             </div>
-                          </TooltipContent>
-                        </Tooltip>
+                          </CardContent>
+                        </Card>
                       );
                     })}
                 </div>
