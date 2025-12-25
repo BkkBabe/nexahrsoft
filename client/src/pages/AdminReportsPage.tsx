@@ -4,11 +4,63 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Download, Printer, FileText, Users, Calendar, Clock } from "lucide-react";
+import { ArrowLeft, Download, Printer, FileText, Users, Calendar, Clock, MapPin } from "lucide-react";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import type { User, AttendanceRecord } from "@shared/schema";
+
+// Address cache to avoid repeated API calls
+const addressCache: Record<string, string> = {};
+
+async function reverseGeocode(lat: string, lng: string): Promise<string> {
+  const cacheKey = `${lat},${lng}`;
+  if (addressCache[cacheKey]) {
+    return addressCache[cacheKey];
+  }
+  
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          'Accept-Language': 'en',
+          'User-Agent': 'NexaHR-HRMS/1.0'
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Geocoding failed');
+    }
+    
+    const data = await response.json();
+    
+    // Build a short address from components
+    const address = data.address || {};
+    const parts: string[] = [];
+    
+    // Add building/road info
+    if (address.road || address.street) {
+      parts.push(address.road || address.street);
+    }
+    if (address.suburb || address.neighbourhood) {
+      parts.push(address.suburb || address.neighbourhood);
+    }
+    if (address.city || address.town || address.village) {
+      parts.push(address.city || address.town || address.village);
+    }
+    
+    const shortAddress = parts.length > 0 ? parts.join(', ') : data.display_name?.split(',').slice(0, 3).join(',') || 'Unknown location';
+    addressCache[cacheKey] = shortAddress;
+    return shortAddress;
+  } catch (error) {
+    console.error('Reverse geocoding error:', error);
+    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
+    addressCache[cacheKey] = fallback;
+    return fallback;
+  }
+}
 
 interface AttendanceWithUser extends AttendanceRecord {
   user?: User;
@@ -19,8 +71,9 @@ export default function AdminReportsPage() {
   const [reportType, setReportType] = useState<string>("attendance");
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"));
+  const [addresses, setAddresses] = useState<Record<string, string>>({});
 
-  const { data: usersData, isLoading: usersLoading } = useQuery<{ users: User[] }>({
+  const { data: usersData, isLoading: usersLoading } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
   });
 
@@ -37,8 +90,36 @@ export default function AdminReportsPage() {
     },
   });
 
-  const users = usersData?.users || [];
+  const users = usersData || [];
   const attendanceRecords = attendanceData?.records || [];
+
+  // Fetch addresses for clock-in/out locations
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      for (const record of attendanceRecords) {
+        // Fetch clock-in address
+        if (record.latitude && record.longitude) {
+          const key = `in-${record.id}`;
+          if (!addresses[key]) {
+            const address = await reverseGeocode(record.latitude, record.longitude);
+            setAddresses(prev => ({ ...prev, [key]: address }));
+          }
+        }
+        // Fetch clock-out address
+        if (record.clockOutLatitude && record.clockOutLongitude) {
+          const key = `out-${record.id}`;
+          if (!addresses[key]) {
+            const address = await reverseGeocode(record.clockOutLatitude, record.clockOutLongitude);
+            setAddresses(prev => ({ ...prev, [key]: address }));
+          }
+        }
+      }
+    };
+    
+    if (reportType === "detailed-attendance" && attendanceRecords.length > 0) {
+      fetchAddresses();
+    }
+  }, [attendanceRecords, reportType]);
 
   const getUserById = (userId: string): User | undefined => {
     return users.find(u => u.id === userId);
@@ -101,12 +182,14 @@ export default function AdminReportsPage() {
       });
       filename = `employee_report_${format(new Date(), "yyyy-MM-dd")}.csv`;
     } else if (reportType === "detailed-attendance") {
-      csvContent = "Date,Employee Code,Name,Department,Clock In,Clock Out,Hours\n";
+      csvContent = "Date,Employee Code,Name,Department,Clock In,Clock In Address,Clock Out,Clock Out Address,Hours\n";
       attendanceRecords.forEach(record => {
         const user = getUserById(record.userId);
         if (user) {
           const hours = calculateHours(record.clockInTime, record.clockOutTime);
-          csvContent += `"${record.date}","${user.employeeCode || ""}","${user.name}","${user.department || ""}","${format(new Date(record.clockInTime), "HH:mm")}","${record.clockOutTime ? format(new Date(record.clockOutTime), "HH:mm") : "N/A"}",${hours.toFixed(2)}\n`;
+          const clockInAddress = addresses[`in-${record.id}`] || (record.latitude && record.longitude ? `${record.latitude}, ${record.longitude}` : "");
+          const clockOutAddress = addresses[`out-${record.id}`] || (record.clockOutLatitude && record.clockOutLongitude ? `${record.clockOutLatitude}, ${record.clockOutLongitude}` : "");
+          csvContent += `"${record.date}","${user.employeeCode || ""}","${user.name}","${user.department || ""}","${format(new Date(record.clockInTime), "HH:mm")}","${clockInAddress}","${record.clockOutTime ? format(new Date(record.clockOutTime), "HH:mm") : "N/A"}","${clockOutAddress}",${hours.toFixed(2)}\n`;
         }
       });
       filename = `detailed_attendance_${startDate}_${endDate}.csv`;
@@ -215,7 +298,9 @@ export default function AdminReportsPage() {
                   <th className="border p-2 text-left">Name</th>
                   <th className="border p-2 text-left">Department</th>
                   <th className="border p-2 text-center">Clock In</th>
+                  <th className="border p-2 text-left">Clock In Address</th>
                   <th className="border p-2 text-center">Clock Out</th>
+                  <th className="border p-2 text-left">Clock Out Address</th>
                   <th className="border p-2 text-center">Hours</th>
                 </tr>
               </thead>
@@ -224,6 +309,8 @@ export default function AdminReportsPage() {
                   const user = getUserById(record.userId);
                   if (!user) return null;
                   const hours = calculateHours(record.clockInTime, record.clockOutTime);
+                  const clockInAddress = addresses[`in-${record.id}`];
+                  const clockOutAddress = addresses[`out-${record.id}`];
                   return (
                     <tr key={record.id} data-testid={`row-detail-${record.id}`}>
                       <td className="border p-2">{record.date}</td>
@@ -231,7 +318,31 @@ export default function AdminReportsPage() {
                       <td className="border p-2">{user.name}</td>
                       <td className="border p-2">{user.department || "-"}</td>
                       <td className="border p-2 text-center">{format(new Date(record.clockInTime), "HH:mm")}</td>
+                      <td className="border p-2 text-sm">
+                        {record.latitude && record.longitude ? (
+                          <div className="flex items-start gap-1">
+                            <MapPin className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <span className="text-muted-foreground">
+                              {clockInAddress || "Loading..."}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
                       <td className="border p-2 text-center">{record.clockOutTime ? format(new Date(record.clockOutTime), "HH:mm") : "N/A"}</td>
+                      <td className="border p-2 text-sm">
+                        {record.clockOutLatitude && record.clockOutLongitude ? (
+                          <div className="flex items-start gap-1">
+                            <MapPin className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <span className="text-muted-foreground">
+                              {clockOutAddress || "Loading..."}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
                       <td className="border p-2 text-center">{hours.toFixed(2)}</td>
                     </tr>
                   );
