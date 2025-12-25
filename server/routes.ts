@@ -1078,7 +1078,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId;
       const now = new Date();
-      const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Get company timezone to store the correct local date
+      const companySettings = await storage.getCompanySettings();
+      const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
+      
+      // Get date in company timezone (not UTC)
+      const date = now.toLocaleDateString('en-CA', { timeZone: timezone }); // Returns YYYY-MM-DD
+      
       const { photoUrl, latitude, longitude, override } = req.body;
       
       // Get all records for today to check for recent clock-ins
@@ -1127,7 +1134,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId;
       const now = new Date();
-      const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Get company timezone to find records for the correct local date
+      const companySettings = await storage.getCompanySettings();
+      const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
+      const date = now.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD in company timezone
+      
       const { latitude, longitude } = req.body as { latitude?: string; longitude?: string };
       
       // Get all today's records
@@ -1419,8 +1431,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate clock out is after clock in
       const clockInDateTime = new Date(record.clockInTime);
+      
+      // Debug logging to diagnose timezone issues
+      console.log("End clock-in debug:", {
+        recordId,
+        recordDate: record.date,
+        recordDateStr,
+        clockOutTimeInput: clockOutTime,
+        clockOutISOString,
+        clockOutDateTime: clockOutDateTime.toISOString(),
+        clockOutDateTimeMs: clockOutDateTime.getTime(),
+        clockInTime: record.clockInTime,
+        clockInDateTime: clockInDateTime.toISOString(),
+        clockInDateTimeMs: clockInDateTime.getTime(),
+        timezone,
+        tzOffset,
+        comparison: clockOutDateTime.getTime() > clockInDateTime.getTime() ? "VALID" : "INVALID"
+      });
+      
       if (clockOutDateTime <= clockInDateTime) {
-        return res.status(400).json({ message: "Clock out time must be after clock in time" });
+        return res.status(400).json({ 
+          message: "Clock out time must be after clock in time",
+          debug: {
+            clockIn: clockInDateTime.toISOString(),
+            clockOut: clockOutDateTime.toISOString()
+          }
+        });
       }
 
       // Update the attendance record
