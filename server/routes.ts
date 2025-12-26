@@ -1069,7 +1069,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== ATTENDANCE ENDPOINTS ====================
   
-  // Clock in (supports multiple clock-ins per day)
+  // Clock in (one active clock-in per user at a time)
   app.post("/api/attendance/clock-in", async (req: Request, res: Response) => {
     if (!req.session?.userId || req.session.isAdmin) {
       return res.status(401).json({ message: "User authentication required" });
@@ -1079,6 +1079,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId;
       const now = new Date();
       
+      // Check if user already has an open attendance session (no clock-out)
+      const openSession = await storage.getOpenAttendanceRecord(userId);
+      if (openSession) {
+        const clockInTime = new Date(openSession.clockInTime);
+        const formattedTime = clockInTime.toLocaleString('en-US', { 
+          timeZone: 'Asia/Singapore',
+          hour: '2-digit',
+          minute: '2-digit',
+          month: 'short',
+          day: 'numeric'
+        });
+        return res.status(409).json({ 
+          message: `You already have an active clock-in from ${formattedTime}. Please clock out first before clocking in again.`,
+          existingRecord: openSession
+        });
+      }
+      
       // Get company timezone to store the correct local date
       const companySettings = await storage.getCompanySettings();
       const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
@@ -1086,28 +1103,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get date in company timezone (not UTC)
       const date = now.toLocaleDateString('en-CA', { timeZone: timezone }); // Returns YYYY-MM-DD
       
-      const { photoUrl, latitude, longitude, override } = req.body;
-      
-      // Get all records for today to check for recent clock-ins
-      const todayRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, date, date);
-      
-      // Check if there's a recent clock-in (within 5 minutes) and user hasn't confirmed override
-      if (!override) {
-        const recentClockIn = todayRecords.find(record => {
-          const clockInTime = new Date(record.clockInTime);
-          const diffMinutes = (now.getTime() - clockInTime.getTime()) / (1000 * 60);
-          return diffMinutes < 5;
-        });
-        
-        if (recentClockIn) {
-          return res.status(400).json({ 
-            message: "You clocked in less than 5 minutes ago. Do you want to continue?",
-            requiresConfirmation: true
-          });
-        }
-      }
+      const { photoUrl, latitude, longitude } = req.body;
 
-      // Create new attendance record (allows multiple per day)
+      // Create new attendance record
       const record = await storage.createAttendanceRecord({
         userId,
         date,
@@ -1275,6 +1273,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, date, date);
       if (existingRecords.length > 0) {
         return res.status(400).json({ message: `Attendance record already exists for this employee on ${date}` });
+      }
+      
+      // If adding a record without clock-out (creating an open session), check for existing open sessions
+      if (!clockOutTime) {
+        const openSession = await storage.getOpenAttendanceRecord(userId);
+        if (openSession) {
+          const existingClockIn = new Date(openSession.clockInTime);
+          const formattedTime = existingClockIn.toLocaleString('en-US', { 
+            timeZone: 'Asia/Singapore',
+            hour: '2-digit',
+            minute: '2-digit',
+            month: 'short',
+            day: 'numeric'
+          });
+          return res.status(409).json({ 
+            message: `Employee already has an active clock-in from ${formattedTime}. Please end that session first before adding a new clock-in without clock-out.`,
+            existingRecord: openSession
+          });
+        }
       }
 
       // Get company timezone setting for proper time interpretation

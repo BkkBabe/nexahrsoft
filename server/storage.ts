@@ -25,6 +25,7 @@ export interface IStorage {
   updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | undefined>;
   deleteAttendanceRecord(id: string): Promise<void>;
   getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined>;
+  getOpenAttendanceRecord(userId: string): Promise<AttendanceRecord | undefined>;
   getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   
@@ -231,6 +232,10 @@ export class MemStorage implements IStorage {
   }
 
   async getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async getOpenAttendanceRecord(userId: string): Promise<AttendanceRecord | undefined> {
     throw new Error("MemStorage attendance not implemented");
   }
 
@@ -599,6 +604,21 @@ export class PgStorage implements IStorage {
           eq(attendanceRecords.date, date)
         )
       )
+      .limit(1);
+    return record;
+  }
+
+  async getOpenAttendanceRecord(userId: string): Promise<AttendanceRecord | undefined> {
+    // Find any attendance record for this user that has no clock-out time (open session)
+    const [record] = await db.select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.userId, userId),
+          isNull(attendanceRecords.clockOutTime)
+        )
+      )
+      .orderBy(desc(attendanceRecords.clockInTime))
       .limit(1);
     return record;
   }
