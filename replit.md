@@ -36,9 +36,11 @@ Preferred communication style: Simple, everyday language.
 - **Admin Attendance Page**: Comprehensive attendance tracking with:
   - Clock-ins view with date picker for viewing any date (not just today)
   - Clock-in/out location display with Google Maps links in tooltips
+  - **Orphaned Sessions view**: Identifies clock-ins older than 24 hours without clock-out, with individual and bulk close functionality to allow affected employees to clock in again
   - Heatmap view with week/month toggle (default: week view)
   - Attendance details view with audit logging
   - Department and employee filtering
+  - **Strict attendance cycle enforcement**: Employees must clock out before clocking in again (prevents duplicate sessions)
   
 - **Admin Reports Page**: Generate and export attendance and employee reports with:
   - Date range filtering for attendance data
