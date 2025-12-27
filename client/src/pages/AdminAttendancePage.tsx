@@ -983,16 +983,15 @@ export default function AdminAttendancePage() {
                 </div>
                 {orphanedSessions.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <Link href="/admin/attendance-audit">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        data-testid="button-audit-trail"
-                      >
-                        <FileText className="h-4 w-4 mr-1" />
-                        Audit Trail
-                      </Button>
-                    </Link>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setViewMode('details')}
+                      data-testid="button-audit-trail"
+                    >
+                      <FileText className="h-4 w-4 mr-1" />
+                      Audit Trail
+                    </Button>
                     <Button
                       size="sm"
                       onClick={handleBulkCloseOrphaned}
