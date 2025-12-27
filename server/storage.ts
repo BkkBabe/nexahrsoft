@@ -2,7 +2,7 @@ import { type User, type InsertUser, type CompanySettings, type AttendanceRecord
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs } from "@shared/schema";
-import { eq, or, and, gte, lte, desc, isNull, not, like, sql } from "drizzle-orm";
+import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -26,6 +26,7 @@ export interface IStorage {
   deleteAttendanceRecord(id: string): Promise<void>;
   getTodayAttendanceRecord(userId: string, date: string): Promise<AttendanceRecord | undefined>;
   getOpenAttendanceRecord(userId: string): Promise<AttendanceRecord | undefined>;
+  getOrphanedAttendanceSessions(): Promise<AttendanceRecord[]>;
   getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   
@@ -236,6 +237,10 @@ export class MemStorage implements IStorage {
   }
 
   async getOpenAttendanceRecord(userId: string): Promise<AttendanceRecord | undefined> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async getOrphanedAttendanceSessions(): Promise<AttendanceRecord[]> {
     throw new Error("MemStorage attendance not implemented");
   }
 
@@ -621,6 +626,23 @@ export class PgStorage implements IStorage {
       .orderBy(desc(attendanceRecords.clockInTime))
       .limit(1);
     return record;
+  }
+
+  async getOrphanedAttendanceSessions(): Promise<AttendanceRecord[]> {
+    // Find all attendance records without clock-out that are older than 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    const records = await db.select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          isNull(attendanceRecords.clockOutTime),
+          lt(attendanceRecords.clockInTime, twentyFourHoursAgo)
+        )
+      )
+      .orderBy(desc(attendanceRecords.clockInTime));
+    
+    return records;
   }
 
   async getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]> {

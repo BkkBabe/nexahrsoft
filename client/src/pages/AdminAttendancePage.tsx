@@ -10,7 +10,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
@@ -169,7 +169,7 @@ function getHeatmapTextColor(hours: number): string {
 }
 
 export default function AdminAttendancePage() {
-  const [viewMode, setViewMode] = useState<'today' | 'heatmap' | 'details'>('today');
+  const [viewMode, setViewMode] = useState<'today' | 'orphaned' | 'heatmap' | 'details'>('today');
   const [heatmapViewType, setHeatmapViewType] = useState<'week' | 'month'>('week');
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
     const now = new Date();
@@ -266,6 +266,17 @@ export default function AdminAttendancePage() {
     enabled: viewMode === 'details',
   });
   const auditLogs = auditLogsData?.logs || [];
+
+  // Fetch orphaned attendance sessions (older than 24 hours without clock-out)
+  const { data: orphanedSessionsData, isLoading: orphanedLoading } = useQuery<{ records: AttendanceRecord[] }>({
+    queryKey: ['/api/admin/attendance/orphaned'],
+    enabled: viewMode === 'orphaned',
+  });
+  const orphanedSessions = orphanedSessionsData?.records || [];
+  
+  // State for selected orphaned records
+  const [selectedOrphanedIds, setSelectedOrphanedIds] = useState<Set<string>>(new Set());
+  const [bulkClockOutTime, setBulkClockOutTime] = useState("18:00");
 
   const users = usersData || [];
   const heatmapRecords = heatmapRecordsData?.records || [];
@@ -484,6 +495,7 @@ export default function AdminAttendancePage() {
         description: data.message || "Clock-out time has been recorded",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/orphaned'] });
       setShowEndClockInDialog(false);
       setSelectedRecord(null);
       setEndClockOutTime("18:00");
@@ -533,6 +545,58 @@ export default function AdminAttendancePage() {
   const handleDeleteAttendance = () => {
     if (!recordToDelete || !isNexaAdmin) return;
     deleteAttendanceMutation.mutate(recordToDelete.id);
+  };
+
+  // Bulk close orphaned sessions mutation
+  const bulkCloseOrphanedMutation = useMutation({
+    mutationFn: async (data: { recordIds: string[]; clockOutTime?: string }) => {
+      const response = await apiRequest("POST", "/api/admin/attendance/bulk-close-orphaned", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Sessions Closed",
+        description: data.message || "Orphaned sessions have been closed",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/orphaned'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      setSelectedOrphanedIds(new Set());
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to close orphaned sessions",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleBulkCloseOrphaned = () => {
+    if (selectedOrphanedIds.size === 0) return;
+    bulkCloseOrphanedMutation.mutate({
+      recordIds: Array.from(selectedOrphanedIds),
+      clockOutTime: bulkClockOutTime || undefined,
+    });
+  };
+
+  const toggleOrphanedSelection = (recordId: string) => {
+    setSelectedOrphanedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(recordId)) {
+        newSet.delete(recordId);
+      } else {
+        newSet.add(recordId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllOrphaned = () => {
+    if (selectedOrphanedIds.size === orphanedSessions.length) {
+      setSelectedOrphanedIds(new Set());
+    } else {
+      setSelectedOrphanedIds(new Set(orphanedSessions.map(r => r.id)));
+    }
   };
 
   // Week navigation
@@ -615,6 +679,21 @@ export default function AdminAttendancePage() {
           >
             <CalendarCheck className="h-4 w-4 mr-1" />
             Clock-ins
+          </Button>
+          <Button
+            variant={viewMode === 'orphaned' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('orphaned')}
+            data-testid="button-view-orphaned"
+            className={orphanedSessions.length > 0 ? "relative" : ""}
+          >
+            <AlertTriangle className="h-4 w-4 mr-1" />
+            Orphaned
+            {orphanedSessions.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                {orphanedSessions.length}
+              </span>
+            )}
           </Button>
           <Button
             variant={viewMode === 'heatmap' ? 'default' : 'outline'}
@@ -882,6 +961,147 @@ export default function AdminAttendancePage() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : viewMode === 'orphaned' ? (
+        <>
+          {/* Orphaned Sessions View */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-amber-500" />
+                    Orphaned Sessions
+                  </CardTitle>
+                  <CardDescription>
+                    Clock-ins without clock-out for more than 24 hours. These need to be closed to allow employees to clock in again.
+                  </CardDescription>
+                </div>
+                {orphanedSessions.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm whitespace-nowrap">Set Clock-out:</Label>
+                      <Input
+                        type="time"
+                        value={bulkClockOutTime}
+                        onChange={(e) => setBulkClockOutTime(e.target.value)}
+                        className="w-28"
+                        data-testid="input-bulk-clockout-time"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleBulkCloseOrphaned}
+                      disabled={selectedOrphanedIds.size === 0 || isViewOnlyAdmin || bulkCloseOrphanedMutation.isPending}
+                      data-testid="button-bulk-close-orphaned"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Close Selected ({selectedOrphanedIds.size})
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {orphanedLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading orphaned sessions...</div>
+              ) : orphanedSessions.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500 opacity-50" />
+                  <p className="text-lg font-medium text-green-600">No Orphaned Sessions</p>
+                  <p className="text-sm">All attendance sessions are properly closed</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Select All */}
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <input
+                      type="checkbox"
+                      checked={selectedOrphanedIds.size === orphanedSessions.length && orphanedSessions.length > 0}
+                      onChange={selectAllOrphaned}
+                      className="h-4 w-4 rounded border-gray-300"
+                      data-testid="checkbox-select-all-orphaned"
+                    />
+                    <span className="text-sm font-medium">
+                      Select All ({orphanedSessions.length} orphaned session{orphanedSessions.length !== 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  
+                  {/* Orphaned Sessions List */}
+                  <div className="space-y-3">
+                    {orphanedSessions.map((record) => {
+                      const user = users.find(u => u.id === record.userId);
+                      const clockInDate = new Date(record.clockInTime);
+                      const daysAgo = Math.floor((Date.now() - clockInDate.getTime()) / (1000 * 60 * 60 * 24));
+                      
+                      return (
+                        <div 
+                          key={record.id}
+                          className="flex items-center gap-4 p-4 border rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                          data-testid={`orphaned-record-${record.id}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedOrphanedIds.has(record.id)}
+                            onChange={() => toggleOrphanedSelection(record.id)}
+                            className="h-4 w-4 rounded border-gray-300"
+                            data-testid={`checkbox-orphaned-${record.id}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{user?.name || 'Unknown'}</span>
+                              {user?.employeeCode && (
+                                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                  {user.employeeCode}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-1">
+                              <span className="font-medium">Clocked in:</span>{' '}
+                              {clockInDate.toLocaleString('en-US', { 
+                                timeZone: 'Asia/Singapore',
+                                weekday: 'short',
+                                month: 'short', 
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                            {user?.department && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {user.department}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                              {daysAgo} day{daysAgo !== 1 ? 's' : ''} ago
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {record.date}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedRecord(record);
+                              setShowEndClockInDialog(true);
+                            }}
+                            disabled={isViewOnlyAdmin}
+                            data-testid={`button-close-orphaned-${record.id}`}
+                          >
+                            <Clock className="h-3 w-3 mr-1" />
+                            Close
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

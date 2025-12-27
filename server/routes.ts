@@ -1238,6 +1238,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Get orphaned attendance sessions (clocked in > 24 hours ago without clock-out)
+  app.get("/api/admin/attendance/orphaned", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const records = await storage.getOrphanedAttendanceSessions();
+      res.json({ records });
+    } catch (error) {
+      console.error("Get orphaned sessions error:", error);
+      res.status(500).json({ message: "Failed to get orphaned sessions" });
+    }
+  });
+
+  // Admin: Bulk close orphaned attendance sessions
+  app.post("/api/admin/attendance/bulk-close-orphaned", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    if (req.session.isViewOnlyAdmin) {
+      return res.status(403).json({ message: "View-only admins cannot close attendance sessions" });
+    }
+
+    try {
+      const schema = z.object({
+        recordIds: z.array(z.string().uuid()),
+        clockOutTime: z.string().optional(), // HH:mm format, optional - defaults to 8 hours after clock-in
+      });
+
+      const { recordIds, clockOutTime } = schema.parse(req.body);
+
+      if (recordIds.length === 0) {
+        return res.status(400).json({ message: "No records selected" });
+      }
+
+      let closedCount = 0;
+      const errors: string[] = [];
+
+      for (const recordId of recordIds) {
+        try {
+          const record = await storage.getAttendanceRecord(recordId);
+          if (!record) {
+            errors.push(`Record ${recordId} not found`);
+            continue;
+          }
+
+          if (record.clockOutTime) {
+            errors.push(`Record ${recordId} already has clock-out time`);
+            continue;
+          }
+
+          // Calculate clock-out time: use provided time or default to 8 hours after clock-in
+          let clockOutDateTime: Date;
+          
+          if (clockOutTime) {
+            // Parse clock-out time based on the record's date
+            const [hours, minutes] = clockOutTime.split(':').map(Number);
+            clockOutDateTime = new Date(record.clockInTime);
+            clockOutDateTime.setHours(hours, minutes, 0, 0);
+            
+            // If clock-out would be before clock-in, assume next day
+            if (clockOutDateTime <= new Date(record.clockInTime)) {
+              clockOutDateTime.setDate(clockOutDateTime.getDate() + 1);
+            }
+          } else {
+            // Default to 8 hours after clock-in
+            clockOutDateTime = new Date(new Date(record.clockInTime).getTime() + 8 * 60 * 60 * 1000);
+          }
+
+          // Calculate hours worked
+          const hoursWorked = (clockOutDateTime.getTime() - new Date(record.clockInTime).getTime()) / (1000 * 60 * 60);
+          const roundedHours = Math.round(hoursWorked * 2) / 2;
+
+          await storage.updateAttendanceRecord(recordId, {
+            clockOutTime: clockOutDateTime,
+            hoursWorked: roundedHours,
+          });
+
+          closedCount++;
+        } catch (err) {
+          errors.push(`Failed to close record ${recordId}`);
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        closedCount, 
+        message: `Closed ${closedCount} of ${recordIds.length} sessions`,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error) {
+      console.error("Bulk close orphaned sessions error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to close orphaned sessions" });
+    }
+  });
+
   // Admin: Add attendance record for an employee (any date) - write access required
   app.post("/api/admin/attendance/add", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
