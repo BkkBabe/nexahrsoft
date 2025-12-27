@@ -10,7 +10,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
@@ -530,6 +531,7 @@ export default function AdminAttendancePage() {
         description: data.message || "Attendance record has been deleted",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/orphaned'] });
       setShowDeleteDialog(false);
       setRecordToDelete(null);
     },
@@ -981,16 +983,16 @@ export default function AdminAttendancePage() {
                 </div>
                 {orphanedSessions.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2">
-                      <Label className="text-sm whitespace-nowrap">Set Clock-out:</Label>
-                      <Input
-                        type="time"
-                        value={bulkClockOutTime}
-                        onChange={(e) => setBulkClockOutTime(e.target.value)}
-                        className="w-28"
-                        data-testid="input-bulk-clockout-time"
-                      />
-                    </div>
+                    <Link href="/admin/attendance-audit">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        data-testid="button-audit-trail"
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        Audit Trail
+                      </Button>
+                    </Link>
                     <Button
                       size="sm"
                       onClick={handleBulkCloseOrphaned}
@@ -1083,19 +1085,55 @@ export default function AdminAttendancePage() {
                               {record.date}
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedRecord(record);
-                              setShowEndClockInDialog(true);
-                            }}
-                            disabled={isViewOnlyAdmin}
-                            data-testid={`button-close-orphaned-${record.id}`}
-                          >
-                            <Clock className="h-3 w-3 mr-1" />
-                            Close
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isViewOnlyAdmin}
+                                data-testid={`button-actions-orphaned-${record.id}`}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  // Cancel - just remove selection
+                                  setSelectedOrphanedIds(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(record.id);
+                                    return newSet;
+                                  });
+                                }}
+                                data-testid={`action-cancel-${record.id}`}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Cancel
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedRecord(record);
+                                  setShowEndClockInDialog(true);
+                                }}
+                                data-testid={`action-set-clockout-${record.id}`}
+                              >
+                                <Clock className="h-4 w-4 mr-2" />
+                                Set Clock-out
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setRecordToDelete(record);
+                                  setShowDeleteDialog(true);
+                                }}
+                                className="text-red-600 focus:text-red-600"
+                                data-testid={`action-delete-${record.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Record
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       );
                     })}
