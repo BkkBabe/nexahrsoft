@@ -45,6 +45,7 @@ export default function AdminSettingsPage() {
   const [senderName, setSenderName] = useState<string>("");
   const [appUrl, setAppUrl] = useState<string>("https://app.nexahrms.com");
   const [defaultTimezone, setDefaultTimezone] = useState<string>("Asia/Singapore");
+  const [companyName, setCompanyName] = useState<string>("");
   const [companyAddress, setCompanyAddress] = useState<string>("");
   const [companyUen, setCompanyUen] = useState<string>("");
   
@@ -92,6 +93,9 @@ export default function AdminSettingsPage() {
     }
     if (settings?.defaultTimezone) {
       setDefaultTimezone(settings.defaultTimezone);
+    }
+    if (settings?.companyName) {
+      setCompanyName(settings.companyName);
     }
     if (settings?.companyAddress) {
       setCompanyAddress(settings.companyAddress);
@@ -495,7 +499,7 @@ export default function AdminSettingsPage() {
 
   // Company info mutation
   const updateCompanyInfoMutation = useMutation({
-    mutationFn: async (data: { companyAddress?: string; companyUen?: string }) => {
+    mutationFn: async (data: { companyName?: string; companyAddress?: string; companyUen?: string }) => {
       await apiRequest("PUT", "/api/company/info", data);
     },
     onSuccess: () => {
@@ -516,6 +520,7 @@ export default function AdminSettingsPage() {
 
   const handleUpdateCompanyInfo = () => {
     updateCompanyInfoMutation.mutate({
+      companyName: companyName || undefined,
       companyAddress: companyAddress || undefined,
       companyUen: companyUen || undefined,
     });
@@ -897,6 +902,20 @@ export default function AdminSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="company-name">Company Name</Label>
+              <Input
+                id="company-name"
+                type="text"
+                placeholder="e.g., ABC Company Pte Ltd"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                data-testid="input-company-name"
+              />
+              <p className="text-xs text-muted-foreground">
+                Official company name displayed on payslips and documents
+              </p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="company-uen">Company UEN</Label>

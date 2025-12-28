@@ -2618,10 +2618,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update company info (admin only) - address and UEN for payslips
+  // Update company info (admin only) - name, address and UEN for payslips
   app.put("/api/company/info", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
+        companyName: z.string().optional(),
         companyAddress: z.string().optional(),
         companyUen: z.string().optional(),
       });
