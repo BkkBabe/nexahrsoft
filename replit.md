@@ -27,7 +27,9 @@ Preferred communication style: Simple, everyday language.
 ### Database Schema
 
 - **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent, mustChangePassword). Supports both password-based and OAuth, with approval-based access control, forced password change on first login, and full HR metadata.
-- **Company Settings Table**: Stores company branding, email settings, and timezone configuration (company_name, logo_url, favicon_url, senderEmail, senderName, appUrl, defaultTimezone, updated_at). Singleton pattern ensures one record.
+- **Company Settings Table**: Stores company branding, email settings, and timezone configuration (company_name, company_address, company_uen, logo_url, favicon_url, senderEmail, senderName, appUrl, defaultTimezone, updated_at). Singleton pattern ensures one record.
+- **Payroll Loan Accounts Table**: Stores employee loans with fields: userId, loanType, description, principalAmount, outstandingBalance, monthlyRepayment, startDate, endDate, status. Supports COMPANY_LOAN, STUDY_LOAN, HOUSING_LOAN types.
+- **Payroll Loan Repayments Table**: Tracks individual repayments with payrollPeriod, amount, notes, and recordedBy references.
 - **Attendance Records Table**: Stores clock-in/out times, user ID, date, calculated hours, location data, and photo metadata.
 - **Extensibility**: Designed to easily accommodate future tables for leave, claims, payroll, etc.
 
@@ -56,13 +58,30 @@ Preferred communication style: Simple, everyday language.
   - Email settings configuration (sender email, sender name, app URL)
   
 - **Admin Settings**: Configure system-wide settings including:
-  - Company branding (logo, favicon, name)
+  - Company branding (logo, favicon, name, address, UEN)
   - Email sender configuration for welcome messages
   - Timezone settings for attendance calculations (default: Asia/Singapore)
   - QR code preview for verification
   - Admin Users Management: Promote employees to admin role, view/remove admin users
   - Admin users can log in via Admin Login page using their username/password
   - **Master Admin Password Management**: The master admin (nexaadmin) can change passwords for other admin users. Changed users will be required to update their password on next login.
+
+- **Admin Payroll Management**: Comprehensive payroll functionality including:
+  - **Payroll Import**: Import payroll data from CSV files with comprehensive field mapping
+  - **Payroll Reports**: View and export payroll records by year/month with statistics
+  - **Loan Management**: Create and manage employee loans (Company, Study, Housing types) with repayment tracking
+  - **Payslip View**: Structured 10-section payslip display (A-J) following Singapore CPF regulations with:
+    - Employee/Employer view toggle: Employee view hides employer contributions; Employer view shows full cost to company
+    - Section A: Employee Information
+    - Section B: Basic Earnings (Basic Salary, Monthly Variables)
+    - Section C: Overtime & Shift Allowances
+    - Section D: Allowances with CPF (Mobile, Transport, Leave Encashment, Service Call)
+    - Section E: Allowances without CPF (Other, House Rental)
+    - Section F: Bonus & Additional Payments
+    - Section G: Employee CPF Contribution
+    - Section H: Deductions (Loans, No Pay Day, Community Contributions - CDAC, MBMF, SINDA, ECF, CC)
+    - Section I: Employer Contributions (Employer CPF, SDF, FWL) - visible only in Employer view
+    - Section J: Payment Summary with Net Pay and Total Cost to Company
 
 ### Key Architectural Patterns
 
