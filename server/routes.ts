@@ -2618,6 +2618,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update company info (admin only) - address and UEN for payslips
+  app.put("/api/company/info", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        companyAddress: z.string().optional(),
+        companyUen: z.string().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const updated = await storage.updateCompanySettings(data);
+      res.json({ success: true, settings: updated });
+    } catch (error) {
+      console.error("Update company info error:", error);
+      res.status(500).json({ message: "Failed to update company information" });
+    }
+  });
+
   // ==================== PAYROLL IMPORT API ====================
 
   // Import payroll records (admin only)

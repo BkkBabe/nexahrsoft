@@ -45,6 +45,8 @@ export default function AdminSettingsPage() {
   const [senderName, setSenderName] = useState<string>("");
   const [appUrl, setAppUrl] = useState<string>("https://app.nexahrms.com");
   const [defaultTimezone, setDefaultTimezone] = useState<string>("Asia/Singapore");
+  const [companyAddress, setCompanyAddress] = useState<string>("");
+  const [companyUen, setCompanyUen] = useState<string>("");
   
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parsedEmployees, setParsedEmployees] = useState<ParsedEmployee[]>([]);
@@ -90,6 +92,12 @@ export default function AdminSettingsPage() {
     }
     if (settings?.defaultTimezone) {
       setDefaultTimezone(settings.defaultTimezone);
+    }
+    if (settings?.companyAddress) {
+      setCompanyAddress(settings.companyAddress);
+    }
+    if (settings?.companyUen) {
+      setCompanyUen(settings.companyUen);
     }
   }, [settings]);
 
@@ -485,6 +493,34 @@ export default function AdminSettingsPage() {
     updateTimezoneMutation.mutate(defaultTimezone);
   };
 
+  // Company info mutation
+  const updateCompanyInfoMutation = useMutation({
+    mutationFn: async (data: { companyAddress?: string; companyUen?: string }) => {
+      await apiRequest("PUT", "/api/company/info", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });
+      toast({
+        title: "Success",
+        description: "Company information updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUpdateCompanyInfo = () => {
+    updateCompanyInfoMutation.mutate({
+      companyAddress: companyAddress || undefined,
+      companyUen: companyUen || undefined,
+    });
+  };
+
   // Common timezones for dropdown
   const commonTimezones = [
     { value: "Asia/Singapore", label: "Singapore (GMT+8)" },
@@ -854,6 +890,57 @@ export default function AdminSettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
+              Company Information
+            </CardTitle>
+            <CardDescription>
+              Company details for official documents like payslips
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="company-uen">Company UEN</Label>
+                <Input
+                  id="company-uen"
+                  type="text"
+                  placeholder="e.g., 202312345A"
+                  value={companyUen}
+                  onChange={(e) => setCompanyUen(e.target.value)}
+                  data-testid="input-company-uen"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Unique Entity Number for Singapore companies
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-address">Company Address</Label>
+                <Input
+                  id="company-address"
+                  type="text"
+                  placeholder="e.g., 123 Main Street, Singapore 123456"
+                  value={companyAddress}
+                  onChange={(e) => setCompanyAddress(e.target.value)}
+                  data-testid="input-company-address"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Full address shown on payslips
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={handleUpdateCompanyInfo}
+              disabled={updateCompanyInfoMutation.isPending || isViewOnlyAdmin}
+              data-testid="button-update-company-info"
+            >
+              {updateCompanyInfoMutation.isPending ? "Updating..." : "Update Company Info"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ImageIcon className="h-5 w-5" />
               App Logo
             </CardTitle>
             <CardDescription>
