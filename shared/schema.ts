@@ -493,3 +493,23 @@ export const insertPayrollLoanRepaymentSchema = createInsertSchema(payrollLoanRe
 
 export type InsertPayrollLoanRepayment = z.infer<typeof insertPayrollLoanRepaymentSchema>;
 export type PayrollLoanRepayment = typeof payrollLoanRepayments.$inferSelect;
+
+// Payroll Audit Logs - tracks all changes to payroll records
+export const payrollAuditLogs = pgTable("payroll_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  payrollRecordId: varchar("payroll_record_id").notNull().references(() => payrollRecords.id),
+  fieldName: text("field_name").notNull(), // Which field was changed
+  oldValue: text("old_value"), // Previous value (as string for any type)
+  newValue: text("new_value"), // New value (as string for any type)
+  changedBy: text("changed_by").notNull(), // Admin username who made the change
+  reason: text("reason"), // Optional reason for the change
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+});
+
+export const insertPayrollAuditLogSchema = createInsertSchema(payrollAuditLogs).omit({
+  id: true,
+  changedAt: true,
+});
+
+export type InsertPayrollAuditLog = z.infer<typeof insertPayrollAuditLogSchema>;
+export type PayrollAuditLog = typeof payrollAuditLogs.$inferSelect;

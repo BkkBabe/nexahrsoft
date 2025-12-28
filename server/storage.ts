@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -92,7 +92,14 @@ export interface IStorage {
   bulkCreatePayrollRecords(records: InsertPayrollRecord[]): Promise<PayrollRecord[]>;
   getPayrollRecords(year?: number, month?: number): Promise<PayrollRecord[]>;
   getPayrollRecordsByEmployee(employeeCode: string): Promise<PayrollRecord[]>;
+  getPayrollRecordById(id: string): Promise<PayrollRecord | undefined>;
+  updatePayrollRecord(id: string, updates: Partial<PayrollRecord>): Promise<PayrollRecord | undefined>;
   deletePayrollRecordsByPeriod(year: number, month: number): Promise<void>;
+  searchPayrollRecords(year?: number, month?: number, employeeName?: string): Promise<PayrollRecord[]>;
+  
+  // Payroll audit log methods
+  createPayrollAuditLog(log: InsertPayrollAuditLog): Promise<PayrollAuditLog>;
+  getPayrollAuditLogsByRecord(payrollRecordId: string): Promise<PayrollAuditLog[]>;
   
   // Leave history methods (CSV import)
   bulkCreateLeaveHistory(records: InsertLeaveHistory[]): Promise<LeaveHistory[]>;
@@ -484,6 +491,26 @@ export class MemStorage implements IStorage {
   
   async deletePayrollRecordsByPeriod(year: number, month: number): Promise<void> {
     throw new Error("MemStorage deletePayrollRecordsByPeriod not implemented");
+  }
+  
+  async getPayrollRecordById(id: string): Promise<PayrollRecord | undefined> {
+    throw new Error("MemStorage getPayrollRecordById not implemented");
+  }
+  
+  async updatePayrollRecord(id: string, updates: Partial<PayrollRecord>): Promise<PayrollRecord | undefined> {
+    throw new Error("MemStorage updatePayrollRecord not implemented");
+  }
+  
+  async searchPayrollRecords(year?: number, month?: number, employeeName?: string): Promise<PayrollRecord[]> {
+    throw new Error("MemStorage searchPayrollRecords not implemented");
+  }
+  
+  async createPayrollAuditLog(log: InsertPayrollAuditLog): Promise<PayrollAuditLog> {
+    throw new Error("MemStorage createPayrollAuditLog not implemented");
+  }
+  
+  async getPayrollAuditLogsByRecord(payrollRecordId: string): Promise<PayrollAuditLog[]> {
+    throw new Error("MemStorage getPayrollAuditLogsByRecord not implemented");
   }
   
   async bulkCreateLeaveHistory(records: InsertLeaveHistory[]): Promise<LeaveHistory[]> {
@@ -1120,6 +1147,58 @@ export class PgStorage implements IStorage {
           eq(payrollRecords.payPeriodMonth, month)
         )
       );
+  }
+  
+  async getPayrollRecordById(id: string): Promise<PayrollRecord | undefined> {
+    const [record] = await db.select()
+      .from(payrollRecords)
+      .where(eq(payrollRecords.id, id));
+    return record;
+  }
+  
+  async updatePayrollRecord(id: string, updates: Partial<PayrollRecord>): Promise<PayrollRecord | undefined> {
+    const [updated] = await db.update(payrollRecords)
+      .set(updates)
+      .where(eq(payrollRecords.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async searchPayrollRecords(year?: number, month?: number, employeeName?: string): Promise<PayrollRecord[]> {
+    const conditions = [];
+    if (year !== undefined) {
+      conditions.push(eq(payrollRecords.payPeriodYear, year));
+    }
+    if (month !== undefined) {
+      conditions.push(eq(payrollRecords.payPeriodMonth, month));
+    }
+    if (employeeName) {
+      conditions.push(like(payrollRecords.employeeName, `%${employeeName}%`));
+    }
+    
+    if (conditions.length > 0) {
+      return await db.select()
+        .from(payrollRecords)
+        .where(and(...conditions))
+        .orderBy(payrollRecords.employeeName);
+    }
+    return await db.select()
+      .from(payrollRecords)
+      .orderBy(payrollRecords.employeeName);
+  }
+  
+  async createPayrollAuditLog(log: InsertPayrollAuditLog): Promise<PayrollAuditLog> {
+    const [created] = await db.insert(payrollAuditLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+  
+  async getPayrollAuditLogsByRecord(payrollRecordId: string): Promise<PayrollAuditLog[]> {
+    return await db.select()
+      .from(payrollAuditLogs)
+      .where(eq(payrollAuditLogs.payrollRecordId, payrollRecordId))
+      .orderBy(desc(payrollAuditLogs.changedAt));
   }
   
   // Leave history methods (CSV import)
