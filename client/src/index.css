@@ -286,3 +286,80 @@
     inset: -1px;
   }
 }
+
+/* Print styles for payslip and reports */
+@media print {
+  /* Hide non-printable elements */
+  .print\:hidden,
+  [data-radix-dialog-overlay],
+  header,
+  nav,
+  aside,
+  .sidebar,
+  button:not(.print-show),
+  [data-state="closed"] {
+    display: none !important;
+  }
+  
+  /* Dialog content should take full page width */
+  [data-radix-dialog-content] {
+    position: static !important;
+    max-height: none !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0.5rem !important;
+    margin: 0 !important;
+  }
+  
+  /* Reset body and html for print */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Prevent page breaks inside sections */
+  .payslip-section,
+  [data-testid="payslip-view"] > div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  /* Keep payslip content together */
+  [data-testid="payslip-view"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  /* Card styles for print */
+  .card,
+  [class*="Card"] {
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  /* Reduce margins for print */
+  @page {
+    margin: 0.5in;
+    size: auto;
+  }
+  
+  /* Compact text for print */
+  * {
+    font-size: inherit;
+    line-height: 1.3;
+  }
+  
+  /* Ensure colors print correctly */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

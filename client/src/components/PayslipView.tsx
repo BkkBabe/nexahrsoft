@@ -46,9 +46,9 @@ function LineItem({ label, value, isNegative, isBold, showZero = false }: LineIt
   const textColor = isNegative && value !== 0 ? "text-destructive" : "";
   
   return (
-    <div className={`flex justify-between items-center py-1 ${fontWeight}`}>
-      <span className="text-sm">{label}</span>
-      <span className={`font-mono text-sm ${textColor}`}>
+    <div className={`flex justify-between items-center py-0.5 print:py-0 ${fontWeight}`}>
+      <span className="text-sm print:text-xs">{label}</span>
+      <span className={`font-mono text-sm print:text-xs ${textColor}`}>
         ${isNegative && value !== 0 ? formatNegativeCurrency(value) : formatCurrency(value)}
       </span>
     </div>
@@ -60,27 +60,30 @@ interface SectionProps {
   sectionLetter: string;
   children: React.ReactNode;
   subtotal?: { label: string; value: number };
+  hideIfZero?: boolean;
 }
 
-function Section({ title, sectionLetter, children, subtotal }: SectionProps) {
+function Section({ title, sectionLetter, children, subtotal, hideIfZero = false }: SectionProps) {
+  if (hideIfZero && subtotal && subtotal.value === 0) return null;
+  
   return (
-    <div className="space-y-2">
+    <div className="space-y-1 print:space-y-0">
       <div className="flex items-center gap-2">
-        <Badge variant="outline" className="font-mono text-xs">
+        <Badge variant="outline" className="font-mono text-xs print:text-[10px] print:px-1 print:py-0">
           {sectionLetter}
         </Badge>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-sm print:text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </h3>
       </div>
-      <div className="pl-2 border-l-2 border-muted">
+      <div className="pl-2 border-l-2 border-muted print:border-l print:pl-1">
         {children}
-        {subtotal && (
+        {subtotal && subtotal.value > 0 && (
           <>
-            <Separator className="my-2" />
+            <Separator className="my-1 print:my-0.5" />
             <div className="flex justify-between items-center font-semibold">
-              <span className="text-sm">{subtotal.label}</span>
-              <span className="font-mono text-sm">${formatCurrency(subtotal.value)}</span>
+              <span className="text-sm print:text-xs">{subtotal.label}</span>
+              <span className="font-mono text-sm print:text-xs">${formatCurrency(subtotal.value)}</span>
             </div>
           </>
         )}
@@ -132,13 +135,13 @@ export default function PayslipView({
   return (
     <Card className="print:shadow-none print:border-none" data-testid="payslip-view">
       <CardHeader className="space-y-4">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div className="flex items-start gap-4">
-            {companySettings?.logoUrl && (
+        <div className="flex items-start justify-between flex-wrap gap-4 print:gap-2">
+          <div className="flex items-start gap-4 print:gap-2">
+            {companySettings?.clockInLogoUrl && (
               <img
-                src={companySettings.logoUrl}
+                src={companySettings.clockInLogoUrl}
                 alt="Company Logo"
-                className="h-16 w-16 object-contain rounded"
+                className="h-16 w-16 object-contain rounded print:h-12 print:w-12"
                 data-testid="img-company-logo"
               />
             )}
@@ -205,41 +208,41 @@ export default function PayslipView({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 print:space-y-2">
         <Section title="Employee Information" sectionLetter="A">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm print:text-xs print:gap-1">
             <div>
-              <p className="text-muted-foreground">Name</p>
+              <p className="text-muted-foreground print:text-[10px]">Name</p>
               <p className="font-medium" data-testid="text-employee-name">{record.employeeName}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Employee Code</p>
+              <p className="text-muted-foreground print:text-[10px]">Employee Code</p>
               <p className="font-medium" data-testid="text-employee-code">{record.employeeCode}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Department</p>
+              <p className="text-muted-foreground print:text-[10px]">Department</p>
               <p className="font-medium">{record.deptName || "-"}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Section</p>
+              <p className="text-muted-foreground print:text-[10px]">Section</p>
               <p className="font-medium">{record.secName || "-"}</p>
             </div>
             {record.nric && (
               <div>
-                <p className="text-muted-foreground">NRIC</p>
+                <p className="text-muted-foreground print:text-[10px]">NRIC</p>
                 <p className="font-medium">{record.nric}</p>
               </div>
             )}
             {record.joinDate && (
               <div>
-                <p className="text-muted-foreground">Join Date</p>
+                <p className="text-muted-foreground print:text-[10px]">Join Date</p>
                 <p className="font-medium">{record.joinDate}</p>
               </div>
             )}
           </div>
         </Section>
 
-        <Separator />
+        <Separator className="print:my-1" />
 
         <Section
           title="Basic Earnings"
@@ -254,6 +257,7 @@ export default function PayslipView({
           title="Overtime & Shift Allowances"
           sectionLetter="C"
           subtotal={{ label: "Total Overtime", value: totalOvertimeAllowances }}
+          hideIfZero
         >
           <LineItem label="Flat Rate Overtime" value={record.flat} />
           <LineItem label="OT 1.0x" value={record.ot10} />
@@ -268,6 +272,7 @@ export default function PayslipView({
           title="Allowances (With CPF)"
           sectionLetter="D"
           subtotal={{ label: "Total Allowances (CPF)", value: totalAllowancesWithCpf }}
+          hideIfZero
         >
           <LineItem label="Mobile Allowance" value={record.mobileAllowance} />
           <LineItem label="Transport Allowance" value={record.transportAllowance} />
@@ -279,34 +284,38 @@ export default function PayslipView({
           title="Allowances (Without CPF)"
           sectionLetter="E"
           subtotal={{ label: "Total Allowances (Non-CPF)", value: totalAllowancesWithoutCpf }}
+          hideIfZero
         >
           <LineItem label="Other Allowance" value={record.otherAllowance} />
           <LineItem label="House Rental Allowances" value={record.houseRentalAllowances} />
         </Section>
 
-        <Section title="Bonus & Additional Payments" sectionLetter="F">
-          <LineItem label="Bonus" value={record.bonus} />
-        </Section>
+        {record.bonus > 0 && (
+          <Section title="Bonus & Additional Payments" sectionLetter="F">
+            <LineItem label="Bonus" value={record.bonus} />
+          </Section>
+        )}
 
-        <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+        <div className="bg-muted/30 rounded-lg p-3 space-y-1 print:p-2 print:space-y-0">
           <div className="flex justify-between items-center font-semibold">
-            <span>Gross Wages</span>
-            <span className="font-mono text-lg" data-testid="text-gross-wages">
+            <span className="print:text-sm">Gross Wages</span>
+            <span className="font-mono text-lg print:text-sm" data-testid="text-gross-wages">
               ${formatCurrency(record.grossWages)}
             </span>
           </div>
-          <div className="flex justify-between items-center text-sm text-muted-foreground">
+          <div className="flex justify-between items-center text-sm text-muted-foreground print:text-xs">
             <span>CPF Wages (Ordinary + Additional)</span>
             <span className="font-mono">${formatCurrency(record.cpfWages)}</span>
           </div>
         </div>
 
-        <Separator />
+        <Separator className="print:my-1" />
 
         <Section
           title="Employee CPF Contribution"
           sectionLetter="G"
           subtotal={{ label: "Total Employee CPF", value: Math.abs(record.employeeCpf) }}
+          hideIfZero
         >
           <LineItem
             label="Employee CPF (20%)"
@@ -315,32 +324,38 @@ export default function PayslipView({
           />
         </Section>
 
-        <Section
-          title="Deductions"
-          sectionLetter="H"
-          subtotal={{ label: "Total Deductions", value: totalDeductionsEmployee }}
-        >
-          <LineItem label="Loan Repayments" value={record.loanRepaymentTotal} isNegative />
-          <LineItem label="No Pay Day Deduction" value={record.noPayDay} isNegative />
-          <div className="text-xs text-muted-foreground mt-2 mb-1">
-            Community Contributions:
-          </div>
-          <LineItem label="CDAC" value={record.cdac} isNegative />
-          <LineItem label="MBMF" value={record.mbmf} isNegative />
-          <LineItem label="SINDA" value={record.sinda} isNegative />
-          <LineItem label="ECF" value={record.ecf} isNegative />
-          <LineItem label="CC" value={record.cc} isNegative />
-        </Section>
+        {totalDeductionsEmployee > 0 && (
+          <Section
+            title="Deductions"
+            sectionLetter="H"
+            subtotal={{ label: "Total Deductions", value: totalDeductionsEmployee }}
+          >
+            <LineItem label="Loan Repayments" value={record.loanRepaymentTotal} isNegative />
+            <LineItem label="No Pay Day Deduction" value={record.noPayDay} isNegative />
+            {totalCommunityFund > 0 && (
+              <>
+                <div className="text-xs text-muted-foreground mt-1 mb-0.5 print:text-[10px]">
+                  Community Contributions:
+                </div>
+                <LineItem label="CDAC" value={record.cdac} isNegative />
+                <LineItem label="MBMF" value={record.mbmf} isNegative />
+                <LineItem label="SINDA" value={record.sinda} isNegative />
+                <LineItem label="ECF" value={record.ecf} isNegative />
+                <LineItem label="CC" value={record.cc} isNegative />
+              </>
+            )}
+          </Section>
+        )}
 
-        {isEmployerView && (
+        {isEmployerView && totalEmployerContributions > 0 && (
           <>
-            <Separator />
+            <Separator className="print:my-1" />
             <Section
               title="Employer Contributions (Not Shown to Employee)"
               sectionLetter="I"
               subtotal={{ label: "Total Employer Cost", value: totalEmployerContributions }}
             >
-              <div className="bg-primary/5 -mx-2 px-2 py-2 rounded-md border border-dashed border-primary/20">
+              <div className="bg-primary/5 -mx-2 px-2 py-1 rounded-md border border-dashed border-primary/20 print:py-0.5">
                 <LineItem
                   label="Employer CPF (17%)"
                   value={record.employerCpf}
@@ -352,25 +367,25 @@ export default function PayslipView({
           </>
         )}
 
-        <Separator />
+        <Separator className="print:my-1" />
 
         <Section title="Payment Summary" sectionLetter="J">
-          <div className="space-y-3">
+          <div className="space-y-2 print:space-y-1">
             <div className="flex justify-between items-center">
-              <span className="text-sm">Total Earnings</span>
-              <span className="font-mono">${formatCurrency(record.total)}</span>
+              <span className="text-sm print:text-xs">Total Earnings</span>
+              <span className="font-mono print:text-xs">${formatCurrency(record.total)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm">Less: Deductions</span>
-              <span className="font-mono text-destructive">
+              <span className="text-sm print:text-xs">Less: Deductions</span>
+              <span className="font-mono text-destructive print:text-xs">
                 -${formatCurrency(totalDeductionsEmployee)}
               </span>
             </div>
-            <Separator />
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-lg font-bold">Net Pay</span>
+            <Separator className="print:my-0.5" />
+            <div className="flex justify-between items-center pt-1 print:pt-0.5">
+              <span className="text-lg font-bold print:text-sm">Net Pay</span>
               <span
-                className="font-mono text-2xl font-bold text-primary"
+                className="font-mono text-2xl font-bold text-primary print:text-base"
                 data-testid="text-net-pay"
               >
                 ${formatCurrency(record.nett)}
@@ -378,19 +393,19 @@ export default function PayslipView({
             </div>
 
             {isEmployerView && (
-              <div className="mt-4 pt-4 border-t border-dashed">
+              <div className="mt-3 pt-3 border-t border-dashed print:mt-1 print:pt-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-muted-foreground">
+                  <span className="text-sm font-medium text-muted-foreground print:text-xs">
                     Total Cost to Company
                   </span>
                   <span
-                    className="font-mono text-lg font-semibold"
+                    className="font-mono text-lg font-semibold print:text-sm"
                     data-testid="text-total-cost"
                   >
                     ${formatCurrency(record.grossWages + totalEmployerContributions)}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 print:text-[10px] print:mt-0.5">
                   (Gross Wages + Employer CPF + Levies)
                 </p>
               </div>
@@ -399,7 +414,7 @@ export default function PayslipView({
         </Section>
 
         {record.payMode && (
-          <div className="text-xs text-muted-foreground text-center mt-4">
+          <div className="text-xs text-muted-foreground text-center mt-2 print:text-[10px] print:mt-1">
             Payment Method: {record.payMode}
             {record.chequeNo && ` | Cheque No: ${record.chequeNo}`}
           </div>
