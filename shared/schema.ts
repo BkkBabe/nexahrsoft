@@ -32,6 +32,8 @@ export const users = pgTable("users", {
 export const companySettings = pgTable("company_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyName: text("company_name").notNull().default("NexaHR"),
+  companyAddress: text("company_address"), // Company address for payslip header
+  companyUen: text("company_uen"), // Company UEN (Unique Entity Number) for payslip header
   logoUrl: text("logo_url"), // URL to app logo in object storage (used in header/branding)
   clockInLogoUrl: text("clock_in_logo_url"), // URL to company logo displayed during clock-in
   faviconUrl: text("favicon_url"), // URL to favicon in object storage
@@ -441,3 +443,53 @@ export const insertLeaveAuditLogSchema = createInsertSchema(leaveAuditLogs).omit
 
 export type InsertLeaveAuditLog = z.infer<typeof insertLeaveAuditLogSchema>;
 export type LeaveAuditLog = typeof leaveAuditLogs.$inferSelect;
+
+// Payroll Loan Accounts - tracks loans given to employees
+export const payrollLoanAccounts = pgTable("payroll_loan_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  employeeCode: text("employee_code").notNull(),
+  employeeName: text("employee_name").notNull(),
+  loanType: text("loan_type").notNull(), // 'salary_advance', 'company_loan', 'personal_loan', etc.
+  loanDescription: text("loan_description"),
+  principalAmount: integer("principal_amount").notNull(), // cents - original loan amount
+  outstandingBalance: integer("outstanding_balance").notNull(), // cents - remaining balance
+  monthlyRepayment: integer("monthly_repayment").notNull().default(0), // cents - monthly deduction amount
+  interestRate: integer("interest_rate").notNull().default(0), // basis points (100 = 1%)
+  startDate: text("start_date").notNull(), // YYYY-MM-DD
+  endDate: text("end_date"), // YYYY-MM-DD expected payoff date
+  status: text("status").notNull().default("active"), // 'active', 'paid_off', 'written_off', 'suspended'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPayrollLoanAccountSchema = createInsertSchema(payrollLoanAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPayrollLoanAccount = z.infer<typeof insertPayrollLoanAccountSchema>;
+export type PayrollLoanAccount = typeof payrollLoanAccounts.$inferSelect;
+
+// Payroll Loan Repayments - tracks individual repayments against loans
+export const payrollLoanRepayments = pgTable("payroll_loan_repayments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  loanAccountId: varchar("loan_account_id").notNull().references(() => payrollLoanAccounts.id),
+  payPeriodYear: integer("pay_period_year").notNull(),
+  payPeriodMonth: integer("pay_period_month").notNull(),
+  repaymentAmount: integer("repayment_amount").notNull(), // cents
+  repaymentType: text("repayment_type").notNull().default("payroll_deduction"), // 'payroll_deduction', 'manual_payment', 'adjustment'
+  notes: text("notes"),
+  processedAt: timestamp("processed_at").notNull().defaultNow(),
+  processedBy: text("processed_by"),
+});
+
+export const insertPayrollLoanRepaymentSchema = createInsertSchema(payrollLoanRepayments).omit({
+  id: true,
+  processedAt: true,
+});
+
+export type InsertPayrollLoanRepayment = z.infer<typeof insertPayrollLoanRepaymentSchema>;
+export type PayrollLoanRepayment = typeof payrollLoanRepayments.$inferSelect;
