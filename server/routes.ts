@@ -2824,6 +2824,177 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // === Payroll Loan Management ===
+  
+  // Get all loan accounts (admin only)
+  app.get("/api/admin/payroll/loans", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const loans = await storage.getAllPayrollLoanAccounts();
+      res.json({ loans });
+    } catch (error) {
+      console.error("Get loans error:", error);
+      res.status(500).json({ message: "Failed to fetch loans" });
+    }
+  });
+  
+  // Get active loans (admin only)
+  app.get("/api/admin/payroll/loans/active", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const loans = await storage.getActivePayrollLoans();
+      res.json({ loans });
+    } catch (error) {
+      console.error("Get active loans error:", error);
+      res.status(500).json({ message: "Failed to fetch active loans" });
+    }
+  });
+  
+  // Get loans for a specific employee (admin only)
+  app.get("/api/admin/payroll/loans/employee/:employeeCode", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { employeeCode } = req.params;
+      const loans = await storage.getPayrollLoanAccountsByEmployee(employeeCode);
+      res.json({ loans });
+    } catch (error) {
+      console.error("Get employee loans error:", error);
+      res.status(500).json({ message: "Failed to fetch employee loans" });
+    }
+  });
+  
+  // Create a new loan (admin only)
+  app.post("/api/admin/payroll/loans", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.string().nullable().optional(),
+        employeeCode: z.string(),
+        employeeName: z.string(),
+        loanType: z.string(),
+        loanDescription: z.string().nullable().optional(),
+        principalAmount: z.number().positive(),
+        monthlyRepayment: z.number().min(0),
+        interestRate: z.number().min(0).default(0),
+        startDate: z.string(),
+        endDate: z.string().nullable().optional(),
+      });
+      
+      const data = schema.parse(req.body);
+      const adminUsername = (req.session as any)?.adminUsername || "admin";
+      
+      const loan = await storage.createPayrollLoanAccount({
+        ...data,
+        outstandingBalance: data.principalAmount,
+        createdBy: adminUsername,
+        status: "active",
+      });
+      
+      res.json({ loan, message: "Loan created successfully" });
+    } catch (error) {
+      console.error("Create loan error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create loan" });
+    }
+  });
+  
+  // Update a loan (admin only)
+  app.patch("/api/admin/payroll/loans/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const schema = z.object({
+        loanType: z.string().optional(),
+        loanDescription: z.string().nullable().optional(),
+        monthlyRepayment: z.number().min(0).optional(),
+        endDate: z.string().nullable().optional(),
+        status: z.enum(["active", "paid_off", "written_off", "suspended"]).optional(),
+      });
+      
+      const updates = schema.parse(req.body);
+      const loan = await storage.updatePayrollLoanAccount(id, updates);
+      
+      if (!loan) {
+        return res.status(404).json({ message: "Loan not found" });
+      }
+      
+      res.json({ loan, message: "Loan updated successfully" });
+    } catch (error) {
+      console.error("Update loan error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update loan" });
+    }
+  });
+  
+  // Record a loan repayment (admin only)
+  app.post("/api/admin/payroll/loans/:loanId/repayments", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { loanId } = req.params;
+      const schema = z.object({
+        payPeriodYear: z.number(),
+        payPeriodMonth: z.number().min(1).max(12),
+        repaymentAmount: z.number().positive(),
+        repaymentType: z.string().default("payroll_deduction"),
+        notes: z.string().nullable().optional(),
+      });
+      
+      const data = schema.parse(req.body);
+      const adminUsername = (req.session as any)?.adminUsername || "admin";
+      
+      const loan = await storage.getPayrollLoanAccount(loanId);
+      if (!loan) {
+        return res.status(404).json({ message: "Loan not found" });
+      }
+      
+      const repayment = await storage.createPayrollLoanRepayment({
+        loanAccountId: loanId,
+        ...data,
+        processedBy: adminUsername,
+      });
+      
+      const updatedLoan = await storage.getPayrollLoanAccount(loanId);
+      
+      res.json({ 
+        repayment, 
+        loan: updatedLoan,
+        message: "Repayment recorded successfully" 
+      });
+    } catch (error) {
+      console.error("Create repayment error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to record repayment" });
+    }
+  });
+  
+  // Get repayments for a loan (admin only)
+  app.get("/api/admin/payroll/loans/:loanId/repayments", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { loanId } = req.params;
+      const repayments = await storage.getLoanRepaymentsByLoan(loanId);
+      res.json({ repayments });
+    } catch (error) {
+      console.error("Get loan repayments error:", error);
+      res.status(500).json({ message: "Failed to fetch repayments" });
+    }
+  });
+  
+  // Get loan repayments for an employee for a specific pay period (for payslip)
+  app.get("/api/admin/payroll/loans/repayments/:employeeCode/:year/:month", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { employeeCode, year, month } = req.params;
+      const repayments = await storage.getEmployeeLoanRepaymentsForPeriod(
+        employeeCode, 
+        parseInt(year), 
+        parseInt(month)
+      );
+      res.json({ repayments });
+    } catch (error) {
+      console.error("Get employee loan repayments error:", error);
+      res.status(500).json({ message: "Failed to fetch employee loan repayments" });
+    }
+  });
+
   // Serve public objects
   app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
     const filePath = req.params.filePath;

@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -107,6 +107,20 @@ export interface IStorage {
   // Leave audit log methods
   createLeaveAuditLog(log: InsertLeaveAuditLog): Promise<LeaveAuditLog>;
   getLeaveAuditLogs(limit?: number): Promise<LeaveAuditLog[]>;
+  
+  // Payroll Loan methods
+  createPayrollLoanAccount(loan: InsertPayrollLoanAccount): Promise<PayrollLoanAccount>;
+  updatePayrollLoanAccount(id: string, updates: Partial<PayrollLoanAccount>): Promise<PayrollLoanAccount | undefined>;
+  getPayrollLoanAccount(id: string): Promise<PayrollLoanAccount | undefined>;
+  getPayrollLoanAccountsByEmployee(employeeCode: string): Promise<PayrollLoanAccount[]>;
+  getActivePayrollLoans(): Promise<PayrollLoanAccount[]>;
+  getAllPayrollLoanAccounts(): Promise<PayrollLoanAccount[]>;
+  
+  // Payroll Loan Repayment methods
+  createPayrollLoanRepayment(repayment: InsertPayrollLoanRepayment): Promise<PayrollLoanRepayment>;
+  getLoanRepaymentsByLoan(loanAccountId: string): Promise<PayrollLoanRepayment[]>;
+  getLoanRepaymentsByPeriod(year: number, month: number): Promise<PayrollLoanRepayment[]>;
+  getEmployeeLoanRepaymentsForPeriod(employeeCode: string, year: number, month: number): Promise<PayrollLoanRepayment[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -118,6 +132,8 @@ export class MemStorage implements IStorage {
     this.companySettings = {
       id: randomUUID(),
       companyName: "NexaHR",
+      companyAddress: null,
+      companyUen: null,
       logoUrl: null,
       clockInLogoUrl: null,
       faviconUrl: null,
@@ -128,6 +144,38 @@ export class MemStorage implements IStorage {
       senderName: null,
       appUrl: "https://app.nexahrms.com",
     };
+  }
+  
+  // Stub implementations for loan methods (MemStorage not used in production)
+  async createPayrollLoanAccount(loan: InsertPayrollLoanAccount): Promise<PayrollLoanAccount> {
+    throw new Error("Not implemented in MemStorage");
+  }
+  async updatePayrollLoanAccount(id: string, updates: Partial<PayrollLoanAccount>): Promise<PayrollLoanAccount | undefined> {
+    throw new Error("Not implemented in MemStorage");
+  }
+  async getPayrollLoanAccount(id: string): Promise<PayrollLoanAccount | undefined> {
+    return undefined;
+  }
+  async getPayrollLoanAccountsByEmployee(employeeCode: string): Promise<PayrollLoanAccount[]> {
+    return [];
+  }
+  async getActivePayrollLoans(): Promise<PayrollLoanAccount[]> {
+    return [];
+  }
+  async getAllPayrollLoanAccounts(): Promise<PayrollLoanAccount[]> {
+    return [];
+  }
+  async createPayrollLoanRepayment(repayment: InsertPayrollLoanRepayment): Promise<PayrollLoanRepayment> {
+    throw new Error("Not implemented in MemStorage");
+  }
+  async getLoanRepaymentsByLoan(loanAccountId: string): Promise<PayrollLoanRepayment[]> {
+    return [];
+  }
+  async getLoanRepaymentsByPeriod(year: number, month: number): Promise<PayrollLoanRepayment[]> {
+    return [];
+  }
+  async getEmployeeLoanRepaymentsForPeriod(employeeCode: string, year: number, month: number): Promise<PayrollLoanRepayment[]> {
+    return [];
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -1168,6 +1216,96 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(leaveAuditLogs)
       .orderBy(desc(leaveAuditLogs.changedAt));
+  }
+  
+  // Payroll Loan Account methods
+  async createPayrollLoanAccount(loan: InsertPayrollLoanAccount): Promise<PayrollLoanAccount> {
+    const [created] = await db.insert(payrollLoanAccounts)
+      .values(loan)
+      .returning();
+    return created;
+  }
+  
+  async updatePayrollLoanAccount(id: string, updates: Partial<PayrollLoanAccount>): Promise<PayrollLoanAccount | undefined> {
+    const [updated] = await db.update(payrollLoanAccounts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(payrollLoanAccounts.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async getPayrollLoanAccount(id: string): Promise<PayrollLoanAccount | undefined> {
+    const [loan] = await db.select()
+      .from(payrollLoanAccounts)
+      .where(eq(payrollLoanAccounts.id, id));
+    return loan;
+  }
+  
+  async getPayrollLoanAccountsByEmployee(employeeCode: string): Promise<PayrollLoanAccount[]> {
+    return await db.select()
+      .from(payrollLoanAccounts)
+      .where(eq(payrollLoanAccounts.employeeCode, employeeCode))
+      .orderBy(desc(payrollLoanAccounts.createdAt));
+  }
+  
+  async getActivePayrollLoans(): Promise<PayrollLoanAccount[]> {
+    return await db.select()
+      .from(payrollLoanAccounts)
+      .where(eq(payrollLoanAccounts.status, "active"))
+      .orderBy(desc(payrollLoanAccounts.createdAt));
+  }
+  
+  async getAllPayrollLoanAccounts(): Promise<PayrollLoanAccount[]> {
+    return await db.select()
+      .from(payrollLoanAccounts)
+      .orderBy(desc(payrollLoanAccounts.createdAt));
+  }
+  
+  // Payroll Loan Repayment methods
+  async createPayrollLoanRepayment(repayment: InsertPayrollLoanRepayment): Promise<PayrollLoanRepayment> {
+    const [created] = await db.insert(payrollLoanRepayments)
+      .values(repayment)
+      .returning();
+    
+    // Update the loan's outstanding balance
+    const loan = await this.getPayrollLoanAccount(repayment.loanAccountId);
+    if (loan) {
+      const newBalance = loan.outstandingBalance - repayment.repaymentAmount;
+      await this.updatePayrollLoanAccount(loan.id, { 
+        outstandingBalance: Math.max(0, newBalance),
+        status: newBalance <= 0 ? "paid_off" : "active"
+      });
+    }
+    
+    return created;
+  }
+  
+  async getLoanRepaymentsByLoan(loanAccountId: string): Promise<PayrollLoanRepayment[]> {
+    return await db.select()
+      .from(payrollLoanRepayments)
+      .where(eq(payrollLoanRepayments.loanAccountId, loanAccountId))
+      .orderBy(desc(payrollLoanRepayments.processedAt));
+  }
+  
+  async getLoanRepaymentsByPeriod(year: number, month: number): Promise<PayrollLoanRepayment[]> {
+    return await db.select()
+      .from(payrollLoanRepayments)
+      .where(and(
+        eq(payrollLoanRepayments.payPeriodYear, year),
+        eq(payrollLoanRepayments.payPeriodMonth, month)
+      ))
+      .orderBy(desc(payrollLoanRepayments.processedAt));
+  }
+  
+  async getEmployeeLoanRepaymentsForPeriod(employeeCode: string, year: number, month: number): Promise<PayrollLoanRepayment[]> {
+    // Get all loans for this employee first, then filter repayments
+    const loans = await this.getPayrollLoanAccountsByEmployee(employeeCode);
+    const loanIds = loans.map(l => l.id);
+    
+    if (loanIds.length === 0) return [];
+    
+    const allRepayments = await this.getLoanRepaymentsByPeriod(year, month);
+    return allRepayments.filter(r => loanIds.includes(r.loanAccountId));
   }
 }
 
