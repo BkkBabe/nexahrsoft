@@ -2841,6 +2841,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get a specific payroll record with its audit history
+  app.get("/api/admin/payroll/records/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const record = await storage.getPayrollRecordById(id);
+      if (!record) {
+        return res.status(404).json({ message: "Payroll record not found" });
+      }
+      const auditLogs = await storage.getPayrollAuditLogsByRecord(id);
+      res.json({ record, auditLogs });
+    } catch (error) {
+      console.error("Get payroll record error:", error);
+      res.status(500).json({ message: "Failed to fetch payroll record" });
+    }
+  });
+
+  // Update a payroll record with audit logging
+  app.patch("/api/admin/payroll/records/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adminUsername = (req.session as any)?.adminUsername || "admin";
+      
+      const existingRecord = await storage.getPayrollRecordById(id);
+      if (!existingRecord) {
+        return res.status(404).json({ message: "Payroll record not found" });
+      }
+      
+      const editableFields = [
+        'basicSalary', 'monthlyVariablesComponent', 'flat', 'ot10', 'ot15', 'ot20', 'ot30',
+        'shiftAllowance', 'mobileAllowance', 'transportAllowance', 'serviceCallAllowances',
+        'otherAllowance', 'houseRentalAllowances', 'annualLeaveEncashment', 'totRestPhAmount',
+        'bonus', 'sdf', 'fwl', 'cc', 'cdac', 'ecf', 'mbmf', 'sinda', 'noPayDay',
+        'loanRepaymentTotal', 'employerCpf', 'employeeCpf'
+      ];
+      
+      const updates: Record<string, any> = {};
+      const reason = req.body.reason || null;
+      
+      for (const field of editableFields) {
+        if (req.body[field] !== undefined) {
+          const newValue = parseInt(req.body[field]);
+          if (!isNaN(newValue)) {
+            const oldValue = (existingRecord as any)[field] || 0;
+            if (newValue !== oldValue) {
+              updates[field] = newValue;
+              await storage.createPayrollAuditLog({
+                payrollRecordId: id,
+                fieldName: field,
+                oldValue: String(oldValue),
+                newValue: String(newValue),
+                changedBy: adminUsername,
+                reason: reason,
+              });
+            }
+          }
+        }
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return res.json({ record: existingRecord, message: "No changes made" });
+      }
+      
+      const recalculate = (record: any) => {
+        const totSalary = record.basicSalary + record.monthlyVariablesComponent;
+        const overtimeTotal = record.flat + record.ot10 + record.ot15 + record.ot20 + record.ot30 + 
+          record.shiftAllowance + record.totRestPhAmount;
+        const allowancesWithCpf = record.mobileAllowance + record.transportAllowance + 
+          record.annualLeaveEncashment + record.serviceCallAllowances;
+        const allowancesWithoutCpf = record.otherAllowance + record.houseRentalAllowances;
+        const grossWages = totSalary + overtimeTotal + allowancesWithCpf + allowancesWithoutCpf + record.bonus;
+        const cpfWages = totSalary + overtimeTotal + allowancesWithCpf + record.bonus;
+        const totalCpf = record.employerCpf + Math.abs(record.employeeCpf);
+        const communityDeductions = record.cc + record.cdac + record.ecf + record.mbmf + record.sinda;
+        const totalDeductions = record.loanRepaymentTotal + record.noPayDay + communityDeductions + Math.abs(record.employeeCpf);
+        const nett = grossWages - totalDeductions;
+        return { totSalary, grossWages, cpfWages, totalCpf, total: grossWages, nett };
+      };
+      
+      const mergedRecord = { ...existingRecord, ...updates };
+      const recalculated = recalculate(mergedRecord);
+      
+      const finalUpdates = { ...updates, ...recalculated };
+      const updated = await storage.updatePayrollRecord(id, finalUpdates);
+      
+      res.json({ record: updated, message: "Record updated successfully" });
+    } catch (error) {
+      console.error("Update payroll record error:", error);
+      res.status(500).json({ message: "Failed to update payroll record" });
+    }
+  });
+
+  // Search payroll records
+  app.get("/api/admin/payroll/search", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const month = req.query.month ? parseInt(req.query.month as string) : undefined;
+      const employeeName = req.query.name as string | undefined;
+      
+      const records = await storage.searchPayrollRecords(year, month, employeeName);
+      res.json({ records });
+    } catch (error) {
+      console.error("Search payroll records error:", error);
+      res.status(500).json({ message: "Failed to search payroll records" });
+    }
+  });
+
   // === Payroll Loan Management ===
   
   // Get all loan accounts (admin only)
