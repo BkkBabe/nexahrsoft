@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
 import PayslipView from "@/components/PayslipView";
+import EditPayslipModal from "@/components/EditPayslipModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,6 +70,9 @@ export default function AdminPayrollReportsPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
   const [payslipDialogOpen, setPayslipDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [editRecord, setEditRecord] = useState<PayrollRecord | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const buildQueryUrl = () => {
     let url = `/api/admin/payroll/records?year=${selectedYear}`;
@@ -115,7 +120,17 @@ export default function AdminPayrollReportsPage() {
     },
   });
 
-  const records = data?.records || [];
+  const allRecords = data?.records || [];
+  
+  const records = useMemo(() => {
+    if (!searchQuery.trim()) return allRecords;
+    const query = searchQuery.toLowerCase();
+    return allRecords.filter(
+      (r) =>
+        r.employeeName.toLowerCase().includes(query) ||
+        r.employeeCode.toLowerCase().includes(query)
+    );
+  }, [allRecords, searchQuery]);
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
@@ -246,7 +261,7 @@ export default function AdminPayrollReportsPage() {
       <Card data-testid="card-filter">
         <CardHeader>
           <CardTitle data-testid="text-filter-title">Filter Records</CardTitle>
-          <CardDescription data-testid="text-filter-description">Select year and month to filter payroll records</CardDescription>
+          <CardDescription data-testid="text-filter-description">Select year and month to filter payroll records, or search by employee name</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 flex-wrap">
@@ -274,6 +289,17 @@ export default function AdminPayrollReportsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex-1 min-w-[200px] max-w-sm relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by employee name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+                data-testid="input-search"
+              />
             </div>
             <Button 
               variant="outline" 
@@ -532,18 +558,32 @@ export default function AdminPayrollReportsPage() {
                         </td>
                         <td className="p-2 text-right font-mono font-medium" data-testid={`cell-nett-${idx}`}>{formatCurrency(row.nett)}</td>
                         <td className="p-2 text-center">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedPayslip(row);
-                              setPayslipDialogOpen(true);
-                            }}
-                            data-testid={`button-view-payslip-${idx}`}
-                          >
-                            <FileText className="h-4 w-4 mr-1" />
-                            View Payslip
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedPayslip(row);
+                                setPayslipDialogOpen(true);
+                              }}
+                              data-testid={`button-view-payslip-${idx}`}
+                            >
+                              <FileText className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditRecord(row);
+                                setEditModalOpen(true);
+                              }}
+                              data-testid={`button-edit-payslip-${idx}`}
+                            >
+                              <Pencil className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -600,6 +640,22 @@ export default function AdminPayrollReportsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Edit Payslip Modal */}
+      <EditPayslipModal
+        record={editRecord}
+        open={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditRecord(null);
+        }}
+        onSaved={() => {
+          queryClient.invalidateQueries({
+            queryKey: ['/api/admin/payroll/records'],
+            exact: false,
+          });
+        }}
+      />
     </div>
   );
 }
