@@ -133,22 +133,32 @@ export default function PayslipView({
     <Card className="print:shadow-none print:border-none" data-testid="payslip-view">
       <CardHeader className="space-y-4">
         <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            {companySettings?.companyName && (
-              <h2 className="text-xl font-bold" data-testid="text-company-name">
-                {companySettings.companyName}
-              </h2>
+          <div className="flex items-start gap-4">
+            {companySettings?.logoUrl && (
+              <img
+                src={companySettings.logoUrl}
+                alt="Company Logo"
+                className="h-16 w-16 object-contain rounded"
+                data-testid="img-company-logo"
+              />
             )}
-            {companySettings?.companyAddress && (
-              <p className="text-sm text-muted-foreground" data-testid="text-company-address">
-                {companySettings.companyAddress}
-              </p>
-            )}
-            {companySettings?.companyUen && (
-              <p className="text-sm text-muted-foreground">
-                UEN: <span data-testid="text-company-uen">{companySettings.companyUen}</span>
-              </p>
-            )}
+            <div>
+              {companySettings?.companyName && (
+                <h2 className="text-xl font-bold" data-testid="text-company-name">
+                  {companySettings.companyName}
+                </h2>
+              )}
+              {companySettings?.companyAddress && (
+                <p className="text-sm text-muted-foreground" data-testid="text-company-address">
+                  {companySettings.companyAddress}
+                </p>
+              )}
+              {companySettings?.companyUen && (
+                <p className="text-sm text-muted-foreground">
+                  UEN: <span data-testid="text-company-uen">{companySettings.companyUen}</span>
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-4 print:hidden">
             {showToggle && (

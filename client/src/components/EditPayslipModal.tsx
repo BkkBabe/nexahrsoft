@@ -402,7 +402,13 @@ export default function EditPayslipModal({
         </ScrollArea>
 
         <div className="flex items-center justify-between pt-4 border-t">
-          {hasChanges && (
+          {hasChanges && !reason.trim() && (
+            <div className="flex items-center gap-2 text-sm text-amber-600">
+              <AlertCircle className="h-4 w-4" />
+              Reason is required to save changes
+            </div>
+          )}
+          {hasChanges && reason.trim() && (
             <div className="flex items-center gap-2 text-sm text-amber-600">
               <AlertCircle className="h-4 w-4" />
               Unsaved changes
@@ -414,7 +420,7 @@ export default function EditPayslipModal({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!hasChanges || updateMutation.isPending}
+              disabled={!hasChanges || updateMutation.isPending || !reason.trim()}
               data-testid="button-save"
             >
               {updateMutation.isPending ? (

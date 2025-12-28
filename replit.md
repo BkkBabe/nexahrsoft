@@ -68,9 +68,12 @@ Preferred communication style: Simple, everyday language.
 
 - **Admin Payroll Management**: Comprehensive payroll functionality including:
   - **Payroll Import**: Import payroll data from CSV files with comprehensive field mapping
-  - **Payroll Reports**: View and export payroll records by year/month with statistics
+  - **Payroll Reports**: View and export payroll records by year/month with search by employee name/code
+  - **Editable Payslips**: Admin can edit any payslip component with full audit trail (field changes tracked with old/new values and reasons)
   - **Loan Management**: Create and manage employee loans (Company, Study, Housing types) with repayment tracking
   - **Payslip View**: Structured 10-section payslip display (A-J) following Singapore CPF regulations with:
+    - Company logo and branding from settings
+    - Zero-value fields automatically hidden for cleaner display
     - Employee/Employer view toggle: Employee view hides employer contributions; Employer view shows full cost to company
     - Section A: Employee Information
     - Section B: Basic Earnings (Basic Salary, Monthly Variables)
@@ -82,6 +85,7 @@ Preferred communication style: Simple, everyday language.
     - Section H: Deductions (Loans, No Pay Day, Community Contributions - CDAC, MBMF, SINDA, ECF, CC)
     - Section I: Employer Contributions (Employer CPF, SDF, FWL) - visible only in Employer view
     - Section J: Payment Summary with Net Pay and Total Cost to Company
+  - **Payroll Audit Logs Table**: Tracks all payslip edits (recordId, fieldName, oldValue, newValue, changedBy, reason, timestamp)
 
 ### Key Architectural Patterns
 
