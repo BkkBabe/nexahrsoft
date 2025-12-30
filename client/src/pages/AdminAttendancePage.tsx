@@ -1264,7 +1264,7 @@ export default function AdminAttendancePage() {
                           return (
                             <div
                               key={idx}
-                              className={`flex-1 ${heatmapViewType === 'week' ? 'min-w-[80px]' : 'min-w-[28px]'} p-1 text-center text-xs border-r last:border-r-0 ${isWeekend ? 'bg-muted/50' : ''}`}
+                              className={`flex-1 ${heatmapViewType === 'week' ? 'min-w-[80px]' : 'min-w-[28px]'} p-1 text-center text-xs border-r ${isWeekend ? 'bg-muted/50' : ''}`}
                             >
                               <div className="font-medium">{day.getDate()}</div>
                               <div className="text-muted-foreground text-[10px]">
@@ -1275,6 +1275,11 @@ export default function AdminAttendancePage() {
                             </div>
                           );
                         })}
+                      </div>
+                      {/* Total column header */}
+                      <div className="w-20 flex-shrink-0 p-1 text-center text-xs border-l bg-primary/10">
+                        <div className="font-bold">Total</div>
+                        <div className="text-muted-foreground text-[10px]">Hours</div>
                       </div>
                     </div>
 
@@ -1395,6 +1400,33 @@ export default function AdminAttendancePage() {
                                 );
                               })}
                             </div>
+                            {/* Total hours column for this employee */}
+                            {(() => {
+                              const userTotalHours = heatmapDays.reduce((sum, day) => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                if (day > today) return sum;
+                                const dateKey = getDateKey(day);
+                                const aggData = heatmapDataMap[user.id]?.[dateKey];
+                                return sum + (aggData?.totalHours || 0);
+                              }, 0);
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div 
+                                      className="w-20 flex-shrink-0 min-h-[36px] flex items-center justify-center text-sm font-bold border-l bg-primary/10 cursor-pointer hover:bg-primary/20"
+                                      data-testid={`total-hours-${user.id}`}
+                                    >
+                                      {userTotalHours > 0 ? userTotalHours.toFixed(1) : '-'}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="text-xs">
+                                    <div className="font-medium">{user.name}</div>
+                                    <div>Total hours this {heatmapViewType === 'week' ? 'week' : 'month'}: {userTotalHours.toFixed(1)} hrs</div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })()}
                           </div>
                         ))}
                       </div>

@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil, UserPlus, CheckCircle2, Copy, Check } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -63,6 +64,32 @@ function escapeCsvField(value: string): string {
   return value;
 }
 
+interface NewUserForm {
+  employeeCode: string;
+  name: string;
+  email: string;
+  department: string;
+  designation: string;
+  section: string;
+  mobileNumber: string;
+  gender: string;
+  joinDate: string;
+  role: "user" | "admin";
+}
+
+const initialFormState: NewUserForm = {
+  employeeCode: "",
+  name: "",
+  email: "",
+  department: "",
+  designation: "",
+  section: "",
+  mobileNumber: "",
+  gender: "",
+  joinDate: "",
+  role: "user",
+};
+
 export default function AdminPayrollReportsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -73,6 +100,11 @@ export default function AdminPayrollReportsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editRecord, setEditRecord] = useState<PayrollRecord | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newUserForm, setNewUserForm] = useState<NewUserForm>(initialFormState);
+  const [createdUserInfo, setCreatedUserInfo] = useState<{ username: string; password: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const buildQueryUrl = () => {
     let url = `/api/admin/payroll/records?year=${selectedYear}`;
@@ -119,6 +151,54 @@ export default function AdminPayrollReportsPage() {
       });
     },
   });
+
+  const createUserMutation = useMutation({
+    mutationFn: async (data: NewUserForm) => {
+      const response = await apiRequest("POST", "/api/admin/users/create", data);
+      return await response.json();
+    },
+    onSuccess: (data: { success: boolean; user: { username?: string; employeeCode?: string }; initialPassword: string; message: string }) => {
+      toast({
+        title: "Employee Created",
+        description: data.message,
+      });
+      setCreatedUserInfo({
+        username: data.user.username || data.user.employeeCode || "",
+        password: data.initialPassword,
+      });
+      setNewUserForm(initialFormState);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create employee",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFormChange = (field: keyof NewUserForm, value: string) => {
+    setNewUserForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreateUser = () => {
+    if (!newUserForm.employeeCode || !newUserForm.name || !newUserForm.email) {
+      toast({
+        title: "Missing Required Fields",
+        description: "Employee code, name, and email are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    createUserMutation.mutate(newUserForm);
+  };
+
+  const handleCopy = async (text: string, field: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   const allRecords = data?.records || [];
   
@@ -312,6 +392,219 @@ export default function AdminPayrollReportsPage() {
             </Button>
           </div>
         </CardContent>
+      </Card>
+
+      {/* Add Employee Card */}
+      <Card data-testid="card-add-employee">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5" />
+                Add Individual Employee
+              </CardTitle>
+              <CardDescription>
+                Create a new employee account with login credentials
+              </CardDescription>
+            </div>
+            <Button
+              variant={showAddForm ? "outline" : "default"}
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setCreatedUserInfo(null);
+              }}
+              data-testid="button-toggle-add-form"
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
+              {showAddForm ? "Hide Form" : "Add Employee"}
+            </Button>
+          </div>
+        </CardHeader>
+        {showAddForm && (
+          <CardContent className="space-y-4">
+            {createdUserInfo ? (
+              <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-4 space-y-4">
+                <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <span className="font-medium">Employee Created Successfully!</span>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-background rounded-md p-3 border">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Username</p>
+                      <p className="font-mono font-medium" data-testid="text-created-username">{createdUserInfo.username}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleCopy(createdUserInfo.username, "username")}
+                      data-testid="button-copy-username"
+                    >
+                      {copiedField === "username" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-background rounded-md p-3 border">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Initial Password</p>
+                      <p className="font-mono font-medium" data-testid="text-created-password">{createdUserInfo.password}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleCopy(createdUserInfo.password, "password")}
+                      data-testid="button-copy-password"
+                    >
+                      {copiedField === "password" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Share these credentials with the employee. They will be required to change their password on first login.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => setCreatedUserInfo(null)}
+                  data-testid="button-add-another"
+                >
+                  Add Another Employee
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="employeeCode">Employee Code *</Label>
+                    <Input
+                      id="employeeCode"
+                      placeholder="e.g., EMP001"
+                      value={newUserForm.employeeCode}
+                      onChange={(e) => handleFormChange("employeeCode", e.target.value)}
+                      data-testid="input-employee-code"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name *</Label>
+                    <Input
+                      id="name"
+                      placeholder="e.g., John Smith"
+                      value={newUserForm.name}
+                      onChange={(e) => handleFormChange("name", e.target.value)}
+                      data-testid="input-employee-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="e.g., john@company.com"
+                      value={newUserForm.email}
+                      onChange={(e) => handleFormChange("email", e.target.value)}
+                      data-testid="input-employee-email"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="department">Department</Label>
+                    <Input
+                      id="department"
+                      placeholder="e.g., Engineering"
+                      value={newUserForm.department}
+                      onChange={(e) => handleFormChange("department", e.target.value)}
+                      data-testid="input-employee-department"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="designation">Designation</Label>
+                    <Input
+                      id="designation"
+                      placeholder="e.g., Software Engineer"
+                      value={newUserForm.designation}
+                      onChange={(e) => handleFormChange("designation", e.target.value)}
+                      data-testid="input-employee-designation"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="section">Section</Label>
+                    <Input
+                      id="section"
+                      placeholder="e.g., Backend Team"
+                      value={newUserForm.section}
+                      onChange={(e) => handleFormChange("section", e.target.value)}
+                      data-testid="input-employee-section"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mobileNumber">Mobile Number</Label>
+                    <Input
+                      id="mobileNumber"
+                      type="tel"
+                      placeholder="e.g., +65 9123 4567"
+                      value={newUserForm.mobileNumber}
+                      onChange={(e) => handleFormChange("mobileNumber", e.target.value)}
+                      data-testid="input-employee-mobile"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gender">Gender</Label>
+                    <Select
+                      value={newUserForm.gender}
+                      onValueChange={(value) => handleFormChange("gender", value)}
+                    >
+                      <SelectTrigger data-testid="select-employee-gender">
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MALE">Male</SelectItem>
+                        <SelectItem value="FEMALE">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="joinDate">Join Date</Label>
+                    <Input
+                      id="joinDate"
+                      type="date"
+                      value={newUserForm.joinDate}
+                      onChange={(e) => handleFormChange("joinDate", e.target.value)}
+                      data-testid="input-employee-join-date"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewUserForm(initialFormState);
+                    }}
+                    data-testid="button-cancel-add"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleCreateUser}
+                    disabled={createUserMutation.isPending}
+                    data-testid="button-create-employee"
+                  >
+                    {createUserMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-4 w-4 mr-2" />
+                    )}
+                    Create Employee
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       {isLoading ? (
