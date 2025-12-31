@@ -256,9 +256,17 @@ export default function AdminAttendancePage() {
     ? getDateKey(new Date(heatmapWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000)) // 6 days after start
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
   
-  const { data: heatmapRecordsData, isLoading: heatmapLoading } = useQuery<{ records: AttendanceRecord[] }>({
+  const { data: heatmapRecordsData, isLoading: heatmapLoading, refetch: refetchHeatmapRecords } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
+    staleTime: 0, // Always consider stale to ensure fresh data
   });
+  
+  // Refetch when switching between week/month view
+  useEffect(() => {
+    if (viewMode === 'heatmap') {
+      refetchHeatmapRecords();
+    }
+  }, [heatmapViewType, heatmapStartDate, heatmapEndDate, viewMode]);
 
   // Fetch audit logs for attendance changes (for details and audit views)
   type AuditLogEntry = {
