@@ -148,7 +148,18 @@ function getDateKey(date: Date): string {
 }
 
 // Get date key from a date string or Date object (handles API dates)
+// IMPORTANT: Date strings like "2025-12-25" are parsed as UTC by JavaScript
+// but we need to treat them as local dates for display purposes
 function normalizeRecordDateKey(dateValue: Date | string): string {
+  if (typeof dateValue === 'string') {
+    // If it's already in YYYY-MM-DD format, return it directly
+    // This avoids timezone conversion issues
+    const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[1]}-${match[2]}-${match[3]}`;
+    }
+  }
+  // For Date objects or other formats, extract local date components
   const d = new Date(dateValue);
   return getDateKey(d);
 }
@@ -244,6 +255,7 @@ export default function AdminAttendancePage() {
   const heatmapEndDate = heatmapViewType === 'week'
     ? getDateKey(new Date(heatmapWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000)) // 6 days after start
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
+  
   const { data: heatmapRecordsData, isLoading: heatmapLoading } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
   });
