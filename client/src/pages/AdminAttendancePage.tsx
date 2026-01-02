@@ -184,7 +184,16 @@ export default function AdminAttendancePage() {
   const [viewMode, setViewMode] = useState<'today' | 'orphaned' | 'heatmap' | 'details'>('today');
   const [heatmapViewType, setHeatmapViewType] = useState<'week' | 'month'>('week');
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
+    // Initialize to previous month if we're in the first week of the month
+    // This provides better UX as most attendance data is in the previous month
     const now = new Date();
+    const dayOfMonth = now.getDate();
+    if (dayOfMonth <= 7) {
+      // First week - default to previous month
+      const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+      const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      return { year: prevYear, month: prevMonth };
+    }
     return { year: now.getFullYear(), month: now.getMonth() };
   });
   // For week view - track the start of the current week
@@ -260,6 +269,23 @@ export default function AdminAttendancePage() {
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
     staleTime: 0, // Always consider stale to ensure fresh data
   });
+  
+  // Sync month with week when switching from week to month view
+  // This ensures the month view shows the same period the user was viewing in week view
+  useEffect(() => {
+    if (heatmapViewType === 'month') {
+      // When switching to month view, use the month of the week start date
+      const weekMonth = heatmapWeekStart.getMonth();
+      const weekYear = heatmapWeekStart.getFullYear();
+      setHeatmapMonth(prev => {
+        // Only update if different to avoid unnecessary re-renders
+        if (prev.month !== weekMonth || prev.year !== weekYear) {
+          return { year: weekYear, month: weekMonth };
+        }
+        return prev;
+      });
+    }
+  }, [heatmapViewType, heatmapWeekStart]);
   
   // Refetch when switching between week/month view
   useEffect(() => {
