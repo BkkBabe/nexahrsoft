@@ -19,12 +19,27 @@ import type { AttendanceRecord, User } from "@shared/schema";
 // Address cache to avoid repeated API calls
 const addressCache: Record<string, string> = {};
 
-// Reverse geocode coordinates to address using OpenStreetMap Nominatim
+// Rate limiting for geocoding - track last request time
+let lastGeocodeTime = 0;
+const GEOCODE_DELAY_MS = 1200; // OpenStreetMap requires max 1 request per second
+
+// Delay helper
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Reverse geocode coordinates to address using OpenStreetMap Nominatim (with rate limiting)
 async function reverseGeocode(lat: string, lng: string): Promise<string> {
   const cacheKey = `${lat},${lng}`;
   if (addressCache[cacheKey]) {
     return addressCache[cacheKey];
   }
+  
+  // Rate limiting - wait if needed
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastGeocodeTime;
+  if (timeSinceLastRequest < GEOCODE_DELAY_MS) {
+    await delay(GEOCODE_DELAY_MS - timeSinceLastRequest);
+  }
+  lastGeocodeTime = Date.now();
   
   try {
     const response = await fetch(
@@ -252,9 +267,10 @@ export default function AdminAttendancePage() {
     queryKey: ['/api/admin/users'],
   });
 
-  // Fetch attendance records for selected clock-ins date
+  // Fetch attendance records for selected clock-ins date (only when viewing Clock-ins tab)
   const { data: clockInsRecordsData, isLoading: clockInsLoading } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: clockInsDate, endDate: clockInsDate }],
+    enabled: viewMode === 'today', // Only fetch when viewing Clock-ins tab
   });
 
   // Fetch attendance records for heatmap (week or month) - use local dates
@@ -433,17 +449,6 @@ export default function AdminAttendancePage() {
   // Create a map of userId -> date -> aggregated attendance data for heatmap
   const heatmapDataMap = useMemo(() => {
     const map: Record<string, Record<string, AggregatedAttendance>> = {};
-    // Debug: log the raw records received
-    console.log('[Heatmap Debug] Raw records count:', heatmapRecords.length);
-    console.log('[Heatmap Debug] Query params:', { heatmapStartDate, heatmapEndDate });
-    if (heatmapRecords.length > 0) {
-      console.log('[Heatmap Debug] Sample records:', heatmapRecords.slice(0, 3).map(r => ({
-        userId: r.userId,
-        date: r.date,
-        dateType: typeof r.date,
-        normalized: normalizeRecordDateKey(r.date)
-      })));
-    }
     
     heatmapRecords.forEach(record => {
       if (!map[record.userId]) {
@@ -471,14 +476,8 @@ export default function AdminAttendancePage() {
       }
     });
     
-    // Debug: log the constructed map
-    console.log('[Heatmap Debug] Map entries:', Object.keys(map).length);
-    Object.entries(map).slice(0, 3).forEach(([userId, dates]) => {
-      console.log('[Heatmap Debug] User map:', { userId, dates: Object.keys(dates) });
-    });
-    
     return map;
-  }, [heatmapRecords, heatmapStartDate, heatmapEndDate]);
+  }, [heatmapRecords]);
 
 
   // Filter employees for add attendance dialog (exclude admins)
