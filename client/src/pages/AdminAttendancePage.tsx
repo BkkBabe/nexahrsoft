@@ -433,6 +433,18 @@ export default function AdminAttendancePage() {
   // Create a map of userId -> date -> aggregated attendance data for heatmap
   const heatmapDataMap = useMemo(() => {
     const map: Record<string, Record<string, AggregatedAttendance>> = {};
+    // Debug: log the raw records received
+    console.log('[Heatmap Debug] Raw records count:', heatmapRecords.length);
+    console.log('[Heatmap Debug] Query params:', { heatmapStartDate, heatmapEndDate });
+    if (heatmapRecords.length > 0) {
+      console.log('[Heatmap Debug] Sample records:', heatmapRecords.slice(0, 3).map(r => ({
+        userId: r.userId,
+        date: r.date,
+        dateType: typeof r.date,
+        normalized: normalizeRecordDateKey(r.date)
+      })));
+    }
+    
     heatmapRecords.forEach(record => {
       if (!map[record.userId]) {
         map[record.userId] = {};
@@ -458,8 +470,15 @@ export default function AdminAttendancePage() {
         map[record.userId][dateKey].hasOpenSession = true;
       }
     });
+    
+    // Debug: log the constructed map
+    console.log('[Heatmap Debug] Map entries:', Object.keys(map).length);
+    Object.entries(map).slice(0, 3).forEach(([userId, dates]) => {
+      console.log('[Heatmap Debug] User map:', { userId, dates: Object.keys(dates) });
+    });
+    
     return map;
-  }, [heatmapRecords]);
+  }, [heatmapRecords, heatmapStartDate, heatmapEndDate]);
 
 
   // Filter employees for add attendance dialog (exclude admins)
