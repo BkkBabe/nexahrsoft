@@ -16,18 +16,27 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
 
-// Address cache to avoid repeated API calls - v2.0 geocoding rate limiting
+// Address cache to avoid repeated API calls
 const addressCache: Record<string, string> = {};
 
-// Rate limiting for geocoding - track last request time
+// Rate limiting for geocoding - track last request time  
 let lastGeocodeTime = 0;
-const GEOCODE_DELAY_MS = 1200; // OpenStreetMap requires max 1 request per second
+const GEOCODE_DELAY_MS = 1500; // 1.5 second delay between requests
 
-// Delay helper
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Delay helper for rate limiting
+const geocodeDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Global flag to track if geocoding is currently allowed
+let geocodingEnabled = true;
 
 // Reverse geocode coordinates to address using OpenStreetMap Nominatim (with rate limiting)
 async function reverseGeocode(lat: string, lng: string): Promise<string> {
+  // Early return if geocoding is disabled
+  if (!geocodingEnabled) {
+    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
+    return fallback;
+  }
+  
   const cacheKey = `${lat},${lng}`;
   if (addressCache[cacheKey]) {
     return addressCache[cacheKey];
@@ -37,9 +46,15 @@ async function reverseGeocode(lat: string, lng: string): Promise<string> {
   const now = Date.now();
   const timeSinceLastRequest = now - lastGeocodeTime;
   if (timeSinceLastRequest < GEOCODE_DELAY_MS) {
-    await delay(GEOCODE_DELAY_MS - timeSinceLastRequest);
+    await geocodeDelay(GEOCODE_DELAY_MS - timeSinceLastRequest);
   }
   lastGeocodeTime = Date.now();
+  
+  // Check again after delay if still enabled
+  if (!geocodingEnabled) {
+    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
+    return fallback;
+  }
   
   try {
     const response = await fetch(
@@ -345,9 +360,23 @@ export default function AdminAttendancePage() {
   const heatmapRecords = heatmapRecordsData?.records || [];
   const clockInsRecords = clockInsRecordsData?.records || [];
   
-  // Fetch addresses for clock-in/out locations
+  // Control geocoding based on view mode - CRITICAL: disable geocoding in heatmap views
   useEffect(() => {
-    if (clockInsRecords.length === 0 || viewMode !== 'today') return;
+    // Enable geocoding ONLY when viewing Clock-ins tab
+    geocodingEnabled = viewMode === 'today';
+  }, [viewMode]);
+  
+  // Fetch addresses for clock-in/out locations - ONLY runs when viewing Clock-ins tab
+  useEffect(() => {
+    // Triple check: Don't run geocoding in any view except Clock-ins
+    if (viewMode !== 'today') {
+      geocodingEnabled = false;
+      return;
+    }
+    if (clockInsRecords.length === 0) return;
+    
+    // Enable geocoding for this session
+    geocodingEnabled = true;
     
     const fetchAllAddresses = async () => {
       const recordsWithLocation = clockInsRecords.filter(r => 
@@ -355,16 +384,21 @@ export default function AdminAttendancePage() {
       );
       
       for (const record of recordsWithLocation) {
+        // Check if geocoding was disabled (user switched views)
+        if (!geocodingEnabled) break;
+        
         // Fetch clock-in address
         if (record.latitude && record.longitude) {
           const clockInKey = `${record.id}-in`;
-          // Check if we already have this address (using functional update to avoid stale closure)
+          // Check if we already have this address
           setAddresses(prev => {
             if (prev[clockInKey]) return prev; // Already have it
-            // Trigger async fetch
+            // Trigger async fetch with rate limiting
             reverseGeocode(record.latitude!, record.longitude!)
               .then(address => {
-                setAddresses(p => ({ ...p, [clockInKey]: address }));
+                if (geocodingEnabled) {
+                  setAddresses(p => ({ ...p, [clockInKey]: address }));
+                }
               })
               .catch(() => {});
             return prev;
@@ -377,7 +411,9 @@ export default function AdminAttendancePage() {
             if (prev[clockOutKey]) return prev;
             reverseGeocode(record.clockOutLatitude!, record.clockOutLongitude!)
               .then(address => {
-                setAddresses(p => ({ ...p, [clockOutKey]: address }));
+                if (geocodingEnabled) {
+                  setAddresses(p => ({ ...p, [clockOutKey]: address }));
+                }
               })
               .catch(() => {});
             return prev;
@@ -387,6 +423,11 @@ export default function AdminAttendancePage() {
     };
     
     fetchAllAddresses();
+    
+    // Cleanup: disable geocoding when component effect cleans up
+    return () => {
+      geocodingEnabled = false;
+    };
   }, [clockInsRecords, viewMode]);
   
   // Check if selected date is today
