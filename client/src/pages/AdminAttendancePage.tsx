@@ -26,17 +26,9 @@ const GEOCODE_DELAY_MS = 1500; // 1.5 second delay between requests
 // Delay helper for rate limiting
 const geocodeDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Global flag to track if geocoding is currently allowed
-let geocodingEnabled = true;
-
 // Reverse geocode coordinates to address using OpenStreetMap Nominatim (with rate limiting)
+// This function is called on-demand when user hovers over a location link - NOT automatically
 async function reverseGeocode(lat: string, lng: string): Promise<string> {
-  // Early return if geocoding is disabled
-  if (!geocodingEnabled) {
-    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
-    return fallback;
-  }
-  
   const cacheKey = `${lat},${lng}`;
   if (addressCache[cacheKey]) {
     return addressCache[cacheKey];
@@ -49,12 +41,6 @@ async function reverseGeocode(lat: string, lng: string): Promise<string> {
     await geocodeDelay(GEOCODE_DELAY_MS - timeSinceLastRequest);
   }
   lastGeocodeTime = Date.now();
-  
-  // Check again after delay if still enabled
-  if (!geocodingEnabled) {
-    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
-    return fallback;
-  }
   
   try {
     const response = await fetch(
@@ -211,7 +197,8 @@ function getHeatmapTextColor(hours: number): string {
 }
 
 export default function AdminAttendancePage() {
-  const [viewMode, setViewMode] = useState<'today' | 'orphaned' | 'heatmap' | 'details'>('today');
+  // Default to heatmap view to prevent geocoding on initial page load
+  const [viewMode, setViewMode] = useState<'today' | 'orphaned' | 'heatmap' | 'details'>('heatmap');
   const [heatmapViewType, setHeatmapViewType] = useState<'week' | 'month'>('week');
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
     // Initialize to previous month if we're in the first week of the month
@@ -360,75 +347,21 @@ export default function AdminAttendancePage() {
   const heatmapRecords = heatmapRecordsData?.records || [];
   const clockInsRecords = clockInsRecordsData?.records || [];
   
-  // Control geocoding based on view mode - CRITICAL: disable geocoding in heatmap views
-  useEffect(() => {
-    // Enable geocoding ONLY when viewing Clock-ins tab
-    geocodingEnabled = viewMode === 'today';
-  }, [viewMode]);
+  // REMOVED: Automatic geocoding - addresses are now fetched on-demand when clicking location links
+  // This prevents API overload and allows heatmap views to load without geocoding interference
   
-  // Fetch addresses for clock-in/out locations - ONLY runs when viewing Clock-ins tab
-  useEffect(() => {
-    // Triple check: Don't run geocoding in any view except Clock-ins
-    if (viewMode !== 'today') {
-      geocodingEnabled = false;
-      return;
+  // On-demand address fetching function - called when user clicks a location link
+  const fetchAddressOnDemand = async (recordId: string, type: 'in' | 'out', lat: string, lng: string) => {
+    const key = `${recordId}-${type}`;
+    if (addresses[key]) return; // Already have it
+    
+    try {
+      const address = await reverseGeocode(lat, lng);
+      setAddresses(prev => ({ ...prev, [key]: address }));
+    } catch (error) {
+      // Silently fail - coordinate display is still available
     }
-    if (clockInsRecords.length === 0) return;
-    
-    // Enable geocoding for this session
-    geocodingEnabled = true;
-    
-    const fetchAllAddresses = async () => {
-      const recordsWithLocation = clockInsRecords.filter(r => 
-        (r.latitude && r.longitude) || (r.clockOutLatitude && r.clockOutLongitude)
-      );
-      
-      for (const record of recordsWithLocation) {
-        // Check if geocoding was disabled (user switched views)
-        if (!geocodingEnabled) break;
-        
-        // Fetch clock-in address
-        if (record.latitude && record.longitude) {
-          const clockInKey = `${record.id}-in`;
-          // Check if we already have this address
-          setAddresses(prev => {
-            if (prev[clockInKey]) return prev; // Already have it
-            // Trigger async fetch with rate limiting
-            reverseGeocode(record.latitude!, record.longitude!)
-              .then(address => {
-                if (geocodingEnabled) {
-                  setAddresses(p => ({ ...p, [clockInKey]: address }));
-                }
-              })
-              .catch(() => {});
-            return prev;
-          });
-        }
-        // Fetch clock-out address
-        if (record.clockOutLatitude && record.clockOutLongitude) {
-          const clockOutKey = `${record.id}-out`;
-          setAddresses(prev => {
-            if (prev[clockOutKey]) return prev;
-            reverseGeocode(record.clockOutLatitude!, record.clockOutLongitude!)
-              .then(address => {
-                if (geocodingEnabled) {
-                  setAddresses(p => ({ ...p, [clockOutKey]: address }));
-                }
-              })
-              .catch(() => {});
-            return prev;
-          });
-        }
-      }
-    };
-    
-    fetchAllAddresses();
-    
-    // Cleanup: disable geocoding when component effect cleans up
-    return () => {
-      geocodingEnabled = false;
-    };
-  }, [clockInsRecords, viewMode]);
+  };
   
   // Check if selected date is today
   const todayDate = getDateKey(new Date());
@@ -952,10 +885,11 @@ export default function AdminAttendancePage() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="flex items-start gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-0.5"
+                                      onMouseEnter={() => fetchAddressOnDemand(record.id, 'in', record.latitude!, record.longitude!)}
                                     >
                                       <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
                                       <span className="break-words">
-                                        {addresses[`${record.id}-in`] || 'Loading...'}
+                                        {addresses[`${record.id}-in`] || `${parseFloat(record.latitude).toFixed(4)}, ${parseFloat(record.longitude).toFixed(4)}`}
                                       </span>
                                       <ExternalLink className="h-3 w-3 shrink-0 mt-0.5" />
                                     </a>
@@ -978,10 +912,11 @@ export default function AdminAttendancePage() {
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="flex items-start gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-0.5"
+                                          onMouseEnter={() => fetchAddressOnDemand(record.id, 'out', record.clockOutLatitude!, record.clockOutLongitude!)}
                                         >
                                           <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
                                           <span className="break-words">
-                                            {addresses[`${record.id}-out`] || 'Loading...'}
+                                            {addresses[`${record.id}-out`] || `${parseFloat(record.clockOutLatitude).toFixed(4)}, ${parseFloat(record.clockOutLongitude).toFixed(4)}`}
                                           </span>
                                           <ExternalLink className="h-3 w-3 shrink-0 mt-0.5" />
                                         </a>
