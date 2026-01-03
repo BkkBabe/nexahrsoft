@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
 
-// Address cache to avoid repeated API calls
+// Address cache to avoid repeated API calls - v2.0 geocoding rate limiting
 const addressCache: Record<string, string> = {};
 
 // Rate limiting for geocoding - track last request time
