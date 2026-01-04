@@ -560,6 +560,36 @@ export default function AdminAttendancePage() {
     },
   });
 
+  // Resolve location for a single record (on-demand geocoding)
+  const [resolvingLocationId, setResolvingLocationId] = useState<string | null>(null);
+  const resolveLocationMutation = useMutation({
+    mutationFn: async (data: { recordId: string; locationType: "in" | "out" }) => {
+      const response = await apiRequest("POST", "/api/admin/attendance/resolve-location", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Location Resolved",
+        description: data.address || "Address updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      setResolvingLocationId(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resolve location",
+        variant: "destructive",
+      });
+      setResolvingLocationId(null);
+    },
+  });
+
+  const handleResolveLocation = (recordId: string, locationType: "in" | "out") => {
+    setResolvingLocationId(`${recordId}-${locationType}`);
+    resolveLocationMutation.mutate({ recordId, locationType });
+  };
+
   const toggleOrphanedSelection = (recordId: string) => {
     setSelectedOrphanedIds(prev => {
       const newSet = new Set(prev);
@@ -736,17 +766,6 @@ export default function AdminAttendancePage() {
                       Today
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => backfillLocationsMutation.mutate()}
-                    disabled={isViewOnlyAdmin || backfillLocationsMutation.isPending}
-                    data-testid="button-update-locations"
-                    title="Update location addresses for records showing coordinates"
-                  >
-                    <MapPin className="h-4 w-4 mr-1" />
-                    {backfillLocationsMutation.isPending ? "Updating..." : "Update Locations"}
-                  </Button>
                   <div className="text-sm text-muted-foreground">
                     <span className="font-medium text-foreground" data-testid="text-today-clocked-in-count">{clockInsRecords.length}</span> clock-ins
                   </div>
@@ -840,30 +859,30 @@ export default function AdminAttendancePage() {
                                         </span>
                                       </div>
                                       {record.latitude && record.longitude && (
-                                        <>
-                                          {expandedLocations.has(`${record.id}-in`) ? (
-                                            <a 
-                                              href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-1 ml-4"
-                                              data-testid={`link-location-in-${record.id}`}
-                                            >
-                                              <ExternalLink className="h-3 w-3" />
-                                              <span>Open in Google Maps</span>
-                                            </a>
-                                          ) : (
+                                        <div className="flex items-center gap-2 mt-1 ml-4">
+                                          <a 
+                                            href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                                            data-testid={`link-location-in-${record.id}`}
+                                          >
+                                            <ExternalLink className="h-3 w-3" />
+                                            <span>Map</span>
+                                          </a>
+                                          {(!record.clockInLocationText || /^[\d.-]+,\s*[\d.-]+$/.test(record.clockInLocationText)) && (
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1"
-                                              onClick={() => setExpandedLocations(prev => new Set([...Array.from(prev), `${record.id}-in`]))}
-                                              data-testid={`button-show-location-in-${record.id}`}
+                                              className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400"
+                                              onClick={() => handleResolveLocation(record.id, "in")}
+                                              disabled={resolvingLocationId === `${record.id}-in`}
+                                              data-testid={`button-resolve-location-in-${record.id}`}
                                             >
-                                              Display Location
+                                              {resolvingLocationId === `${record.id}-in` ? "Resolving..." : "Resolve Address"}
                                             </Button>
                                           )}
-                                        </>
+                                        </div>
                                       )}
                                     </div>
                                   ) : (
@@ -888,30 +907,30 @@ export default function AdminAttendancePage() {
                                             </span>
                                           </div>
                                           {record.clockOutLatitude && record.clockOutLongitude && (
-                                            <>
-                                              {expandedLocations.has(`${record.id}-out`) ? (
-                                                <a 
-                                                  href={`https://www.google.com/maps?q=${record.clockOutLatitude},${record.clockOutLongitude}`}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-1 ml-4"
-                                                  data-testid={`link-location-out-${record.id}`}
-                                                >
-                                                  <ExternalLink className="h-3 w-3" />
-                                                  <span>Open in Google Maps</span>
-                                                </a>
-                                              ) : (
+                                            <div className="flex items-center gap-2 mt-1 ml-4">
+                                              <a 
+                                                href={`https://www.google.com/maps?q=${record.clockOutLatitude},${record.clockOutLongitude}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                                                data-testid={`link-location-out-${record.id}`}
+                                              >
+                                                <ExternalLink className="h-3 w-3" />
+                                                <span>Map</span>
+                                              </a>
+                                              {(!record.clockOutLocationText || /^[\d.-]+,\s*[\d.-]+$/.test(record.clockOutLocationText)) && (
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
-                                                  className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1"
-                                                  onClick={() => setExpandedLocations(prev => new Set([...Array.from(prev), `${record.id}-out`]))}
-                                                  data-testid={`button-show-location-out-${record.id}`}
+                                                  className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400"
+                                                  onClick={() => handleResolveLocation(record.id, "out")}
+                                                  disabled={resolvingLocationId === `${record.id}-out`}
+                                                  data-testid={`button-resolve-location-out-${record.id}`}
                                                 >
-                                                  Display Location
+                                                  {resolvingLocationId === `${record.id}-out` ? "Resolving..." : "Resolve Address"}
                                                 </Button>
                                               )}
-                                            </>
+                                            </div>
                                           )}
                                         </div>
                                       ) : (

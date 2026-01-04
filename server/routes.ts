@@ -1532,6 +1532,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Resolve location for a single attendance record (on-demand geocoding)
+  app.post("/api/admin/attendance/resolve-location", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const schema = z.object({
+        recordId: z.string().uuid(),
+        locationType: z.enum(["in", "out"])
+      });
+
+      const { recordId, locationType } = schema.parse(req.body);
+
+      // Get the attendance record
+      const record = await storage.getAttendanceRecordById(recordId);
+      if (!record) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+
+      let lat: string | null = null;
+      let lng: string | null = null;
+      let updateField: string = "";
+
+      if (locationType === "in") {
+        lat = record.latitude;
+        lng = record.longitude;
+        updateField = "clockInLocationText";
+      } else {
+        lat = record.clockOutLatitude;
+        lng = record.clockOutLongitude;
+        updateField = "clockOutLocationText";
+      }
+
+      if (!lat || !lng) {
+        return res.status(400).json({ message: "No coordinates available to resolve" });
+      }
+
+      // Perform geocoding
+      const address = await serverReverseGeocode(lat, lng);
+
+      // Update the record with the resolved address
+      const updates: any = {};
+      updates[updateField] = address;
+      await storage.updateAttendanceRecord(recordId, updates);
+
+      res.json({
+        success: true,
+        address,
+        message: "Location resolved successfully"
+      });
+    } catch (error) {
+      console.error("Resolve location error:", error);
+      res.status(500).json({ message: "Failed to resolve location" });
+    }
+  });
+
   // Admin: Add attendance record for an employee (any date) - write access required
   app.post("/api/admin/attendance/add", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
