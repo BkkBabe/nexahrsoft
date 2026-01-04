@@ -14,23 +14,19 @@ const resend = process.env.RESEND_API ? new Resend(process.env.RESEND_API) : nul
 
 // Address cache for server-side geocoding
 const serverAddressCache: Record<string, string> = {};
-let lastServerGeocodeTime = 0;
 const SERVER_GEOCODE_DELAY_MS = 1100; // 1.1 second delay between requests
 
-// Server-side reverse geocoding function
-async function serverReverseGeocode(lat: string, lng: string): Promise<string> {
+// Promise chain to serialize geocode requests - ensures only one request at a time
+let geocodeQueue: Promise<void> = Promise.resolve();
+
+// Internal function that performs the actual geocoding
+async function performGeocode(lat: string, lng: string): Promise<string> {
   const cacheKey = `${lat},${lng}`;
+  
+  // Check cache first (already checked in wrapper, but double-check for safety)
   if (serverAddressCache[cacheKey]) {
     return serverAddressCache[cacheKey];
   }
-  
-  // Rate limiting - wait if needed
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastServerGeocodeTime;
-  if (timeSinceLastRequest < SERVER_GEOCODE_DELAY_MS) {
-    await new Promise(resolve => setTimeout(resolve, SERVER_GEOCODE_DELAY_MS - timeSinceLastRequest));
-  }
-  lastServerGeocodeTime = Date.now();
   
   try {
     const response = await fetch(
@@ -72,6 +68,42 @@ async function serverReverseGeocode(lat: string, lng: string): Promise<string> {
     serverAddressCache[cacheKey] = fallback;
     return fallback;
   }
+}
+
+// Server-side reverse geocoding function with proper serialization
+// This queues requests to ensure only one geocode call happens at a time with proper spacing
+async function serverReverseGeocode(lat: string, lng: string): Promise<string> {
+  const cacheKey = `${lat},${lng}`;
+  
+  // Return cached result immediately if available
+  if (serverAddressCache[cacheKey]) {
+    return serverAddressCache[cacheKey];
+  }
+  
+  // Create a new promise that chains after the current queue
+  // This ensures requests are processed sequentially with proper delays
+  return new Promise<string>((resolve, reject) => {
+    geocodeQueue = geocodeQueue.then(async () => {
+      try {
+        // Check cache again in case a previous queued request already resolved this
+        if (serverAddressCache[cacheKey]) {
+          resolve(serverAddressCache[cacheKey]);
+          return;
+        }
+        
+        // Perform the geocoding
+        const result = await performGeocode(lat, lng);
+        resolve(result);
+        
+        // Wait the required delay before allowing next request
+        await new Promise(r => setTimeout(r, SERVER_GEOCODE_DELAY_MS));
+      } catch (error) {
+        reject(error);
+      }
+    }).catch(() => {
+      // Keep the queue alive even if one request fails
+    });
+  });
 }
 
 // Admin credentials
