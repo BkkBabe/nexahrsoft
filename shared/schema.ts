@@ -68,8 +68,10 @@ export const attendanceRecords = pgTable("attendance_records", {
   photoUrl: text("photo_url"), // URL to attendance photo in object storage
   latitude: text("latitude"), // GPS latitude (clock-in)
   longitude: text("longitude"), // GPS longitude (clock-in)
+  clockInLocationText: text("clock_in_location_text"), // Geocoded address text (clock-in)
   clockOutLatitude: text("clock_out_latitude"), // GPS latitude (clock-out)
   clockOutLongitude: text("clock_out_longitude"), // GPS longitude (clock-out)
+  clockOutLocationText: text("clock_out_location_text"), // Geocoded address text (clock-out)
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
