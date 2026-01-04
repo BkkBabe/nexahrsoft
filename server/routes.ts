@@ -1433,13 +1433,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             clockOutDateTime = new Date(new Date(record.clockInTime).getTime() + 8 * 60 * 60 * 1000);
           }
 
-          // Calculate hours worked
-          const hoursWorked = (clockOutDateTime.getTime() - new Date(record.clockInTime).getTime()) / (1000 * 60 * 60);
-          const roundedHours = Math.round(hoursWorked * 2) / 2;
-
           await storage.updateAttendanceRecord(recordId, {
             clockOutTime: clockOutDateTime,
-            hoursWorked: roundedHours,
           });
 
           closedCount++;
@@ -1552,7 +1547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { recordId, locationType } = schema.parse(req.body);
 
       // Get the attendance record
-      const record = await storage.getAttendanceRecordById(recordId);
+      const record = await storage.getAttendanceRecord(recordId);
       if (!record) {
         return res.status(404).json({ message: "Attendance record not found" });
       }
@@ -2264,7 +2259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If replaceExisting, delete records for the year(s) being imported
       if (replaceExisting) {
-        const years = [...new Set(records.map(r => r.year))];
+        const years = Array.from(new Set(records.map(r => r.year)));
         for (const year of years) {
           await storage.deleteLeaveHistoryByYear(year);
         }
@@ -2273,8 +2268,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const created = await storage.bulkCreateLeaveHistory(records);
       
       // Log the import action
-      const adminUsername = req.session.adminUsername || req.session.userId || "admin";
-      const years = [...new Set(records.map(r => r.year))];
+      const adminUsername = req.session.userId || "admin";
+      const years = Array.from(new Set(records.map(r => r.year)));
       await storage.createLeaveAuditLog({
         action: "import",
         tableName: "leave_history",
@@ -2324,7 +2319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const records = await storage.getLeaveHistory(yearNum);
       
       // Calculate additional analytics
-      const uniqueEmployees = [...new Set(records.map(r => r.employeeCode))].length;
+      const uniqueEmployees = Array.from(new Set(records.map(r => r.employeeCode))).length;
       const totalRecords = records.length;
       
       // Group by month for chart data
@@ -2401,7 +2396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateLeaveHistory(id, data);
       
       // Log the change
-      const adminUsername = req.session.adminUsername || req.session.userId || "admin";
+      const adminUsername = req.session.userId || "admin";
       const changedFields = Object.keys(data).filter(k => data[k as keyof typeof data] !== undefined);
       
       await storage.createLeaveAuditLog({
@@ -2440,7 +2435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteLeaveHistory(id);
       
       // Log the deletion
-      const adminUsername = req.session.adminUsername || req.session.userId || "admin";
+      const adminUsername = req.session.userId || "admin";
       await storage.createLeaveAuditLog({
         action: "delete",
         tableName: "leave_history",
@@ -2994,7 +2989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
       const records = await storage.getPayrollRecords(year);
-      const allLeaveBalances = await storage.getAllLeaveBalances();
+      const allLeaveBalances = await storage.getAllLeaveBalances(year);
       const allLeaveApplications = await storage.getAllLeaveApplications();
       
       const summary = records.reduce((acc, record) => {
