@@ -19,7 +19,7 @@ const SERVER_GEOCODE_DELAY_MS = 1100; // 1.1 second delay between requests
 // Promise chain to serialize geocode requests - ensures only one request at a time
 let geocodeQueue: Promise<void> = Promise.resolve();
 
-// Internal function that performs the actual geocoding
+// Internal function that performs the actual geocoding using OpenStreetMap Nominatim
 async function performGeocode(lat: string, lng: string): Promise<string> {
   const cacheKey = `${lat},${lng}`;
   
@@ -29,18 +29,17 @@ async function performGeocode(lat: string, lng: string): Promise<string> {
   }
   
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          'Accept-Language': 'en',
-          'User-Agent': 'NexaHR-HRMS/1.0'
-        }
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Accept-Language': 'en',
+        'User-Agent': 'NexaHR-HRMS/1.0'
       }
-    );
+    });
     
     if (!response.ok) {
-      throw new Error('Geocoding failed');
+      throw new Error(`Geocoding failed with status ${response.status}`);
     }
     
     const data = await response.json();
@@ -1456,6 +1455,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to close orphaned sessions" });
+    }
+  });
+
+  // Admin: Backfill location text for records that have coordinates but no address
+  app.post("/api/admin/attendance/backfill-locations", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    // View-only admins cannot modify records
+    if (req.session.isViewOnlyAdmin) {
+      return res.status(403).json({ message: "View-only admins cannot modify attendance records" });
+    }
+
+    try {
+      // Get all attendance records
+      const allRecords = await storage.getAllAttendanceRecords();
+      
+      // Filter records that have coordinates but no location text
+      const recordsToUpdate = allRecords.filter(r => 
+        (r.latitude && r.longitude && !r.clockInLocationText) ||
+        (r.clockOutLatitude && r.clockOutLongitude && !r.clockOutLocationText)
+      );
+
+      console.log(`[Backfill] Found ${recordsToUpdate.length} records to update`);
+
+      let updatedCount = 0;
+      const errors: string[] = [];
+
+      for (const record of recordsToUpdate) {
+        try {
+          const updates: any = {};
+          
+          // Geocode clock-in location if needed
+          if (record.latitude && record.longitude && !record.clockInLocationText) {
+            console.log(`[Backfill] Geocoding clock-in for record ${record.id}: ${record.latitude}, ${record.longitude}`);
+            const address = await serverReverseGeocode(record.latitude, record.longitude);
+            // Only update if we got a real address (not coordinates)
+            if (address && !address.match(/^[\d.-]+,\s*[\d.-]+$/)) {
+              updates.clockInLocationText = address;
+            }
+          }
+          
+          // Geocode clock-out location if needed
+          if (record.clockOutLatitude && record.clockOutLongitude && !record.clockOutLocationText) {
+            console.log(`[Backfill] Geocoding clock-out for record ${record.id}: ${record.clockOutLatitude}, ${record.clockOutLongitude}`);
+            const address = await serverReverseGeocode(record.clockOutLatitude, record.clockOutLongitude);
+            // Only update if we got a real address (not coordinates)
+            if (address && !address.match(/^[\d.-]+,\s*[\d.-]+$/)) {
+              updates.clockOutLocationText = address;
+            }
+          }
+          
+          if (Object.keys(updates).length > 0) {
+            await storage.updateAttendanceRecord(record.id, updates);
+            updatedCount++;
+            console.log(`[Backfill] Updated record ${record.id} with:`, updates);
+          }
+        } catch (err) {
+          console.error(`[Backfill] Error processing record ${record.id}:`, err);
+          errors.push(`Failed to update record ${record.id}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Updated ${updatedCount} of ${recordsToUpdate.length} records with location data`,
+        updatedCount,
+        totalToUpdate: recordsToUpdate.length,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error) {
+      console.error("Backfill locations error:", error);
+      res.status(500).json({ message: "Failed to backfill locations" });
     }
   });
 

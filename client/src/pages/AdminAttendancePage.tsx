@@ -538,6 +538,28 @@ export default function AdminAttendancePage() {
     });
   };
 
+  // Backfill location text for records with coordinates but no address
+  const backfillLocationsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/attendance/backfill-locations", {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Locations Updated",
+        description: data.message || `Updated ${data.updatedCount} records with location data`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update locations",
+        variant: "destructive",
+      });
+    },
+  });
+
   const toggleOrphanedSelection = (recordId: string) => {
     setSelectedOrphanedIds(prev => {
       const newSet = new Set(prev);
@@ -714,6 +736,17 @@ export default function AdminAttendancePage() {
                       Today
                     </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => backfillLocationsMutation.mutate()}
+                    disabled={isViewOnlyAdmin || backfillLocationsMutation.isPending}
+                    data-testid="button-update-locations"
+                    title="Update location addresses for records showing coordinates"
+                  >
+                    <MapPin className="h-4 w-4 mr-1" />
+                    {backfillLocationsMutation.isPending ? "Updating..." : "Update Locations"}
+                  </Button>
                   <div className="text-sm text-muted-foreground">
                     <span className="font-medium text-foreground" data-testid="text-today-clocked-in-count">{clockInsRecords.length}</span> clock-ins
                   </div>

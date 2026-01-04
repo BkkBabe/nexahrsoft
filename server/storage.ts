@@ -29,6 +29,7 @@ export interface IStorage {
   getOrphanedAttendanceSessions(): Promise<AttendanceRecord[]>;
   getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
+  getAllAttendanceRecords(): Promise<AttendanceRecord[]>;
   
   // Session tracking methods
   createUserSession(session: InsertUserSession): Promise<UserSession>;
@@ -304,6 +305,10 @@ export class MemStorage implements IStorage {
   }
 
   async getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
+    throw new Error("MemStorage attendance not implemented");
+  }
+
+  async getAllAttendanceRecords(): Promise<AttendanceRecord[]> {
     throw new Error("MemStorage attendance not implemented");
   }
 
@@ -742,6 +747,12 @@ export class PgStorage implements IStorage {
           lte(attendanceRecords.date, endDate)
         )
       )
+      .orderBy(desc(attendanceRecords.date));
+  }
+
+  async getAllAttendanceRecords(): Promise<AttendanceRecord[]> {
+    return await db.select()
+      .from(attendanceRecords)
       .orderBy(desc(attendanceRecords.date));
   }
 
