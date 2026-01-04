@@ -1222,6 +1222,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         clockInLocationText,
       });
 
+      // Recalculate daily summary for this user and date
+      await storage.recalculateDailyAttendanceSummary(date, userId);
+
       res.json({ success: true, record });
     } catch (error) {
       console.error("Clock in error:", error);
@@ -1277,6 +1280,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         clockOutLongitude: longitude || null,
         clockOutLocationText,
       });
+
+      // Recalculate daily summary for this user and date
+      await storage.recalculateDailyAttendanceSummary(date, userId);
 
       res.json({ success: true, record: updated });
     } catch (error) {
@@ -1377,6 +1383,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Get pre-calculated daily attendance summaries for heatmap
+  app.get("/api/admin/attendance/summaries", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+      
+      const now = new Date();
+      const defaultStartDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const defaultEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      
+      const queryStartDate = startDate || defaultStartDate;
+      const queryEndDate = endDate || defaultEndDate;
+      
+      console.log(`[Attendance Summaries] Fetching summaries from ${queryStartDate} to ${queryEndDate}`);
+      
+      const summaries = await storage.getDailyAttendanceSummaries(queryStartDate, queryEndDate);
+      
+      console.log(`[Attendance Summaries] Found ${summaries.length} summaries`);
+      
+      res.json({ summaries });
+    } catch (error: any) {
+      console.error("Get attendance summaries error:", error);
+      res.status(500).json({ message: "Failed to get attendance summaries" });
+    }
+  });
+
+  // Admin: Recalculate attendance summaries for a date range (e.g., populate December data)
+  app.post("/api/admin/attendance/recalculate-summaries", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    if (req.session.isViewOnlyAdmin) {
+      return res.status(403).json({ message: "View-only admins cannot recalculate summaries" });
+    }
+
+    try {
+      const { startDate, endDate } = req.body as { startDate: string; endDate: string };
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "startDate and endDate are required" });
+      }
+      
+      console.log(`[Recalculate Summaries] Processing ${startDate} to ${endDate}`);
+      
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      let processedDays = 0;
+      let totalProcessed = 0;
+      let totalDeleted = 0;
+      let totalErrors = 0;
+      
+      const currentDate = new Date(start);
+      while (currentDate <= end) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const result = await storage.recalculateAllSummariesForDate(dateStr);
+        totalProcessed += result.processed;
+        totalDeleted += result.deleted;
+        totalErrors += result.errors;
+        processedDays++;
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      console.log(`[Recalculate Summaries] Processed ${processedDays} days, ${totalProcessed} summaries, ${totalDeleted} deleted, ${totalErrors} errors`);
+      
+      const response = {
+        success: totalErrors === 0,
+        message: totalErrors > 0 
+          ? `Recalculated summaries for ${processedDays} days with ${totalErrors} errors`
+          : `Recalculated summaries for ${processedDays} days`,
+        processedDays,
+        totalProcessed,
+        totalDeleted,
+        totalErrors,
+      };
+      
+      // Return 207 (Multi-Status) if there were partial errors, 200 for full success
+      res.status(totalErrors > 0 ? 207 : 200).json(response);
+    } catch (error: any) {
+      console.error("Recalculate summaries error:", error);
+      res.status(500).json({ success: false, message: "Failed to recalculate summaries" });
+    }
+  });
+
   // Admin: Bulk close orphaned attendance sessions
   app.post("/api/admin/attendance/bulk-close-orphaned", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
@@ -1436,6 +1529,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.updateAttendanceRecord(recordId, {
             clockOutTime: clockOutDateTime,
           });
+
+          // Recalculate daily summary for this user and date
+          await storage.recalculateDailyAttendanceSummary(record.date, record.userId);
 
           closedCount++;
         } catch (err) {
@@ -1715,6 +1811,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         changeType: "create",
       });
 
+      // Recalculate daily summary for this user and date
+      await storage.recalculateDailyAttendanceSummary(date, userId);
+
       res.json({ 
         success: true, 
         record,
@@ -1845,6 +1944,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }),
         changeType: "update",
       });
+
+      // Recalculate daily summary for this user and date
+      await storage.recalculateDailyAttendanceSummary(record.date, record.userId);
 
       res.json({ 
         success: true, 

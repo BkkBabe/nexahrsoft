@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -30,6 +30,12 @@ export interface IStorage {
   getAttendanceRecordsByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
   getAllAttendanceRecords(): Promise<AttendanceRecord[]>;
+  
+  // Daily attendance summary methods (pre-calculated for heatmap)
+  upsertDailyAttendanceSummary(summary: InsertDailyAttendanceSummary): Promise<DailyAttendanceSummary>;
+  getDailyAttendanceSummaries(startDate: string, endDate: string, limit?: number): Promise<DailyAttendanceSummary[]>;
+  recalculateDailyAttendanceSummary(date: string, userId: string): Promise<DailyAttendanceSummary | null>;
+  recalculateAllSummariesForDate(date: string): Promise<{ processed: number; errors: number; deleted: number }>;
   
   // Session tracking methods
   createUserSession(session: InsertUserSession): Promise<UserSession>;
@@ -310,6 +316,23 @@ export class MemStorage implements IStorage {
 
   async getAllAttendanceRecords(): Promise<AttendanceRecord[]> {
     throw new Error("MemStorage attendance not implemented");
+  }
+
+  // Daily attendance summary methods - stub implementations
+  async upsertDailyAttendanceSummary(summary: InsertDailyAttendanceSummary): Promise<DailyAttendanceSummary> {
+    throw new Error("MemStorage daily summary not implemented");
+  }
+
+  async getDailyAttendanceSummaries(startDate: string, endDate: string, limit?: number): Promise<DailyAttendanceSummary[]> {
+    throw new Error("MemStorage daily summary not implemented");
+  }
+
+  async recalculateDailyAttendanceSummary(date: string, userId: string): Promise<DailyAttendanceSummary | null> {
+    throw new Error("MemStorage daily summary not implemented");
+  }
+
+  async recalculateAllSummariesForDate(date: string): Promise<{ processed: number; errors: number; deleted: number }> {
+    throw new Error("MemStorage daily summary not implemented");
   }
 
   // Session tracking methods - stub implementations for MemStorage
@@ -764,6 +787,158 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(attendanceRecords)
       .orderBy(desc(attendanceRecords.date));
+  }
+
+  // Daily attendance summary methods (pre-calculated for heatmap)
+  async upsertDailyAttendanceSummary(summary: InsertDailyAttendanceSummary): Promise<DailyAttendanceSummary> {
+    // Atomic upsert using ON CONFLICT DO UPDATE for race-condition safety
+    const [result] = await db.insert(dailyAttendanceSummary)
+      .values({ ...summary, calculatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [dailyAttendanceSummary.userId, dailyAttendanceSummary.date],
+        set: {
+          employeeCode: summary.employeeCode,
+          employeeName: summary.employeeName,
+          department: summary.department,
+          totalClockIns: summary.totalClockIns,
+          totalHoursWorked: summary.totalHoursWorked,
+          firstClockIn: summary.firstClockIn,
+          lastClockOut: summary.lastClockOut,
+          status: summary.status,
+          calculatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async getDailyAttendanceSummaries(startDate: string, endDate: string, limit: number = 5000): Promise<DailyAttendanceSummary[]> {
+    return await db.select()
+      .from(dailyAttendanceSummary)
+      .where(
+        and(
+          gte(dailyAttendanceSummary.date, startDate),
+          lte(dailyAttendanceSummary.date, endDate)
+        )
+      )
+      .orderBy(dailyAttendanceSummary.date, dailyAttendanceSummary.userId)
+      .limit(limit);
+  }
+
+  async recalculateDailyAttendanceSummary(date: string, userId: string): Promise<DailyAttendanceSummary | null> {
+    const records = await db.select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.date, date),
+          eq(attendanceRecords.userId, userId)
+        )
+      );
+    
+    if (records.length === 0) {
+      await db.delete(dailyAttendanceSummary)
+        .where(
+          and(
+            eq(dailyAttendanceSummary.date, date),
+            eq(dailyAttendanceSummary.userId, userId)
+          )
+        );
+      return null;
+    }
+    
+    const user = await this.getUser(userId);
+    
+    let totalHoursWorked = 0;
+    let firstClockIn: Date | null = null;
+    let lastClockOut: Date | null = null;
+    
+    for (const record of records) {
+      if (!firstClockIn || record.clockInTime < firstClockIn) {
+        firstClockIn = record.clockInTime;
+      }
+      if (record.clockOutTime) {
+        if (!lastClockOut || record.clockOutTime > lastClockOut) {
+          lastClockOut = record.clockOutTime;
+        }
+        const hours = (record.clockOutTime.getTime() - record.clockInTime.getTime()) / (1000 * 60 * 60);
+        totalHoursWorked += hours;
+      }
+    }
+    
+    const hasCompleteSessions = records.some(r => r.clockOutTime !== null);
+    const hasOpenSessions = records.some(r => r.clockOutTime === null);
+    const status = hasCompleteSessions ? 'present' : (hasOpenSessions ? 'partial' : 'absent');
+    
+    const summary: InsertDailyAttendanceSummary = {
+      date,
+      userId,
+      employeeCode: user?.employeeCode || null,
+      employeeName: user?.name || null,
+      department: user?.department || null,
+      totalClockIns: records.length,
+      totalHoursWorked: Math.round(totalHoursWorked * 100) / 100,
+      firstClockIn,
+      lastClockOut,
+      status,
+    };
+    
+    return await this.upsertDailyAttendanceSummary(summary);
+  }
+
+  async recalculateAllSummariesForDate(date: string): Promise<{ processed: number; errors: number; deleted: number }> {
+    // Get all attendance records for this date
+    const records = await db.select()
+      .from(attendanceRecords)
+      .where(eq(attendanceRecords.date, date));
+    
+    const attendanceUserIds = new Set(records.map(r => r.userId));
+    
+    // Always get existing summaries for this date to find orphaned ones
+    // This is critical even when no attendance records exist (all were deleted)
+    const existingSummaries = await db.select()
+      .from(dailyAttendanceSummary)
+      .where(eq(dailyAttendanceSummary.date, date));
+    
+    const summaryUserIds = new Set(existingSummaries.map(s => s.userId));
+    
+    let processed = 0;
+    let errors = 0;
+    let deleted = 0;
+    
+    // First, delete orphaned summaries (summaries for users with no attendance records)
+    // This handles the case where all attendance records for a user/date were deleted
+    for (const userId of summaryUserIds) {
+      if (!attendanceUserIds.has(userId)) {
+        try {
+          await db.delete(dailyAttendanceSummary)
+            .where(
+              and(
+                eq(dailyAttendanceSummary.date, date),
+                eq(dailyAttendanceSummary.userId, userId)
+              )
+            );
+          deleted++;
+          console.log(`[DailySummary] Deleted orphaned summary for ${date}, user ${userId}`);
+        } catch (error) {
+          console.error(`[DailySummary] Error deleting orphaned summary ${date} for user ${userId}:`, error);
+          errors++;
+        }
+      }
+    }
+    
+    // Then, recalculate summaries for users with attendance records
+    for (const userId of attendanceUserIds) {
+      try {
+        await this.recalculateDailyAttendanceSummary(date, userId);
+        processed++;
+      } catch (error) {
+        console.error(`[DailySummary] Error recalculating ${date} for user ${userId}:`, error);
+        errors++;
+        // Continue processing other users even if one fails
+      }
+    }
+    
+    return { processed, errors, deleted };
   }
 
   // Session tracking methods

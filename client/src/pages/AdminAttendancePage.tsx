@@ -14,7 +14,7 @@ import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
-import type { AttendanceRecord, User } from "@shared/schema";
+import type { AttendanceRecord, User, DailyAttendanceSummary } from "@shared/schema";
 
 // NOTE: Geocoding is now handled server-side during clock-in/out
 // Location text is stored in the database and displayed directly
@@ -209,7 +209,7 @@ export default function AdminAttendancePage() {
     enabled: viewMode === 'today', // Only fetch when viewing Clock-ins tab
   });
 
-  // Fetch attendance records for heatmap (week or month) - use local dates
+  // Fetch attendance summaries for heatmap (week or month) - use local dates
   const heatmapStartDate = heatmapViewType === 'week' 
     ? getDateKey(heatmapWeekStart)
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month, 1));
@@ -217,8 +217,9 @@ export default function AdminAttendancePage() {
     ? getDateKey(new Date(heatmapWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000)) // 6 days after start
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
   
-  const { data: heatmapRecordsData, isLoading: heatmapLoading, refetch: refetchHeatmapRecords } = useQuery<{ records: AttendanceRecord[] }>({
-    queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
+  // Use pre-calculated summaries instead of raw attendance records for better performance
+  const { data: heatmapSummariesData, isLoading: heatmapLoading, refetch: refetchHeatmapRecords } = useQuery<{ summaries: DailyAttendanceSummary[] }>({
+    queryKey: ['/api/admin/attendance/summaries', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
     staleTime: 0, // Always consider stale to ensure fresh data
   });
   
@@ -278,7 +279,7 @@ export default function AdminAttendancePage() {
   const [bulkClockOutTime, setBulkClockOutTime] = useState("18:00");
 
   const users = usersData || [];
-  const heatmapRecords = heatmapRecordsData?.records || [];
+  const heatmapSummaries = heatmapSummariesData?.summaries || [];
   const clockInsRecords = clockInsRecordsData?.records || [];
   
   
@@ -331,46 +332,37 @@ export default function AdminAttendancePage() {
     }
   }, [heatmapViewType, heatmapWeekStart, heatmapMonth]);
 
-  // Aggregated data type for heatmap cells
+  // Aggregated data type for heatmap cells (now uses pre-calculated summaries)
   type AggregatedAttendance = {
     totalHours: number;
     recordCount: number;
-    records: AttendanceRecord[];
     hasOpenSession: boolean; // true if any record is missing clock-out
+    employeeName: string | null;
+    employeeCode: string | null;
   };
 
   // Create a map of userId -> date -> aggregated attendance data for heatmap
+  // Now uses pre-calculated summaries instead of raw records
   const heatmapDataMap = useMemo(() => {
     const map: Record<string, Record<string, AggregatedAttendance>> = {};
     
-    heatmapRecords.forEach(record => {
-      if (!map[record.userId]) {
-        map[record.userId] = {};
+    heatmapSummaries.forEach(summary => {
+      if (!map[summary.userId]) {
+        map[summary.userId] = {};
       }
-      const dateKey = normalizeRecordDateKey(record.date);
+      const dateKey = summary.date;
       
-      if (!map[record.userId][dateKey]) {
-        map[record.userId][dateKey] = {
-          totalHours: 0,
-          recordCount: 0,
-          records: [],
-          hasOpenSession: false,
-        };
-      }
-      
-      const hours = calculateHours(record.clockInTime, record.clockOutTime);
-      map[record.userId][dateKey].totalHours += hours;
-      map[record.userId][dateKey].recordCount += 1;
-      map[record.userId][dateKey].records.push(record);
-      
-      // Track if any record is missing clock-out
-      if (!record.clockOutTime) {
-        map[record.userId][dateKey].hasOpenSession = true;
-      }
+      map[summary.userId][dateKey] = {
+        totalHours: summary.totalHoursWorked || 0,
+        recordCount: summary.totalClockIns,
+        hasOpenSession: summary.status === 'partial',
+        employeeName: summary.employeeName,
+        employeeCode: summary.employeeCode,
+      };
     });
     
     return map;
-  }, [heatmapRecords]);
+  }, [heatmapSummaries]);
 
 
   // Filter employees for add attendance dialog (exclude admins)
@@ -392,12 +384,12 @@ export default function AdminAttendancePage() {
 
   // Check if employee already has attendance today
   const employeeHasAttendanceToday = (userId: string) => {
-    return heatmapRecords.some(r => r.userId === userId && normalizeRecordDateKey(r.date) === todayStr);
+    return heatmapSummaries.some(s => s.userId === userId && s.date === todayStr);
   };
 
   // Check if employee already has attendance on selected date
   const employeeHasAttendanceOnDate = (userId: string, date: string) => {
-    return heatmapRecords.some(r => r.userId === userId && normalizeRecordDateKey(r.date) === date);
+    return heatmapSummaries.some(s => s.userId === userId && s.date === date);
   };
 
   // Add attendance mutation
@@ -1394,53 +1386,14 @@ export default function AdminAttendancePage() {
                                         <div className="mt-1 space-y-1">
                                           {recordCount > 1 && (
                                             <div className="text-yellow-600 dark:text-yellow-400 font-medium">
-                                              {recordCount} entries
+                                              {recordCount} clock-in entries
                                             </div>
                                           )}
-                                          {aggData.records.map((record, rIdx) => (
-                                            <div key={record.id} className="border-t pt-1 first:border-t-0 first:pt-0">
-                                              {recordCount > 1 && <div className="text-muted-foreground">Entry {rIdx + 1}:</div>}
-                                              <div>In: {formatTime(record.clockInTime)}</div>
-                                              <div>Out: {record.clockOutTime ? formatTime(record.clockOutTime) : <span className="text-blue-500">In Progress</span>}</div>
-                                              <div>{record.clockOutTime ? `${calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs` : '-'}</div>
-                                              <div className="flex flex-col gap-1 mt-1">
-                                                {!record.clockOutTime && (
-                                                  <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="h-6 text-xs"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setSelectedRecord(record);
-                                                      setShowEndClockInDialog(true);
-                                                    }}
-                                                    disabled={isViewOnlyAdmin}
-                                                    data-testid={`button-end-clockin-${record.id}`}
-                                                  >
-                                                    End Clock-in
-                                                  </Button>
-                                                )}
-                                                {isNexaAdmin && !isViewOnlyAdmin && (
-                                                  <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="h-6 text-xs text-destructive hover:text-destructive"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setRecordToDelete(record);
-                                                      setShowDeleteDialog(true);
-                                                    }}
-                                                    data-testid={`button-delete-attendance-${record.id}`}
-                                                  >
-                                                    <Trash2 className="h-3 w-3 mr-1" />
-                                                    Delete
-                                                  </Button>
-                                                )}
-                                              </div>
-                                            </div>
-                                          ))}
-                                          <div className="border-t pt-1 font-medium">
-                                            Total: {hours.toFixed(1)} hours
+                                          <div className="border-t pt-1">
+                                            <div>Total Hours: {hours.toFixed(1)} hrs</div>
+                                            {hasOpenSession && (
+                                              <div className="text-blue-500 font-medium">Has active session</div>
+                                            )}
                                           </div>
                                         </div>
                                       ) : isFuture ? (
@@ -1499,13 +1452,13 @@ export default function AdminAttendancePage() {
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Total Records</p>
                   <p className="text-xl font-bold" data-testid="text-heatmap-total-records">
-                    {heatmapRecords.filter(r => filteredUsers.some(u => u.id === r.userId)).length}
+                    {heatmapSummaries.filter(s => filteredUsers.some(u => u.id === s.userId)).reduce((sum, s) => sum + s.totalClockIns, 0)}
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Active This {heatmapViewType === 'week' ? 'Week' : 'Month'}</p>
                   <p className="text-xl font-bold" data-testid="text-heatmap-active">
-                    {new Set(heatmapRecords.filter(r => filteredUsers.some(u => u.id === r.userId)).map(r => r.userId)).size}
+                    {new Set(heatmapSummaries.filter(s => filteredUsers.some(u => u.id === s.userId)).map(s => s.userId)).size}
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">

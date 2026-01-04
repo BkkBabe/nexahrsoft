@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -74,6 +74,23 @@ export const attendanceRecords = pgTable("attendance_records", {
   clockOutLocationText: text("clock_out_location_text"), // Geocoded address text (clock-out)
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const dailyAttendanceSummary = pgTable("daily_attendance_summary", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: text("date").notNull(), // Format: YYYY-MM-DD
+  userId: varchar("user_id").notNull().references(() => users.id),
+  employeeCode: text("employee_code"),
+  employeeName: text("employee_name"),
+  department: text("department"),
+  totalClockIns: integer("total_clock_ins").notNull().default(0),
+  totalHoursWorked: real("total_hours_worked").default(0), // Decimal hours
+  firstClockIn: timestamp("first_clock_in"),
+  lastClockOut: timestamp("last_clock_out"),
+  status: text("status").notNull().default("absent"), // 'present', 'absent', 'partial'
+  calculatedAt: timestamp("calculated_at").notNull().defaultNow(),
+}, (table) => ({
+  userDateUnique: sql`UNIQUE(user_id, date)`,
+}));
 
 export const userSessions = pgTable("user_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // Internal DB ID
@@ -151,6 +168,13 @@ export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type ClockIn = z.infer<typeof clockInSchema>;
 export type ClockOut = z.infer<typeof clockOutSchema>;
+
+export const insertDailyAttendanceSummarySchema = createInsertSchema(dailyAttendanceSummary).omit({
+  id: true,
+  calculatedAt: true,
+});
+export type InsertDailyAttendanceSummary = z.infer<typeof insertDailyAttendanceSummarySchema>;
+export type DailyAttendanceSummary = typeof dailyAttendanceSummary.$inferSelect;
 
 export const insertUserSessionSchema = createInsertSchema(userSessions).omit({
   id: true,

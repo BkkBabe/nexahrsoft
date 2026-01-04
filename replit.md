@@ -31,6 +31,7 @@ Preferred communication style: Simple, everyday language.
 - **Payroll Loan Accounts Table**: Stores employee loans with fields: userId, loanType, description, principalAmount, outstandingBalance, monthlyRepayment, startDate, endDate, status. Supports COMPANY_LOAN, STUDY_LOAN, HOUSING_LOAN types.
 - **Payroll Loan Repayments Table**: Tracks individual repayments with payrollPeriod, amount, notes, and recordedBy references.
 - **Attendance Records Table**: Stores clock-in/out times, user ID, date, calculated hours, location data, and photo metadata.
+- **Daily Attendance Summary Table**: Pre-calculated daily attendance summaries for improved heatmap performance with fields: date, userId, employeeCode, employeeName, department, totalClockIns, totalHoursWorked, firstClockIn, lastClockOut, status (present/absent/partial). Uses unique constraint on (user_id, date) with atomic upserts to prevent duplicates.
 - **Extensibility**: Designed to easily accommodate future tables for leave, claims, payroll, etc.
 
 ### Admin Features (MVP)
