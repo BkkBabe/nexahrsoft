@@ -16,74 +16,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Link } from "wouter";
 import type { AttendanceRecord, User } from "@shared/schema";
 
-// Address cache to avoid repeated API calls
-const addressCache: Record<string, string> = {};
-
-// Rate limiting for geocoding - track last request time  
-let lastGeocodeTime = 0;
-const GEOCODE_DELAY_MS = 1500; // 1.5 second delay between requests
-
-// Delay helper for rate limiting
-const geocodeDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Reverse geocode coordinates to address using OpenStreetMap Nominatim (with rate limiting)
-// This function is called on-demand when user hovers over a location link - NOT automatically
-async function reverseGeocode(lat: string, lng: string): Promise<string> {
-  const cacheKey = `${lat},${lng}`;
-  if (addressCache[cacheKey]) {
-    return addressCache[cacheKey];
-  }
-  
-  // Rate limiting - wait if needed
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastGeocodeTime;
-  if (timeSinceLastRequest < GEOCODE_DELAY_MS) {
-    await geocodeDelay(GEOCODE_DELAY_MS - timeSinceLastRequest);
-  }
-  lastGeocodeTime = Date.now();
-  
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          'Accept-Language': 'en',
-          'User-Agent': 'NexaHR-HRMS/1.0'
-        }
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error('Geocoding failed');
-    }
-    
-    const data = await response.json();
-    
-    // Build a short address from components
-    const address = data.address || {};
-    const parts: string[] = [];
-    
-    // Add building/road info
-    if (address.road || address.street) {
-      parts.push(address.road || address.street);
-    }
-    if (address.suburb || address.neighbourhood) {
-      parts.push(address.suburb || address.neighbourhood);
-    }
-    if (address.city || address.town || address.village) {
-      parts.push(address.city || address.town || address.village);
-    }
-    
-    const shortAddress = parts.length > 0 ? parts.join(', ') : data.display_name?.split(',').slice(0, 3).join(',') || 'Unknown location';
-    addressCache[cacheKey] = shortAddress;
-    return shortAddress;
-  } catch (error) {
-    console.error('Reverse geocoding error:', error);
-    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
-    addressCache[cacheKey] = fallback;
-    return fallback;
-  }
-}
+// NOTE: Geocoding is now handled server-side during clock-in/out
+// Location text is stored in the database and displayed directly
 
 // Helper function to calculate hours worked (to nearest 0.5 hour)
 function calculateHours(clockInTime: Date | string, clockOutTime: Date | string | null): number {
@@ -250,9 +184,6 @@ export default function AdminAttendancePage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<AttendanceRecord | null>(null);
   
-  // Address state for reverse geocoding
-  const [addresses, setAddresses] = useState<Record<string, string>>({});
-  
   // State to track which location buttons have been expanded (show map link)
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
   
@@ -350,21 +281,6 @@ export default function AdminAttendancePage() {
   const heatmapRecords = heatmapRecordsData?.records || [];
   const clockInsRecords = clockInsRecordsData?.records || [];
   
-  // REMOVED: Automatic geocoding - addresses are now fetched on-demand when clicking location links
-  // This prevents API overload and allows heatmap views to load without geocoding interference
-  
-  // On-demand address fetching function - called when user clicks a location link
-  const fetchAddressOnDemand = async (recordId: string, type: 'in' | 'out', lat: string, lng: string) => {
-    const key = `${recordId}-${type}`;
-    if (addresses[key]) return; // Already have it
-    
-    try {
-      const address = await reverseGeocode(lat, lng);
-      setAddresses(prev => ({ ...prev, [key]: address }));
-    } catch (error) {
-      // Silently fail - coordinate display is still available
-    }
-  };
   
   // Check if selected date is today
   const todayDate = getDateKey(new Date());
@@ -908,7 +824,7 @@ export default function AdminAttendancePage() {
                                               variant="ghost"
                                               size="sm"
                                               className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1"
-                                              onClick={() => setExpandedLocations(prev => new Set([...prev, `${record.id}-in`]))}
+                                              onClick={() => setExpandedLocations(prev => new Set([...Array.from(prev), `${record.id}-in`]))}
                                               data-testid={`button-show-location-in-${record.id}`}
                                             >
                                               Display Location
@@ -956,7 +872,7 @@ export default function AdminAttendancePage() {
                                                   variant="ghost"
                                                   size="sm"
                                                   className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1"
-                                                  onClick={() => setExpandedLocations(prev => new Set([...prev, `${record.id}-out`]))}
+                                                  onClick={() => setExpandedLocations(prev => new Set([...Array.from(prev), `${record.id}-out`]))}
                                                   data-testid={`button-show-location-out-${record.id}`}
                                                 >
                                                   Display Location
