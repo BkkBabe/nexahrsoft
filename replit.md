@@ -41,6 +41,9 @@ Preferred communication style: Simple, everyday language.
   - Clock-in/out location display with Google Maps links in tooltips
   - **Orphaned Sessions view**: Identifies clock-ins older than 24 hours without clock-out, with individual and bulk close functionality to allow affected employees to clock in again
   - Heatmap view with week/month toggle (default: week view)
+    - **Week view**: Uses raw attendance records for reliable, real-time data
+    - **Month view**: Uses pre-calculated summaries only (prevents query timeouts on large datasets)
+    - **Refresh Data button**: Regenerates summaries from raw records for the current month (visible in month view only)
   - Attendance details view with audit logging
   - Department and employee filtering
   - **Strict attendance cycle enforcement**: Employees must clock out before clocking in again (prevents duplicate sessions)

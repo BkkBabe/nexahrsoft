@@ -10,7 +10,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
@@ -218,31 +218,33 @@ export default function AdminAttendancePage() {
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
   
   // WEEK VIEW: Always use raw attendance records for reliability
-  // MONTH VIEW: Use pre-calculated summaries for performance, with fallback to raw records
+  // MONTH VIEW: Use pre-calculated summaries ONLY (no raw records fallback to prevent timeouts)
   
-  // Only fetch summaries for month view (optimization)
+  // Only fetch summaries for month view
   const { data: heatmapSummariesData, isLoading: heatmapSummariesLoading, refetch: refetchHeatmapSummaries } = useQuery<{ summaries: DailyAttendanceSummary[] }>({
     queryKey: ['/api/admin/attendance/summaries', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
     staleTime: 0,
     enabled: heatmapViewType === 'month', // Only fetch summaries for month view
   });
   
-  // Always fetch raw attendance records for week view; for month view, fetch as fallback
+  // Only fetch raw attendance records for week view (NOT for month view to prevent timeouts)
   const { data: heatmapRecordsData, isLoading: heatmapRecordsLoading, refetch: refetchHeatmapRawRecords } = useQuery<{ records: AttendanceRecord[] }>({
     queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
     staleTime: 0,
+    enabled: heatmapViewType === 'week', // Only fetch records for week view
   });
   
   // Loading state depends on view type
   const heatmapLoading = heatmapViewType === 'week' 
     ? heatmapRecordsLoading 
-    : (heatmapSummariesLoading || heatmapRecordsLoading);
+    : heatmapSummariesLoading;
   
   const refetchHeatmapRecords = () => {
     if (heatmapViewType === 'month') {
       refetchHeatmapSummaries();
+    } else {
+      refetchHeatmapRawRecords();
     }
-    refetchHeatmapRawRecords();
   };
   
   // Sync month with week when switching from week to month view
@@ -400,7 +402,7 @@ export default function AdminAttendancePage() {
 
   // Create a map of userId -> date -> aggregated attendance data for heatmap
   // WEEK VIEW: Always uses raw attendance records for reliability
-  // MONTH VIEW: Uses pre-calculated summaries when available, falls back to raw records
+  // MONTH VIEW: Uses pre-calculated summaries ONLY (no raw records fallback to prevent timeouts)
   const heatmapDataMap = useMemo(() => {
     // Guard: Only use data if queries have loaded (not in loading state)
     // This prevents stale data from a different date range being displayed
@@ -413,31 +415,26 @@ export default function AdminAttendancePage() {
       return buildMapFromRawRecords(heatmapRawRecords);
     }
     
-    // MONTH VIEW: Try summaries first, fallback to raw records
+    // MONTH VIEW: Use summaries only (no fallback to raw records to prevent timeouts on large datasets)
     const map: Record<string, Record<string, AggregatedAttendance>> = {};
     
-    if (heatmapSummaries.length > 0) {
-      // Use pre-calculated summaries (more efficient for month view)
-      heatmapSummaries.forEach(summary => {
-        if (!map[summary.userId]) {
-          map[summary.userId] = {};
-        }
-        const dateKey = summary.date;
-        
-        map[summary.userId][dateKey] = {
-          totalHours: summary.totalHoursWorked || 0,
-          recordCount: summary.totalClockIns,
-          hasOpenSession: summary.status === 'partial',
-          employeeName: summary.employeeName,
-          employeeCode: summary.employeeCode,
-        };
-      });
-      return map;
-    }
+    // Use pre-calculated summaries for month view
+    heatmapSummaries.forEach(summary => {
+      if (!map[summary.userId]) {
+        map[summary.userId] = {};
+      }
+      const dateKey = summary.date;
+      
+      map[summary.userId][dateKey] = {
+        totalHours: summary.totalHoursWorked || 0,
+        recordCount: summary.totalClockIns,
+        hasOpenSession: summary.status === 'partial',
+        employeeName: summary.employeeName,
+        employeeCode: summary.employeeCode,
+      };
+    });
     
-    // Fallback: Use raw attendance records if summaries are empty
-    // This ensures backward compatibility with production databases that may not have summaries yet
-    return buildMapFromRawRecords(heatmapRawRecords);
+    return map;
   }, [heatmapViewType, heatmapSummaries, heatmapRawRecords, heatmapLoading]);
 
 
@@ -656,6 +653,35 @@ export default function AdminAttendancePage() {
   const handleResolveLocation = (recordId: string, locationType: "in" | "out") => {
     setResolvingLocationId(`${recordId}-${locationType}`);
     resolveLocationMutation.mutate({ recordId, locationType });
+  };
+
+  // Regenerate summaries mutation (for populating month view data)
+  const regenerateSummariesMutation = useMutation({
+    mutationFn: async (data: { startDate: string; endDate: string }) => {
+      const response = await apiRequest("POST", "/api/admin/attendance/recalculate-summaries", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Summaries Regenerated",
+        description: data.message || `Processed ${data.processedDays} days, ${data.totalProcessed} summaries`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/summaries'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to regenerate summaries",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRegenerateSummaries = () => {
+    regenerateSummariesMutation.mutate({
+      startDate: heatmapStartDate,
+      endDate: heatmapEndDate,
+    });
   };
 
   const toggleOrphanedSelection = (recordId: string) => {
@@ -1310,6 +1336,26 @@ export default function AdminAttendancePage() {
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
+                  {/* Regenerate summaries button (month view only) */}
+                  {heatmapViewType === 'month' && !isViewOnlyAdmin && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRegenerateSummaries}
+                          disabled={regenerateSummariesMutation.isPending}
+                          data-testid="button-regenerate-summaries"
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-1 ${regenerateSummariesMutation.isPending ? 'animate-spin' : ''}`} />
+                          {regenerateSummariesMutation.isPending ? 'Regenerating...' : 'Refresh Data'}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Recalculate attendance summaries from raw records for this month</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               </div>
             </CardHeader>
