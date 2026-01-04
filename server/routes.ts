@@ -12,6 +12,68 @@ import { Resend } from "resend";
 // Initialize Resend email client
 const resend = process.env.RESEND_API ? new Resend(process.env.RESEND_API) : null;
 
+// Address cache for server-side geocoding
+const serverAddressCache: Record<string, string> = {};
+let lastServerGeocodeTime = 0;
+const SERVER_GEOCODE_DELAY_MS = 1100; // 1.1 second delay between requests
+
+// Server-side reverse geocoding function
+async function serverReverseGeocode(lat: string, lng: string): Promise<string> {
+  const cacheKey = `${lat},${lng}`;
+  if (serverAddressCache[cacheKey]) {
+    return serverAddressCache[cacheKey];
+  }
+  
+  // Rate limiting - wait if needed
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastServerGeocodeTime;
+  if (timeSinceLastRequest < SERVER_GEOCODE_DELAY_MS) {
+    await new Promise(resolve => setTimeout(resolve, SERVER_GEOCODE_DELAY_MS - timeSinceLastRequest));
+  }
+  lastServerGeocodeTime = Date.now();
+  
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          'Accept-Language': 'en',
+          'User-Agent': 'NexaHR-HRMS/1.0'
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Geocoding failed');
+    }
+    
+    const data = await response.json();
+    
+    // Build a short address from components
+    const address = data.address || {};
+    const parts: string[] = [];
+    
+    if (address.road || address.street) {
+      parts.push(address.road || address.street);
+    }
+    if (address.suburb || address.neighbourhood) {
+      parts.push(address.suburb || address.neighbourhood);
+    }
+    if (address.city || address.town || address.village) {
+      parts.push(address.city || address.town || address.village);
+    }
+    
+    const shortAddress = parts.length > 0 ? parts.join(', ') : data.display_name?.split(',').slice(0, 3).join(',') || 'Unknown location';
+    serverAddressCache[cacheKey] = shortAddress;
+    return shortAddress;
+  } catch (error) {
+    console.error('Server reverse geocoding error:', error);
+    const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
+    serverAddressCache[cacheKey] = fallback;
+    return fallback;
+  }
+}
+
 // Admin credentials
 const ADMIN_CREDENTIALS = {
   username: "nexaadmin",
@@ -1105,6 +1167,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { photoUrl, latitude, longitude } = req.body;
 
+      // Geocode the location if coordinates are provided
+      let clockInLocationText: string | null = null;
+      if (latitude && longitude) {
+        try {
+          clockInLocationText = await serverReverseGeocode(latitude, longitude);
+        } catch (error) {
+          console.error('Geocoding failed during clock-in:', error);
+          // Fallback to coordinates if geocoding fails
+          clockInLocationText = `${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}`;
+        }
+      }
+
       // Create new attendance record
       const record = await storage.createAttendanceRecord({
         userId,
@@ -1114,6 +1188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         photoUrl: photoUrl || null,
         latitude: latitude || null,
         longitude: longitude || null,
+        clockInLocationText,
       });
 
       res.json({ success: true, record });
@@ -1152,11 +1227,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No active clock-in found. Please clock in first." });
       }
 
+      // Geocode the location if coordinates are provided
+      let clockOutLocationText: string | null = null;
+      if (latitude && longitude) {
+        try {
+          clockOutLocationText = await serverReverseGeocode(latitude, longitude);
+        } catch (error) {
+          console.error('Geocoding failed during clock-out:', error);
+          // Fallback to coordinates if geocoding fails
+          clockOutLocationText = `${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}`;
+        }
+      }
+
       // Update with clock out time and location
       const updated = await storage.updateAttendanceRecord(openRecord.id, {
         clockOutTime: now,
         clockOutLatitude: latitude || null,
         clockOutLongitude: longitude || null,
+        clockOutLocationText,
       });
 
       res.json({ success: true, record: updated });
