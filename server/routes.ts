@@ -1345,15 +1345,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const defaultStartDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
       const defaultEndDate = now.toISOString().split('T')[0];
       
-      const records = await storage.getAllUsersAttendanceByDateRange(
-        startDate || defaultStartDate,
-        endDate || defaultEndDate
-      );
+      const queryStartDate = startDate || defaultStartDate;
+      const queryEndDate = endDate || defaultEndDate;
+      
+      console.log(`[Attendance Records] Fetching records from ${queryStartDate} to ${queryEndDate}`);
+      
+      const records = await storage.getAllUsersAttendanceByDateRange(queryStartDate, queryEndDate);
+      
+      console.log(`[Attendance Records] Found ${records.length} records`);
       
       res.json({ records });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Get all attendance records error:", error);
-      res.status(500).json({ message: "Failed to get attendance records" });
+      console.error("Error stack:", error?.stack);
+      res.status(500).json({ message: "Failed to get attendance records", error: error?.message });
     }
   });
 
