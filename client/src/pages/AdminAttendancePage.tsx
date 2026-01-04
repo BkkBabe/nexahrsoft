@@ -253,6 +253,9 @@ export default function AdminAttendancePage() {
   // Address state for reverse geocoding
   const [addresses, setAddresses] = useState<Record<string, string>>({});
   
+  // State to track which location buttons have been expanded (show map link)
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
+  
   const { toast } = useToast();
 
   // Fetch session to check if user is nexaadmin (master admin) or view-only admin
@@ -879,20 +882,41 @@ export default function AdminAttendancePage() {
                                 <span className="font-medium text-muted-foreground w-8 shrink-0">In:</span>
                                 <div className="min-w-0 flex-1">
                                   <div className="font-medium">{formatTime(record.clockInTime)}</div>
-                                  {record.latitude && record.longitude ? (
-                                    <a 
-                                      href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-start gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-0.5"
-                                      onMouseEnter={() => fetchAddressOnDemand(record.id, 'in', record.latitude!, record.longitude!)}
-                                    >
-                                      <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
-                                      <span className="break-words">
-                                        {addresses[`${record.id}-in`] || `${parseFloat(record.latitude).toFixed(4)}, ${parseFloat(record.longitude).toFixed(4)}`}
-                                      </span>
-                                      <ExternalLink className="h-3 w-3 shrink-0 mt-0.5" />
-                                    </a>
+                                  {(record.clockInLocationText || (record.latitude && record.longitude)) ? (
+                                    <div className="mt-0.5">
+                                      <div className="flex items-start gap-1 text-muted-foreground">
+                                        <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                                        <span className="break-words">
+                                          {record.clockInLocationText || `${parseFloat(record.latitude!).toFixed(4)}, ${parseFloat(record.longitude!).toFixed(4)}`}
+                                        </span>
+                                      </div>
+                                      {record.latitude && record.longitude && (
+                                        <>
+                                          {expandedLocations.has(`${record.id}-in`) ? (
+                                            <a 
+                                              href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-1 ml-4"
+                                              data-testid={`link-location-in-${record.id}`}
+                                            >
+                                              <ExternalLink className="h-3 w-3" />
+                                              <span>Open in Google Maps</span>
+                                            </a>
+                                          ) : (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1"
+                                              onClick={() => setExpandedLocations(prev => new Set([...prev, `${record.id}-in`]))}
+                                              data-testid={`button-show-location-in-${record.id}`}
+                                            >
+                                              Display Location
+                                            </Button>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
                                   ) : (
                                     <span className="text-muted-foreground">No location</span>
                                   )}
@@ -906,20 +930,41 @@ export default function AdminAttendancePage() {
                                   {record.clockOutTime ? (
                                     <>
                                       <div className="font-medium">{formatTime(record.clockOutTime)}</div>
-                                      {record.clockOutLatitude && record.clockOutLongitude ? (
-                                        <a 
-                                          href={`https://www.google.com/maps?q=${record.clockOutLatitude},${record.clockOutLongitude}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-start gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-0.5"
-                                          onMouseEnter={() => fetchAddressOnDemand(record.id, 'out', record.clockOutLatitude!, record.clockOutLongitude!)}
-                                        >
-                                          <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
-                                          <span className="break-words">
-                                            {addresses[`${record.id}-out`] || `${parseFloat(record.clockOutLatitude).toFixed(4)}, ${parseFloat(record.clockOutLongitude).toFixed(4)}`}
-                                          </span>
-                                          <ExternalLink className="h-3 w-3 shrink-0 mt-0.5" />
-                                        </a>
+                                      {(record.clockOutLocationText || (record.clockOutLatitude && record.clockOutLongitude)) ? (
+                                        <div className="mt-0.5">
+                                          <div className="flex items-start gap-1 text-muted-foreground">
+                                            <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                                            <span className="break-words">
+                                              {record.clockOutLocationText || `${parseFloat(record.clockOutLatitude!).toFixed(4)}, ${parseFloat(record.clockOutLongitude!).toFixed(4)}`}
+                                            </span>
+                                          </div>
+                                          {record.clockOutLatitude && record.clockOutLongitude && (
+                                            <>
+                                              {expandedLocations.has(`${record.id}-out`) ? (
+                                                <a 
+                                                  href={`https://www.google.com/maps?q=${record.clockOutLatitude},${record.clockOutLongitude}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline mt-1 ml-4"
+                                                  data-testid={`link-location-out-${record.id}`}
+                                                >
+                                                  <ExternalLink className="h-3 w-3" />
+                                                  <span>Open in Google Maps</span>
+                                                </a>
+                                              ) : (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  className="h-5 px-1 py-0 text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1"
+                                                  onClick={() => setExpandedLocations(prev => new Set([...prev, `${record.id}-out`]))}
+                                                  data-testid={`button-show-location-out-${record.id}`}
+                                                >
+                                                  Display Location
+                                                </Button>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
                                       ) : (
                                         <span className="text-muted-foreground">No location</span>
                                       )}
