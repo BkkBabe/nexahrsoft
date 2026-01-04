@@ -739,15 +739,25 @@ export class PgStorage implements IStorage {
   }
 
   async getAllUsersAttendanceByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
-    return await db.select()
-      .from(attendanceRecords)
-      .where(
-        and(
-          gte(attendanceRecords.date, startDate),
-          lte(attendanceRecords.date, endDate)
+    try {
+      console.log(`[Storage] getAllUsersAttendanceByDateRange: ${startDate} to ${endDate}`);
+      const records = await db.select()
+        .from(attendanceRecords)
+        .where(
+          and(
+            gte(attendanceRecords.date, startDate),
+            lte(attendanceRecords.date, endDate)
+          )
         )
-      )
-      .orderBy(desc(attendanceRecords.date));
+        .orderBy(desc(attendanceRecords.date));
+      console.log(`[Storage] Query returned ${records.length} attendance records`);
+      return records;
+    } catch (error: any) {
+      console.error(`[Storage] getAllUsersAttendanceByDateRange error:`, error.message);
+      console.error(`[Storage] Error code:`, error.code);
+      console.error(`[Storage] Full error:`, error);
+      throw error;
+    }
   }
 
   async getAllAttendanceRecords(): Promise<AttendanceRecord[]> {
