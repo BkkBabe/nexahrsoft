@@ -217,11 +217,23 @@ export default function AdminAttendancePage() {
     ? getDateKey(new Date(heatmapWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000)) // 6 days after start
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
   
-  // Use pre-calculated summaries instead of raw attendance records for better performance
-  const { data: heatmapSummariesData, isLoading: heatmapLoading, refetch: refetchHeatmapRecords } = useQuery<{ summaries: DailyAttendanceSummary[] }>({
+  // Use pre-calculated summaries for performance, with fallback to raw records
+  const { data: heatmapSummariesData, isLoading: heatmapSummariesLoading, refetch: refetchHeatmapSummaries } = useQuery<{ summaries: DailyAttendanceSummary[] }>({
     queryKey: ['/api/admin/attendance/summaries', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
     staleTime: 0, // Always consider stale to ensure fresh data
   });
+  
+  // Fallback: Also fetch raw attendance records for heatmap in case summaries are empty
+  const { data: heatmapRecordsData, isLoading: heatmapRecordsLoading, refetch: refetchHeatmapRawRecords } = useQuery<{ records: AttendanceRecord[] }>({
+    queryKey: ['/api/admin/attendance/records', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
+    staleTime: 0,
+  });
+  
+  const heatmapLoading = heatmapSummariesLoading || heatmapRecordsLoading;
+  const refetchHeatmapRecords = () => {
+    refetchHeatmapSummaries();
+    refetchHeatmapRawRecords();
+  };
   
   // Sync month with week when switching from week to month view
   // This ensures the month view shows the same period the user was viewing in week view
@@ -280,6 +292,7 @@ export default function AdminAttendancePage() {
 
   const users = usersData || [];
   const heatmapSummaries = heatmapSummariesData?.summaries || [];
+  const heatmapRawRecords = heatmapRecordsData?.records || [];
   const clockInsRecords = clockInsRecordsData?.records || [];
   
   
@@ -332,7 +345,7 @@ export default function AdminAttendancePage() {
     }
   }, [heatmapViewType, heatmapWeekStart, heatmapMonth]);
 
-  // Aggregated data type for heatmap cells (now uses pre-calculated summaries)
+  // Aggregated data type for heatmap cells
   type AggregatedAttendance = {
     totalHours: number;
     recordCount: number;
@@ -342,27 +355,63 @@ export default function AdminAttendancePage() {
   };
 
   // Create a map of userId -> date -> aggregated attendance data for heatmap
-  // Now uses pre-calculated summaries instead of raw records
+  // Uses pre-calculated summaries when available, falls back to raw records
   const heatmapDataMap = useMemo(() => {
     const map: Record<string, Record<string, AggregatedAttendance>> = {};
     
-    heatmapSummaries.forEach(summary => {
-      if (!map[summary.userId]) {
-        map[summary.userId] = {};
-      }
-      const dateKey = summary.date;
-      
-      map[summary.userId][dateKey] = {
-        totalHours: summary.totalHoursWorked || 0,
-        recordCount: summary.totalClockIns,
-        hasOpenSession: summary.status === 'partial',
-        employeeName: summary.employeeName,
-        employeeCode: summary.employeeCode,
-      };
-    });
+    // First, try to use pre-calculated summaries (more efficient)
+    if (heatmapSummaries.length > 0) {
+      heatmapSummaries.forEach(summary => {
+        if (!map[summary.userId]) {
+          map[summary.userId] = {};
+        }
+        const dateKey = summary.date;
+        
+        map[summary.userId][dateKey] = {
+          totalHours: summary.totalHoursWorked || 0,
+          recordCount: summary.totalClockIns,
+          hasOpenSession: summary.status === 'partial',
+          employeeName: summary.employeeName,
+          employeeCode: summary.employeeCode,
+        };
+      });
+    }
+    
+    // Fallback: Use raw attendance records if summaries are empty
+    // This ensures backward compatibility with production databases that may not have summaries yet
+    if (heatmapSummaries.length === 0 && heatmapRawRecords.length > 0) {
+      heatmapRawRecords.forEach(record => {
+        if (!map[record.userId]) {
+          map[record.userId] = {};
+        }
+        const dateKey = normalizeRecordDateKey(record.date);
+        
+        if (!map[record.userId][dateKey]) {
+          map[record.userId][dateKey] = {
+            totalHours: 0,
+            recordCount: 0,
+            hasOpenSession: false,
+            employeeName: null,
+            employeeCode: null,
+          };
+        }
+        
+        // Aggregate hours
+        const hours = record.clockOutTime 
+          ? calculateHours(record.clockInTime, record.clockOutTime)
+          : 0;
+        map[record.userId][dateKey].totalHours += hours;
+        map[record.userId][dateKey].recordCount += 1;
+        
+        // Check for open sessions (no clock-out)
+        if (!record.clockOutTime) {
+          map[record.userId][dateKey].hasOpenSession = true;
+        }
+      });
+    }
     
     return map;
-  }, [heatmapSummaries]);
+  }, [heatmapSummaries, heatmapRawRecords]);
 
 
   // Filter employees for add attendance dialog (exclude admins)
@@ -382,14 +431,14 @@ export default function AdminAttendancePage() {
   // Get today's date string
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Check if employee already has attendance today
+  // Check if employee already has attendance today (using heatmapDataMap which has fallback logic)
   const employeeHasAttendanceToday = (userId: string) => {
-    return heatmapSummaries.some(s => s.userId === userId && s.date === todayStr);
+    return !!heatmapDataMap[userId]?.[todayStr];
   };
 
   // Check if employee already has attendance on selected date
   const employeeHasAttendanceOnDate = (userId: string, date: string) => {
-    return heatmapSummaries.some(s => s.userId === userId && s.date === date);
+    return !!heatmapDataMap[userId]?.[date];
   };
 
   // Add attendance mutation
@@ -1452,13 +1501,25 @@ export default function AdminAttendancePage() {
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Total Records</p>
                   <p className="text-xl font-bold" data-testid="text-heatmap-total-records">
-                    {heatmapSummaries.filter(s => filteredUsers.some(u => u.id === s.userId)).reduce((sum, s) => sum + s.totalClockIns, 0)}
+                    {(() => {
+                      // Use heatmapDataMap which has fallback logic
+                      let total = 0;
+                      filteredUsers.forEach(u => {
+                        const userData = heatmapDataMap[u.id];
+                        if (userData) {
+                          Object.values(userData).forEach(dayData => {
+                            total += dayData.recordCount;
+                          });
+                        }
+                      });
+                      return total;
+                    })()}
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">
                   <p className="text-xs text-muted-foreground mb-1">Active This {heatmapViewType === 'week' ? 'Week' : 'Month'}</p>
                   <p className="text-xl font-bold" data-testid="text-heatmap-active">
-                    {new Set(heatmapSummaries.filter(s => filteredUsers.some(u => u.id === s.userId)).map(s => s.userId)).size}
+                    {filteredUsers.filter(u => heatmapDataMap[u.id] && Object.keys(heatmapDataMap[u.id]).length > 0).length}
                   </p>
                 </div>
                 <div className="bg-muted/50 p-3 rounded-md">
