@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -10,7 +11,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw, Archive, ArchiveRestore, Download, Printer } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
@@ -198,6 +199,12 @@ export default function AdminAttendancePage() {
   // State to track which location buttons have been expanded (show map link)
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
   
+  // Heatmap selection state for archive functionality
+  const [selectedHeatmapUsers, setSelectedHeatmapUsers] = useState<Set<string>>(new Set());
+  const [showUnarchiveModal, setShowUnarchiveModal] = useState(false);
+  const [selectedArchivedUsers, setSelectedArchivedUsers] = useState<Set<string>>(new Set());
+  const [isPrinting, setIsPrinting] = useState(false);
+  
   const { toast } = useToast();
 
   // Fetch session to check if user is nexaadmin (master admin) or view-only admin
@@ -213,6 +220,13 @@ export default function AdminAttendancePage() {
   const { data: usersData } = useQuery<User[]>({
     queryKey: ['/api/admin/users'],
   });
+  
+  // Fetch archived users for unarchive modal
+  const { data: archivedUsersData, isLoading: archivedUsersLoading } = useQuery<User[]>({
+    queryKey: ['/api/admin/users/archived'],
+    enabled: showUnarchiveModal,
+  });
+  const archivedUsers = archivedUsersData || [];
 
   // Fetch attendance records for selected clock-ins date (only when viewing Clock-ins tab)
   const { data: clockInsRecordsData, isLoading: clockInsLoading } = useQuery<{ records: AttendanceRecord[] }>({
@@ -330,10 +344,11 @@ export default function AdminAttendancePage() {
     return Array.from(depts).sort();
   }, [users]);
 
-  // Filter users for heatmap
+  // Filter users for heatmap (exclude archived users)
   const filteredUsers = useMemo(() => {
     return users
       .filter(u => !u.id.includes('admin'))
+      .filter(u => !u.isArchived) // Exclude archived users
       .filter(u => {
         if (searchQuery) {
           const query = searchQuery.toLowerCase();
@@ -696,6 +711,211 @@ export default function AdminAttendancePage() {
       startDate: heatmapStartDate,
       endDate: heatmapEndDate,
     });
+  };
+  
+  // Archive users mutation
+  const archiveUsersMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      const response = await apiRequest("POST", "/api/admin/users/archive", { userIds });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Users Archived",
+        description: data.message || "Selected users have been archived",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setSelectedHeatmapUsers(new Set());
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to archive users",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Unarchive users mutation
+  const unarchiveUsersMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      const response = await apiRequest("POST", "/api/admin/users/unarchive", { userIds });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Users Unarchived",
+        description: data.message || "Selected users have been unarchived",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users/archived'] });
+      setSelectedArchivedUsers(new Set());
+      setShowUnarchiveModal(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unarchive users",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Handle archive selected users
+  const handleArchiveSelected = () => {
+    if (selectedHeatmapUsers.size === 0) return;
+    archiveUsersMutation.mutate(Array.from(selectedHeatmapUsers));
+  };
+  
+  // Handle unarchive selected users
+  const handleUnarchiveSelected = () => {
+    if (selectedArchivedUsers.size === 0) return;
+    unarchiveUsersMutation.mutate(Array.from(selectedArchivedUsers));
+  };
+  
+  // Toggle heatmap user selection
+  const toggleHeatmapUserSelection = (userId: string) => {
+    setSelectedHeatmapUsers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(userId)) {
+        newSet.delete(userId);
+      } else {
+        newSet.add(userId);
+      }
+      return newSet;
+    });
+  };
+  
+  // Toggle all heatmap users selection
+  const toggleAllHeatmapUsers = () => {
+    if (selectedHeatmapUsers.size === filteredUsers.length) {
+      setSelectedHeatmapUsers(new Set());
+    } else {
+      setSelectedHeatmapUsers(new Set(filteredUsers.map(u => u.id)));
+    }
+  };
+  
+  // Toggle archived user selection
+  const toggleArchivedUserSelection = (userId: string) => {
+    setSelectedArchivedUsers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(userId)) {
+        newSet.delete(userId);
+      } else {
+        newSet.add(userId);
+      }
+      return newSet;
+    });
+  };
+  
+  // Export heatmap data to CSV
+  const exportToCSV = () => {
+    const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...heatmapDays.map(d => getDateKey(d)), 'Total Hours'];
+    const rows = filteredUsers.map((user, idx) => {
+      const totalHours = heatmapDays.reduce((sum, day) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (day > today) return sum;
+        const dateKey = getDateKey(day);
+        const aggData = heatmapDataMap[user.id]?.[dateKey];
+        return sum + (aggData?.totalHours || 0);
+      }, 0);
+      
+      return [
+        idx + 1,
+        user.name || '',
+        user.employeeCode || '',
+        user.department || '',
+        ...heatmapDays.map(day => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (day > today) return '';
+          const dateKey = getDateKey(day);
+          const aggData = heatmapDataMap[user.id]?.[dateKey];
+          return aggData?.totalHours || 0;
+        }),
+        totalHours.toFixed(1)
+      ];
+    });
+    
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendance_heatmap_${heatmapViewType}_${heatmapStartDate}_${heatmapEndDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Export Complete",
+      description: "Heatmap data exported to CSV",
+    });
+  };
+  
+  // Export heatmap data to Excel (using CSV format with xls extension for basic compatibility)
+  const exportToExcel = () => {
+    const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...heatmapDays.map(d => getDateKey(d)), 'Total Hours'];
+    const rows = filteredUsers.map((user, idx) => {
+      const totalHours = heatmapDays.reduce((sum, day) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (day > today) return sum;
+        const dateKey = getDateKey(day);
+        const aggData = heatmapDataMap[user.id]?.[dateKey];
+        return sum + (aggData?.totalHours || 0);
+      }, 0);
+      
+      return [
+        idx + 1,
+        user.name || '',
+        user.employeeCode || '',
+        user.department || '',
+        ...heatmapDays.map(day => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (day > today) return '';
+          const dateKey = getDateKey(day);
+          const aggData = heatmapDataMap[user.id]?.[dateKey];
+          return aggData?.totalHours || 0;
+        }),
+        totalHours.toFixed(1)
+      ];
+    });
+    
+    // Create tab-separated content for Excel
+    const excelContent = [headers, ...rows]
+      .map(row => row.join('\t'))
+      .join('\n');
+    
+    const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendance_heatmap_${heatmapViewType}_${heatmapStartDate}_${heatmapEndDate}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Export Complete",
+      description: "Heatmap data exported to Excel",
+    });
+  };
+  
+  // Print heatmap
+  const handlePrintHeatmap = () => {
+    setIsPrinting(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrinting(false);
+    }, 100);
   };
 
   const toggleOrphanedSelection = (recordId: string) => {
@@ -1496,6 +1716,72 @@ export default function AdminAttendancePage() {
                   <span>Absent</span>
                 </div>
               </div>
+              
+              {/* Action Buttons Row */}
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
+                {/* Archive button - only when users selected */}
+                {!isViewOnlyAdmin && selectedHeatmapUsers.size > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleArchiveSelected}
+                    disabled={archiveUsersMutation.isPending}
+                    data-testid="button-archive-selected"
+                  >
+                    <Archive className="h-4 w-4 mr-1" />
+                    Archive ({selectedHeatmapUsers.size})
+                  </Button>
+                )}
+                
+                {/* Unarchive button - opens modal */}
+                {!isViewOnlyAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowUnarchiveModal(true)}
+                    data-testid="button-open-unarchive"
+                  >
+                    <ArchiveRestore className="h-4 w-4 mr-1" />
+                    Unarchive Employees
+                  </Button>
+                )}
+                
+                {/* Export dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-export-dropdown">
+                      <Download className="h-4 w-4 mr-1" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={exportToCSV} data-testid="button-export-csv">
+                      Export to CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
+                      Export to Excel
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                {/* Print button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrintHeatmap}
+                  data-testid="button-print-heatmap"
+                >
+                  <Printer className="h-4 w-4 mr-1" />
+                  Print
+                </Button>
+                
+                {/* Selection info */}
+                {selectedHeatmapUsers.size > 0 && (
+                  <span className="text-sm text-muted-foreground ml-2">
+                    {selectedHeatmapUsers.size} of {filteredUsers.length} selected
+                  </span>
+                )}
+              </div>
 
               {/* Heatmap Grid */}
               {heatmapLoading ? (
@@ -1505,6 +1791,20 @@ export default function AdminAttendancePage() {
                   <div className="min-w-[800px]">
                     {/* Header row with dates */}
                     <div className="flex border-b sticky top-0 bg-background z-10">
+                      {/* Checkbox column - hidden when printing */}
+                      {!isPrinting && (
+                        <div className="w-10 flex-shrink-0 p-2 flex items-center justify-center border-r print:hidden">
+                          <Checkbox
+                            checked={selectedHeatmapUsers.size === filteredUsers.length && filteredUsers.length > 0}
+                            onCheckedChange={toggleAllHeatmapUsers}
+                            data-testid="checkbox-select-all"
+                          />
+                        </div>
+                      )}
+                      {/* Serial number column */}
+                      <div className="w-12 flex-shrink-0 p-2 font-medium text-sm border-r text-center">
+                        S/N
+                      </div>
                       <div className="w-48 flex-shrink-0 p-2 font-medium text-sm border-r">
                         Employee
                       </div>
@@ -1540,8 +1840,22 @@ export default function AdminAttendancePage() {
                       </div>
                     ) : (
                       <div className="max-h-[60vh] overflow-y-auto">
-                        {filteredUsers.map((user) => (
+                        {filteredUsers.map((user, userIndex) => (
                           <div key={user.id} className="flex border-b hover:bg-muted/30" data-testid={`heatmap-row-${user.id}`}>
+                            {/* Checkbox column - hidden when printing */}
+                            {!isPrinting && (
+                              <div className="w-10 flex-shrink-0 p-2 flex items-center justify-center border-r print:hidden">
+                                <Checkbox
+                                  checked={selectedHeatmapUsers.has(user.id)}
+                                  onCheckedChange={() => toggleHeatmapUserSelection(user.id)}
+                                  data-testid={`checkbox-user-${user.id}`}
+                                />
+                              </div>
+                            )}
+                            {/* Serial number column */}
+                            <div className="w-12 flex-shrink-0 p-2 text-sm text-center text-muted-foreground border-r">
+                              {userIndex + 1}
+                            </div>
                             <div className="w-48 flex-shrink-0 p-2 border-r">
                               <div className="text-sm font-medium truncate" title={user.name || ''}>
                                 {user.name}
@@ -2050,6 +2364,65 @@ export default function AdminAttendancePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* Unarchive Modal */}
+      <Dialog open={showUnarchiveModal} onOpenChange={(open) => {
+        setShowUnarchiveModal(open);
+        if (!open) {
+          setSelectedArchivedUsers(new Set());
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArchiveRestore className="h-5 w-5" />
+              Unarchive Employees
+            </DialogTitle>
+            <DialogDescription>
+              Select archived employees to restore them back to the active list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {archivedUsersLoading ? (
+              <div className="text-center py-4 text-muted-foreground">Loading archived employees...</div>
+            ) : archivedUsers.length === 0 ? (
+              <div className="text-center py-4 text-muted-foreground">No archived employees found</div>
+            ) : (
+              archivedUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/30"
+                  data-testid={`archived-user-${user.id}`}
+                >
+                  <Checkbox
+                    checked={selectedArchivedUsers.has(user.id)}
+                    onCheckedChange={() => toggleArchivedUserSelection(user.id)}
+                    data-testid={`checkbox-archived-${user.id}`}
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{user.name || 'Unknown'}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {user.employeeCode || 'No code'} | {user.department || 'No dept'}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUnarchiveModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUnarchiveSelected}
+              disabled={selectedArchivedUsers.size === 0 || unarchiveUsersMutation.isPending}
+              data-testid="button-confirm-unarchive"
+            >
+              {unarchiveUsersMutation.isPending ? "Unarchiving..." : `Unarchive (${selectedArchivedUsers.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

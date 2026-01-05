@@ -46,6 +46,11 @@ Preferred communication style: Simple, everyday language.
       - Navigation arrows move by the selected range length
     - **Month view**: Uses pre-calculated summaries only (prevents query timeouts on large datasets)
     - **Refresh Data button**: Regenerates summaries from raw records for the current month (visible in month view only)
+    - **Employee Selection**: Checkbox column for selecting individual or all employees
+    - **Serial Numbers**: S/N column for easy reference in printed reports
+    - **Archive/Unarchive**: Hide inactive employees from views without deletion; restore via unarchive modal
+    - **Export Features**: Export heatmap data to CSV or Excel format with employee details and hours worked
+    - **Print Functionality**: Print-friendly heatmap layout (checkboxes hidden, serial numbers visible)
   - Attendance details view with audit logging
   - Department and employee filtering
   - **Strict attendance cycle enforcement**: Employees must clock out before clocking in again (prevents duplicate sessions)

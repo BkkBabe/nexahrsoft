@@ -135,6 +135,11 @@ export interface IStorage {
   getLoanRepaymentsByLoan(loanAccountId: string): Promise<PayrollLoanRepayment[]>;
   getLoanRepaymentsByPeriod(year: number, month: number): Promise<PayrollLoanRepayment[]>;
   getEmployeeLoanRepaymentsForPeriod(employeeCode: string, year: number, month: number): Promise<PayrollLoanRepayment[]>;
+  
+  // Archive methods
+  archiveUsers(userIds: string[]): Promise<void>;
+  unarchiveUsers(userIds: string[]): Promise<void>;
+  getArchivedUsers(): Promise<User[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -191,6 +196,17 @@ export class MemStorage implements IStorage {
   async getEmployeeLoanRepaymentsForPeriod(employeeCode: string, year: number, month: number): Promise<PayrollLoanRepayment[]> {
     return [];
   }
+  
+  // Archive stubs (MemStorage not used in production)
+  async archiveUsers(userIds: string[]): Promise<void> {
+    throw new Error("Not implemented in MemStorage");
+  }
+  async unarchiveUsers(userIds: string[]): Promise<void> {
+    throw new Error("Not implemented in MemStorage");
+  }
+  async getArchivedUsers(): Promise<User[]> {
+    return [];
+  }
 
   async getUser(id: string): Promise<User | undefined> {
     return this.users.get(id);
@@ -245,6 +261,7 @@ export class MemStorage implements IStorage {
       resignDate: insertUser.resignDate ?? null,
       welcomeEmailSentAt: insertUser.welcomeEmailSentAt ?? null,
       mustChangePassword: insertUser.mustChangePassword ?? false,
+      isArchived: insertUser.isArchived ?? false,
     };
     this.users.set(id, user);
     return user;
@@ -1581,6 +1598,34 @@ export class PgStorage implements IStorage {
     
     const allRepayments = await this.getLoanRepaymentsByPeriod(year, month);
     return allRepayments.filter(r => loanIds.includes(r.loanAccountId));
+  }
+  
+  // Archive methods
+  async archiveUsers(userIds: string[]): Promise<void> {
+    if (userIds.length === 0) return;
+    
+    for (const userId of userIds) {
+      await db.update(users)
+        .set({ isArchived: true })
+        .where(eq(users.id, userId));
+    }
+  }
+  
+  async unarchiveUsers(userIds: string[]): Promise<void> {
+    if (userIds.length === 0) return;
+    
+    for (const userId of userIds) {
+      await db.update(users)
+        .set({ isArchived: false })
+        .where(eq(users.id, userId));
+    }
+  }
+  
+  async getArchivedUsers(): Promise<User[]> {
+    return await db.select()
+      .from(users)
+      .where(eq(users.isArchived, true))
+      .orderBy(users.name);
   }
 }
 

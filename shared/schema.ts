@@ -27,6 +27,7 @@ export const users = pgTable("users", {
   resignDate: text("resign_date"), // Resign date (DD-MM-YYYY)
   welcomeEmailSentAt: timestamp("welcome_email_sent_at"), // When welcome email was last sent
   mustChangePassword: boolean("must_change_password").notNull().default(false), // Force password change on first login
+  isArchived: boolean("is_archived").notNull().default(false), // Hidden from all views when true
 });
 
 export const companySettings = pgTable("company_settings", {

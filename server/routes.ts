@@ -488,6 +488,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch users" });
     }
   });
+  
+  // Get archived users (admin only)
+  app.get("/api/admin/users/archived", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const archivedUsers = await storage.getArchivedUsers();
+      res.json(archivedUsers);
+    } catch (error) {
+      console.error("Get archived users error:", error);
+      res.status(500).json({ message: "Failed to fetch archived users" });
+    }
+  });
+  
+  // Archive users (admin only, write access required)
+  app.post("/api/admin/users/archive", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userIds: z.array(z.string()).min(1, "At least one user ID is required"),
+      });
+      
+      const { userIds } = schema.parse(req.body);
+      await storage.archiveUsers(userIds);
+      
+      res.json({ success: true, message: `${userIds.length} user(s) archived` });
+    } catch (error) {
+      console.error("Archive users error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to archive users" });
+    }
+  });
+  
+  // Unarchive users (admin only, write access required)
+  app.post("/api/admin/users/unarchive", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userIds: z.array(z.string()).min(1, "At least one user ID is required"),
+      });
+      
+      const { userIds } = schema.parse(req.body);
+      await storage.unarchiveUsers(userIds);
+      
+      res.json({ success: true, message: `${userIds.length} user(s) unarchived` });
+    } catch (error) {
+      console.error("Unarchive users error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to unarchive users" });
+    }
+  });
 
   // Approve user (admin only, write access required)
   app.post("/api/admin/users/:id/approve", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
