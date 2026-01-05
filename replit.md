@@ -42,6 +42,8 @@ Preferred communication style: Simple, everyday language.
   - **Orphaned Sessions view**: Identifies clock-ins older than 24 hours without clock-out, with individual and bulk close functionality to allow affected employees to clock in again
   - Heatmap view with week/month toggle (default: week view)
     - **Week view**: Uses raw attendance records for reliable, real-time data
+      - Supports custom date range selection (1-7 days) via date pickers
+      - Navigation arrows move by the selected range length
     - **Month view**: Uses pre-calculated summaries only (prevents query timeouts on large datasets)
     - **Refresh Data button**: Regenerates summaries from raw records for the current month (visible in month view only)
   - Attendance details view with audit logging

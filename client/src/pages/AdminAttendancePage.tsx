@@ -147,7 +147,7 @@ export default function AdminAttendancePage() {
     }
     return { year: now.getFullYear(), month: now.getMonth() };
   });
-  // For week view - track the start of the current week
+  // For week view - track custom date range (up to 7 days)
   const [heatmapWeekStart, setHeatmapWeekStart] = useState(() => {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -156,6 +156,17 @@ export default function AdminAttendancePage() {
     weekStart.setHours(0, 0, 0, 0);
     return weekStart;
   });
+  const [heatmapWeekEnd, setHeatmapWeekEnd] = useState(() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const weekStart = new Date(now.setDate(diff));
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return weekEnd;
+  });
+  const [useCustomRange, setUseCustomRange] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   // Selected date for clock-ins view (defaults to today)
@@ -210,11 +221,12 @@ export default function AdminAttendancePage() {
   });
 
   // Fetch attendance summaries for heatmap (week or month) - use local dates
+  // Week view now supports custom date range (up to 7 days)
   const heatmapStartDate = heatmapViewType === 'week' 
     ? getDateKey(heatmapWeekStart)
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month, 1));
   const heatmapEndDate = heatmapViewType === 'week'
-    ? getDateKey(new Date(heatmapWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000)) // 6 days after start
+    ? getDateKey(heatmapWeekEnd)
     : getDateKey(new Date(heatmapMonth.year, heatmapMonth.month + 1, 0));
   
   // WEEK VIEW: Always use raw attendance records for reliability
@@ -343,10 +355,12 @@ export default function AdminAttendancePage() {
   }, [users, searchQuery, departmentFilter]);
 
   // Days in selected period for heatmap (week or month)
+  // Week view now supports custom date range (up to 7 days)
   const heatmapDays = useMemo(() => {
     if (heatmapViewType === 'week') {
       const days: Date[] = [];
-      for (let i = 0; i < 7; i++) {
+      const rangeDays = Math.round((heatmapWeekEnd.getTime() - heatmapWeekStart.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+      for (let i = 0; i < rangeDays; i++) {
         const day = new Date(heatmapWeekStart);
         day.setDate(heatmapWeekStart.getDate() + i);
         days.push(day);
@@ -355,7 +369,7 @@ export default function AdminAttendancePage() {
     } else {
       return getDaysInMonth(heatmapMonth.year, heatmapMonth.month);
     }
-  }, [heatmapViewType, heatmapWeekStart, heatmapMonth]);
+  }, [heatmapViewType, heatmapWeekStart, heatmapWeekEnd, heatmapMonth]);
 
   // Aggregated data type for heatmap cells
   type AggregatedAttendance = {
@@ -704,21 +718,65 @@ export default function AdminAttendancePage() {
     }
   };
 
-  // Week navigation
+  // Week navigation - maintains the same range length
   const goToPreviousWeek = () => {
+    const rangeDays = Math.round((heatmapWeekEnd.getTime() - heatmapWeekStart.getTime()) / (24 * 60 * 60 * 1000));
     setHeatmapWeekStart(prev => {
       const newDate = new Date(prev);
-      newDate.setDate(newDate.getDate() - 7);
+      newDate.setDate(newDate.getDate() - (rangeDays + 1));
+      return newDate;
+    });
+    setHeatmapWeekEnd(prev => {
+      const newDate = new Date(prev);
+      newDate.setDate(newDate.getDate() - (rangeDays + 1));
       return newDate;
     });
   };
 
   const goToNextWeek = () => {
+    const rangeDays = Math.round((heatmapWeekEnd.getTime() - heatmapWeekStart.getTime()) / (24 * 60 * 60 * 1000));
     setHeatmapWeekStart(prev => {
       const newDate = new Date(prev);
-      newDate.setDate(newDate.getDate() + 7);
+      newDate.setDate(newDate.getDate() + rangeDays + 1);
       return newDate;
     });
+    setHeatmapWeekEnd(prev => {
+      const newDate = new Date(prev);
+      newDate.setDate(newDate.getDate() + rangeDays + 1);
+      return newDate;
+    });
+  };
+  
+  // Handle custom date range changes
+  const handleWeekStartChange = (dateStr: string) => {
+    const newStart = new Date(dateStr + 'T00:00:00');
+    setHeatmapWeekStart(newStart);
+    // If end date is before start or more than 7 days after, adjust it
+    const maxEnd = new Date(newStart);
+    maxEnd.setDate(newStart.getDate() + 6);
+    if (heatmapWeekEnd < newStart) {
+      setHeatmapWeekEnd(newStart);
+    } else if (heatmapWeekEnd > maxEnd) {
+      setHeatmapWeekEnd(maxEnd);
+    }
+    setUseCustomRange(true);
+  };
+  
+  const handleWeekEndChange = (dateStr: string) => {
+    const newEnd = new Date(dateStr + 'T00:00:00');
+    // Ensure end is not before start and not more than 7 days after start
+    const minEnd = heatmapWeekStart;
+    const maxEnd = new Date(heatmapWeekStart);
+    maxEnd.setDate(heatmapWeekStart.getDate() + 6);
+    
+    if (newEnd < minEnd) {
+      setHeatmapWeekEnd(minEnd);
+    } else if (newEnd > maxEnd) {
+      setHeatmapWeekEnd(maxEnd);
+    } else {
+      setHeatmapWeekEnd(newEnd);
+    }
+    setUseCustomRange(true);
   };
 
   // Month navigation
@@ -745,10 +803,10 @@ export default function AdminAttendancePage() {
     year: 'numeric' 
   });
 
-  // Format week range
-  const weekEndDate = new Date(heatmapWeekStart);
-  weekEndDate.setDate(heatmapWeekStart.getDate() + 6);
-  const weekRangeName = `${heatmapWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  // Format week range (now uses custom end date)
+  const weekRangeName = heatmapWeekStart.getTime() === heatmapWeekEnd.getTime()
+    ? heatmapWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : `${heatmapWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${heatmapWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   // Navigate heatmap based on view type
   const goToPrevious = heatmapViewType === 'week' ? goToPreviousWeek : goToPreviousMonth;
@@ -1361,7 +1419,7 @@ export default function AdminAttendancePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Filters */}
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
                 <div className="relative flex-1 max-w-xs">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -1383,6 +1441,31 @@ export default function AdminAttendancePage() {
                     ))}
                   </SelectContent>
                 </Select>
+                
+                {/* Custom Date Range for Week View */}
+                {heatmapViewType === 'week' && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Label className="text-sm text-muted-foreground whitespace-nowrap">Date Range:</Label>
+                    <Input
+                      type="date"
+                      value={getDateKey(heatmapWeekStart)}
+                      onChange={(e) => handleWeekStartChange(e.target.value)}
+                      className="w-[140px]"
+                      data-testid="input-week-start-date"
+                    />
+                    <span className="text-muted-foreground">to</span>
+                    <Input
+                      type="date"
+                      value={getDateKey(heatmapWeekEnd)}
+                      onChange={(e) => handleWeekEndChange(e.target.value)}
+                      min={getDateKey(heatmapWeekStart)}
+                      max={getDateKey(new Date(heatmapWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000))}
+                      className="w-[140px]"
+                      data-testid="input-week-end-date"
+                    />
+                    <span className="text-xs text-muted-foreground">(max 7 days)</span>
+                  </div>
+                )}
               </div>
 
               {/* Legend */}
