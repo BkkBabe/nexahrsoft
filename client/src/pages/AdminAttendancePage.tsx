@@ -1826,13 +1826,13 @@ export default function AdminAttendancePage() {
                       <div className="w-48 flex-shrink-0 p-2 font-medium text-sm border-r">
                         Employee
                       </div>
-                      <div className="flex">
+                      <div className={`flex ${heatmapViewType === 'week' ? 'flex-1' : ''}`}>
                         {heatmapDays.map((day, idx) => {
                           const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                           return (
                             <div
                               key={idx}
-                              className={`${heatmapViewType === 'week' ? 'w-20' : 'w-8'} flex-shrink-0 p-1 text-center text-xs border-r ${isWeekend ? 'bg-muted/50' : ''}`}
+                              className={`${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} p-1 text-center text-xs border-r ${isWeekend ? 'bg-muted/50' : ''}`}
                             >
                               <div className="font-medium">{day.getDate()}</div>
                               <div className="text-muted-foreground text-[10px]">
@@ -1882,7 +1882,7 @@ export default function AdminAttendancePage() {
                                 {user.department || 'No dept'}
                               </div>
                             </div>
-                            <div className="flex">
+                            <div className={`flex ${heatmapViewType === 'week' ? 'flex-1' : ''}`}>
                               {heatmapDays.map((day, idx) => {
                                 const dateKey = getDateKey(day);
                                 const aggData = heatmapDataMap[user.id]?.[dateKey];
@@ -1899,7 +1899,7 @@ export default function AdminAttendancePage() {
                                   <Tooltip key={idx}>
                                     <TooltipTrigger asChild>
                                       <div
-                                        className={`${heatmapViewType === 'week' ? 'w-20' : 'w-8'} flex-shrink-0 min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
+                                        className={`${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
                                           isFuture 
                                             ? 'bg-muted/30' 
                                             : isWeekend && !hasRecord 
