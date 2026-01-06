@@ -15,7 +15,7 @@ import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
-import type { AttendanceRecord, User, DailyAttendanceSummary } from "@shared/schema";
+import type { AttendanceRecord, User, DailyAttendanceSummary, CompanySettings } from "@shared/schema";
 
 // NOTE: Geocoding is now handled server-side during clock-in/out
 // Location text is stored in the database and displayed directly
@@ -204,6 +204,7 @@ export default function AdminAttendancePage() {
   const [showUnarchiveModal, setShowUnarchiveModal] = useState(false);
   const [selectedArchivedUsers, setSelectedArchivedUsers] = useState<Set<string>>(new Set());
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showDailyReport, setShowDailyReport] = useState(false);
   
   const { toast } = useToast();
 
@@ -323,6 +324,12 @@ export default function AdminAttendancePage() {
     enabled: viewMode === 'orphaned',
   });
   const orphanedSessions = orphanedSessionsData?.records || [];
+
+  // Fetch company settings to check ignoreOrphanedSessions flag
+  const { data: companySettings } = useQuery<CompanySettings>({
+    queryKey: ['/api/company/settings'],
+  });
+  const ignoreOrphanedSessions = companySettings?.ignoreOrphanedSessions ?? false;
   
   // State for selected orphaned records
   const [selectedOrphanedIds, setSelectedOrphanedIds] = useState<Set<string>>(new Set());
@@ -1063,21 +1070,23 @@ export default function AdminAttendancePage() {
             <CalendarCheck className="h-4 w-4 mr-1" />
             Clock-ins
           </Button>
-          <Button
-            variant={viewMode === 'orphaned' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('orphaned')}
-            data-testid="button-view-orphaned"
-            className={orphanedSessions.length > 0 ? "relative" : ""}
-          >
-            <AlertTriangle className="h-4 w-4 mr-1" />
-            Orphaned
-            {orphanedSessions.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                {orphanedSessions.length}
-              </span>
-            )}
-          </Button>
+          {!ignoreOrphanedSessions && (
+            <Button
+              variant={viewMode === 'orphaned' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('orphaned')}
+              data-testid="button-view-orphaned"
+              className={orphanedSessions.length > 0 ? "relative" : ""}
+            >
+              <AlertTriangle className="h-4 w-4 mr-1" />
+              Orphaned
+              {orphanedSessions.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                  {orphanedSessions.length}
+                </span>
+              )}
+            </Button>
+          )}
           <Button
             variant={viewMode === 'heatmap' ? 'default' : 'outline'}
             size="sm"
@@ -1138,6 +1147,15 @@ export default function AdminAttendancePage() {
                       Today
                     </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowDailyReport(true)}
+                    data-testid="button-print-daily-report"
+                  >
+                    <Printer className="h-4 w-4 mr-1" />
+                    Print Daily Report
+                  </Button>
                   <div className="text-sm text-muted-foreground">
                     <span className="font-medium text-foreground" data-testid="text-today-clocked-in-count">{clockInsRecords.length}</span> clock-ins
                   </div>
@@ -1808,13 +1826,13 @@ export default function AdminAttendancePage() {
                       <div className="w-48 flex-shrink-0 p-2 font-medium text-sm border-r">
                         Employee
                       </div>
-                      <div className="flex flex-1">
+                      <div className="flex">
                         {heatmapDays.map((day, idx) => {
                           const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                           return (
                             <div
                               key={idx}
-                              className={`flex-1 ${heatmapViewType === 'week' ? 'min-w-[80px]' : 'min-w-[28px]'} p-1 text-center text-xs border-r ${isWeekend ? 'bg-muted/50' : ''}`}
+                              className={`${heatmapViewType === 'week' ? 'w-20' : 'w-8'} flex-shrink-0 p-1 text-center text-xs border-r ${isWeekend ? 'bg-muted/50' : ''}`}
                             >
                               <div className="font-medium">{day.getDate()}</div>
                               <div className="text-muted-foreground text-[10px]">
@@ -1864,7 +1882,7 @@ export default function AdminAttendancePage() {
                                 {user.department || 'No dept'}
                               </div>
                             </div>
-                            <div className="flex flex-1">
+                            <div className="flex">
                               {heatmapDays.map((day, idx) => {
                                 const dateKey = getDateKey(day);
                                 const aggData = heatmapDataMap[user.id]?.[dateKey];
@@ -1881,7 +1899,7 @@ export default function AdminAttendancePage() {
                                   <Tooltip key={idx}>
                                     <TooltipTrigger asChild>
                                       <div
-                                        className={`flex-1 ${heatmapViewType === 'week' ? 'min-w-[80px]' : 'min-w-[28px]'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
+                                        className={`${heatmapViewType === 'week' ? 'w-20' : 'w-8'} flex-shrink-0 min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
                                           isFuture 
                                             ? 'bg-muted/30' 
                                             : isWeekend && !hasRecord 
@@ -2419,6 +2437,115 @@ export default function AdminAttendancePage() {
               data-testid="button-confirm-unarchive"
             >
               {unarchiveUsersMutation.isPending ? "Unarchiving..." : `Unarchive (${selectedArchivedUsers.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Daily Report Dialog */}
+      <Dialog open={showDailyReport} onOpenChange={setShowDailyReport}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Daily Attendance Report
+            </DialogTitle>
+            <DialogDescription>
+              {new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4" id="daily-report-content">
+            {clockInsRecords.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No attendance records for this date.
+              </div>
+            ) : (
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="p-2 text-left font-medium">S/N</th>
+                    <th className="p-2 text-left font-medium">Employee</th>
+                    <th className="p-2 text-left font-medium">Clock-in Time</th>
+                    <th className="p-2 text-left font-medium">Clock-out Time</th>
+                    <th className="p-2 text-left font-medium">Clock-in Location</th>
+                    <th className="p-2 text-left font-medium">Clock-out Location</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clockInsRecords
+                    .sort((a, b) => new Date(a.clockInTime).getTime() - new Date(b.clockInTime).getTime())
+                    .map((record, idx) => {
+                      const user = users.find(u => u.id === record.userId);
+                      return (
+                        <tr key={record.id} className="border-b hover:bg-muted/30" data-testid={`daily-report-row-${record.id}`}>
+                          <td className="p-2 text-muted-foreground">{idx + 1}</td>
+                          <td className="p-2">
+                            <div className="font-medium">{user?.name || 'Unknown'}</div>
+                            <div className="text-xs text-muted-foreground">{user?.employeeCode || '-'}</div>
+                          </td>
+                          <td className="p-2">{formatTime(record.clockInTime)}</td>
+                          <td className="p-2">{record.clockOutTime ? formatTime(record.clockOutTime) : <span className="text-blue-500">In Progress</span>}</td>
+                          <td className="p-2">
+                            <div className="max-w-[150px]">
+                              {record.clockInLocationText || (record.latitude && record.longitude ? 'Location recorded' : 'No location')}
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            <div className="max-w-[150px]">
+                              {record.clockOutLocationText || (record.clockOutLatitude && record.clockOutLongitude ? 'Location recorded' : record.clockOutTime ? 'No location' : '-')}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDailyReport(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                const reportContent = document.getElementById('daily-report-content');
+                if (reportContent) {
+                  const printWindow = window.open('', '_blank');
+                  if (printWindow) {
+                    printWindow.document.write(`
+                      <!DOCTYPE html>
+                      <html>
+                        <head>
+                          <title>Daily Attendance Report - ${clockInsDate}</title>
+                          <style>
+                            body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; }
+                            h1 { font-size: 18px; margin-bottom: 5px; }
+                            h2 { font-size: 14px; color: #666; margin-bottom: 20px; }
+                            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                            th { background: #f5f5f5; font-weight: 600; }
+                            tr:nth-child(even) { background: #fafafa; }
+                            .in-progress { color: #3b82f6; }
+                          </style>
+                        </head>
+                        <body>
+                          <h1>Daily Attendance Report</h1>
+                          <h2>${new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h2>
+                          ${reportContent.innerHTML}
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                    printWindow.print();
+                  }
+                }
+              }}
+              data-testid="button-print-report"
+            >
+              <Printer className="h-4 w-4 mr-1" />
+              Print Report
             </Button>
           </DialogFooter>
         </DialogContent>

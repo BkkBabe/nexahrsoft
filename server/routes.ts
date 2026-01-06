@@ -3021,6 +3021,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update orphaned sessions setting (admin only)
+  app.put("/api/company/orphaned-setting", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        ignoreOrphanedSessions: z.boolean(),
+      });
+
+      const data = schema.parse(req.body);
+      const updated = await storage.updateCompanySettings({ ignoreOrphanedSessions: data.ignoreOrphanedSessions });
+      res.json({ success: true, settings: updated });
+    } catch (error) {
+      console.error("Update orphaned setting error:", error);
+      res.status(500).json({ message: "Failed to update orphaned sessions setting" });
+    }
+  });
+
   // Update company info (admin only) - name, address and UEN for payslips
   app.put("/api/company/info", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {

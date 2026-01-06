@@ -27,7 +27,7 @@ Preferred communication style: Simple, everyday language.
 ### Database Schema
 
 - **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent, mustChangePassword). Supports both password-based and OAuth, with approval-based access control, forced password change on first login, and full HR metadata.
-- **Company Settings Table**: Stores company branding, email settings, and timezone configuration (company_name, company_address, company_uen, logo_url, favicon_url, senderEmail, senderName, appUrl, defaultTimezone, updated_at). Singleton pattern ensures one record.
+- **Company Settings Table**: Stores company branding, email settings, and timezone configuration (company_name, company_address, company_uen, logo_url, favicon_url, senderEmail, senderName, appUrl, defaultTimezone, ignoreOrphanedSessions, updated_at). Singleton pattern ensures one record.
 - **Payroll Loan Accounts Table**: Stores employee loans with fields: userId, loanType, description, principalAmount, outstandingBalance, monthlyRepayment, startDate, endDate, status. Supports COMPANY_LOAN, STUDY_LOAN, HOUSING_LOAN types.
 - **Payroll Loan Repayments Table**: Tracks individual repayments with payrollPeriod, amount, notes, and recordedBy references.
 - **Attendance Records Table**: Stores clock-in/out times, user ID, date, calculated hours, location data, and photo metadata.
@@ -72,6 +72,7 @@ Preferred communication style: Simple, everyday language.
   - Company branding (logo, favicon, name, address, UEN)
   - Email sender configuration for welcome messages
   - Timezone settings for attendance calculations (default: Asia/Singapore)
+  - **Orphaned Sessions Setting**: Toggle to ignore orphaned sessions (clock-ins older than 24 hours without clock-out). When enabled, employees can clock in without closing orphaned sessions, and the Orphaned button is hidden from the Attendance page.
   - QR code preview for verification
   - Admin Users Management: Promote employees to admin role, view/remove admin users
   - Admin users can log in via Admin Login page using their username/password
