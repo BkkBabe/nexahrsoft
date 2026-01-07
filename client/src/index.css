@@ -347,8 +347,8 @@
   
   /* Reduce margins for print */
   @page {
-    margin: 0.5in;
-    size: auto;
+    margin: 0.25in;
+    size: landscape;
   }
   
   /* Compact text for print */
@@ -361,5 +361,26 @@
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  /* Heatmap print styles - inline styles are used for cell colors */
+  [data-testid^="cell-"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  /* Ensure heatmap container expands fully */
+  [data-testid="heatmap-container"] {
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Hide tooltips in print */
+  [data-radix-tooltip-content],
+  [role="tooltip"] {
+    display: none !important;
   }
 }

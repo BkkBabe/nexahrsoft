@@ -126,6 +126,30 @@ function getHeatmapColor(hours: number, hasOpenSession?: boolean): string {
   return "bg-muted";
 }
 
+// Get inline style for printing (browsers print inline styles more reliably)
+// Covers all cell states: hours worked, in-progress, absent, weekend, and future
+function getHeatmapInlineStyle(
+  hours: number, 
+  hasOpenSession: boolean, 
+  isWeekend: boolean, 
+  isFuture: boolean,
+  hasRecord: boolean
+): React.CSSProperties {
+  // Future dates - light gray
+  if (isFuture) return { backgroundColor: '#f3f4f6' }; // Gray-100
+  // Has active session (in progress)
+  if (hasOpenSession && hours === 0) return { backgroundColor: '#3b82f6', color: '#fff' }; // Blue
+  // Hours worked - color coded by duration
+  if (hours >= 8) return { backgroundColor: '#16a34a', color: '#fff' }; // Green-600
+  if (hours >= 6) return { backgroundColor: '#4ade80', color: '#000' }; // Green-400
+  if (hours >= 4) return { backgroundColor: '#facc15', color: '#000' }; // Yellow-400
+  if (hours > 0) return { backgroundColor: '#fb923c', color: '#fff' }; // Orange-400
+  // Weekend with no record
+  if (isWeekend) return { backgroundColor: '#e5e7eb' }; // Gray-200
+  // Regular day with no record (absent)
+  return { backgroundColor: '#f9fafb' }; // Gray-50
+}
+
 // Get text color based on background
 function getHeatmapTextColor(hours: number): string {
   if (hours > 0) return "text-white";
@@ -1059,9 +1083,39 @@ export default function AdminAttendancePage() {
   
   // Print heatmap
   const handlePrintHeatmap = () => {
+    // Guard against empty data
+    if (!heatmapDays || heatmapDays.length === 0) {
+      toast({
+        title: "No Data to Print",
+        description: "Please wait for the attendance data to load before printing.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsPrinting(true);
+    
+    // Change document title to month/year for print
+    const originalTitle = document.title;
+    const firstDay = heatmapDays[0];
+    const lastDay = heatmapDays[heatmapDays.length - 1];
+    
+    // Format: "Attendance Report - January 2026" for single month, or "Attendance Report - Jan 5-11, 2026" for week view
+    let printTitle: string;
+    if (heatmapViewType === 'month') {
+      printTitle = `Attendance Report - ${firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+    } else {
+      // Week view - show date range
+      const startDate = firstDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const endDate = lastDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      printTitle = `Attendance Report - ${startDate} to ${endDate}`;
+    }
+    document.title = printTitle;
+    
     setTimeout(() => {
       window.print();
+      // Restore original title after print dialog closes
+      document.title = originalTitle;
       setIsPrinting(false);
     }, 100);
   };
@@ -1946,7 +2000,7 @@ export default function AdminAttendancePage() {
               {heatmapLoading ? (
                 <div className="text-center py-8 text-muted-foreground">Loading heatmap data...</div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto print:overflow-visible" data-testid="heatmap-container">
                   <div className="min-w-[800px]">
                     {/* Header row with dates */}
                     <div className="flex border-b sticky top-0 bg-background z-10">
@@ -1998,7 +2052,7 @@ export default function AdminAttendancePage() {
                         No employees found matching your filters
                       </div>
                     ) : (
-                      <div className="max-h-[60vh] overflow-y-auto">
+                      <div className="max-h-[60vh] overflow-y-auto print:max-h-none print:overflow-visible">
                         {filteredUsers.map((user, userIndex) => (
                           <div key={user.id} className="flex border-b hover:bg-muted/30" data-testid={`heatmap-row-${user.id}`}>
                             {/* Checkbox column - hidden when printing */}
@@ -2047,6 +2101,7 @@ export default function AdminAttendancePage() {
                                               ? 'bg-muted/50'
                                               : getHeatmapColor(hours, hasOpenSession)
                                         } ${(hours > 0 || hasOpenSession) ? 'text-white' : ''}`}
+                                        style={getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord)}
                                         data-testid={`cell-${user.id}-${dateKey}`}
                                       >
                                         {!isFuture && hasOpenSession && hours === 0 && (
