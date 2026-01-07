@@ -513,6 +513,7 @@ export default function AdminAttendancePage() {
         description: data.message || "Attendance record created successfully",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/summaries'] });
       setShowAddDialog(false);
       setSelectedEmployee(null);
       setAddSearchQuery("");

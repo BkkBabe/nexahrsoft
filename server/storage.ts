@@ -162,6 +162,7 @@ export class MemStorage implements IStorage {
       senderEmail: null,
       senderName: null,
       appUrl: "https://app.nexahrms.com",
+      ignoreOrphanedSessions: false,
     };
   }
   
