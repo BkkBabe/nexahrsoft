@@ -898,51 +898,58 @@ export default function AdminAttendancePage() {
     });
   };
   
-  // Export heatmap data to Excel (using HTML table format for styling support)
+  // Export heatmap data to Excel (using Excel XML Spreadsheet format)
   const exportToExcel = () => {
     // Get month/year for title from first day in range
     const firstDay = heatmapDays[0];
     const monthYearTitle = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     
-    // Build HTML table with yellow highlighting for weekends
-    let html = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          table { border-collapse: collapse; }
-          th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: center; }
-          th { background-color: #f0f0f0; font-weight: bold; }
-          .weekend { background-color: #FFFF00; }
-          .total { background-color: #e0f0e0; font-weight: bold; }
-          .title { font-size: 16px; font-weight: bold; text-align: left; background-color: #fff; border: none; }
-        </style>
-      </head>
-      <body>
-        <table>
-    `;
+    // Build Excel XML Spreadsheet
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+  <Style ss:ID="Default"><Alignment ss:Vertical="Center" ss:Horizontal="Center"/></Style>
+  <Style ss:ID="Title"><Font ss:Bold="1" ss:Size="14"/><Alignment ss:Horizontal="Left"/></Style>
+  <Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#F0F0F0" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+  <Style ss:ID="Weekend"><Interior ss:Color="#FFFF00" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+  <Style ss:ID="WeekendHeader"><Font ss:Bold="1"/><Interior ss:Color="#FFFF00" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+  <Style ss:ID="Total"><Font ss:Bold="1"/><Interior ss:Color="#E0F0E0" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+</Styles>
+<Worksheet ss:Name="Attendance">
+<Table>
+`;
     
-    // Title row with month/year
-    const totalColumns = 4 + heatmapDays.length + 1; // S/N, Name, Code, Dept + days + Total
-    html += `<tr><td colspan="${totalColumns}" class="title">Attendance Report - ${monthYearTitle}</td></tr>`;
+    // Title row
+    const totalColumns = 4 + heatmapDays.length + 1;
+    xml += `<Row><Cell ss:StyleID="Title" ss:MergeAcross="${totalColumns - 1}"><Data ss:Type="String">Attendance Report - ${monthYearTitle}</Data></Cell></Row>\n`;
     
-    // Header row with just day numbers (1, 2, 3, etc.)
-    html += '<tr>';
-    html += '<th>S/N</th><th>Employee Name</th><th>Employee Code</th><th>Department</th>';
+    // Header row with day numbers
+    xml += '<Row>';
+    xml += '<Cell ss:StyleID="Header"><Data ss:Type="String">S/N</Data></Cell>';
+    xml += '<Cell ss:StyleID="Header"><Data ss:Type="String">Employee Name</Data></Cell>';
+    xml += '<Cell ss:StyleID="Header"><Data ss:Type="String">Employee Code</Data></Cell>';
+    xml += '<Cell ss:StyleID="Header"><Data ss:Type="String">Department</Data></Cell>';
     heatmapDays.forEach(day => {
-      const isWeekend = isWeekendDate(day);
-      html += `<th class="${isWeekend ? 'weekend' : ''}">${day.getDate()}</th>`;
+      const style = isWeekendDate(day) ? 'WeekendHeader' : 'Header';
+      xml += `<Cell ss:StyleID="${style}"><Data ss:Type="Number">${day.getDate()}</Data></Cell>`;
     });
-    html += '<th class="total">Total Hours</th></tr>';
+    xml += '<Cell ss:StyleID="Total"><Data ss:Type="String">Total Hours</Data></Cell>';
+    xml += '</Row>\n';
     
     // Day of week row
-    html += '<tr>';
-    html += '<td></td><td></td><td></td><td></td>';
+    xml += '<Row>';
+    xml += '<Cell><Data ss:Type="String"></Data></Cell>';
+    xml += '<Cell><Data ss:Type="String"></Data></Cell>';
+    xml += '<Cell><Data ss:Type="String"></Data></Cell>';
+    xml += '<Cell><Data ss:Type="String"></Data></Cell>';
     heatmapDays.forEach(day => {
-      const isWeekend = isWeekendDate(day);
-      html += `<td class="${isWeekend ? 'weekend' : ''}">${getDayOfWeek(day)}</td>`;
+      const style = isWeekendDate(day) ? 'Weekend' : 'Default';
+      xml += `<Cell ss:StyleID="${style}"><Data ss:Type="String">${getDayOfWeek(day)}</Data></Cell>`;
     });
-    html += '<td class="total"></td></tr>';
+    xml += '<Cell ss:StyleID="Total"><Data ss:Type="String"></Data></Cell>';
+    xml += '</Row>\n';
     
     // Data rows
     filteredUsers.forEach((user, idx) => {
@@ -955,35 +962,35 @@ export default function AdminAttendancePage() {
         return sum + (aggData?.totalHours || 0);
       }, 0);
       
-      html += '<tr>';
-      html += `<td>${idx + 1}</td>`;
-      html += `<td>${user.name || ''}</td>`;
-      html += `<td>${user.employeeCode || ''}</td>`;
-      html += `<td>${user.department || ''}</td>`;
+      xml += '<Row>';
+      xml += `<Cell><Data ss:Type="Number">${idx + 1}</Data></Cell>`;
+      xml += `<Cell><Data ss:Type="String">${user.name || ''}</Data></Cell>`;
+      xml += `<Cell><Data ss:Type="String">${user.employeeCode || ''}</Data></Cell>`;
+      xml += `<Cell><Data ss:Type="String">${user.department || ''}</Data></Cell>`;
       
       heatmapDays.forEach(day => {
-        const isWeekend = isWeekendDate(day);
+        const style = isWeekendDate(day) ? 'Weekend' : 'Default';
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        let value: string | number = '';
+        let value = '';
         if (day <= today) {
           const dateKey = getDateKey(day);
           const aggData = heatmapDataMap[user.id]?.[dateKey];
-          value = aggData?.totalHours || 0;
+          value = String(aggData?.totalHours || 0);
         }
-        html += `<td class="${isWeekend ? 'weekend' : ''}">${value}</td>`;
+        xml += `<Cell ss:StyleID="${style}"><Data ss:Type="Number">${value || 0}</Data></Cell>`;
       });
       
-      html += `<td class="total">${totalHours.toFixed(1)}</td></tr>`;
+      xml += `<Cell ss:StyleID="Total"><Data ss:Type="Number">${totalHours.toFixed(1)}</Data></Cell>`;
+      xml += '</Row>\n';
     });
     
-    html += '</table></body></html>';
+    xml += '</Table></Worksheet></Workbook>';
     
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    // File name includes month/year
     const fileMonthYear = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '_');
     link.download = `Attendance_Report_${fileMonthYear}.xls`;
     document.body.appendChild(link);
