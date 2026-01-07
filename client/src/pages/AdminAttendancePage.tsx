@@ -849,9 +849,6 @@ export default function AdminAttendancePage() {
     // Day of week row
     const dayOfWeekRow = ['', '', '', '', ...heatmapDays.map(d => getDayOfWeek(d)), ''];
     
-    // Weekend indicator row (for reference)
-    const weekendRow = ['', '', '', '', ...heatmapDays.map(d => isWeekendDate(d) ? 'WEEKEND' : ''), ''];
-    
     const rows = filteredUsers.map((user, idx) => {
       const totalHours = heatmapDays.reduce((sum, day) => {
         const today = new Date();
@@ -879,8 +876,8 @@ export default function AdminAttendancePage() {
       ];
     });
     
-    const csvContent = [titleRow, headers, dayOfWeekRow, weekendRow, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
+    const csvContent = [titleRow, headers, dayOfWeekRow, ...rows]
+      .map((row: (string | number)[]) => row.map(cell => `"${cell}"`).join(','))
       .join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
