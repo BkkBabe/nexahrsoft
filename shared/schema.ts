@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer, real, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -90,9 +90,9 @@ export const dailyAttendanceSummary = pgTable("daily_attendance_summary", {
   lastClockOut: timestamp("last_clock_out"),
   status: text("status").notNull().default("absent"), // 'present', 'absent', 'partial'
   calculatedAt: timestamp("calculated_at").notNull().defaultNow(),
-}, (table) => ({
-  userDateUnique: sql`UNIQUE(user_id, date)`,
-}));
+}, (table) => [
+  unique("daily_attendance_summary_user_date_unique").on(table.userId, table.date),
+]);
 
 export const userSessions = pgTable("user_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // Internal DB ID
