@@ -835,8 +835,15 @@ export default function AdminAttendancePage() {
   
   // Export heatmap data to CSV
   const exportToCSV = () => {
-    // Header row with formatted dates (Dec 1, Dec 2, etc.)
-    const dateHeaders = heatmapDays.map(d => formatDateForExport(d));
+    // Get month/year for title from first day in range
+    const firstDay = heatmapDays[0];
+    const monthYearTitle = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    
+    // Title row with month/year
+    const titleRow = [`Attendance Report - ${monthYearTitle}`, '', '', '', ...heatmapDays.map(() => ''), ''];
+    
+    // Header row with just day numbers (1, 2, 3, etc.)
+    const dateHeaders = heatmapDays.map(d => d.getDate().toString());
     const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...dateHeaders, 'Total Hours'];
     
     // Day of week row
@@ -872,7 +879,7 @@ export default function AdminAttendancePage() {
       ];
     });
     
-    const csvContent = [headers, dayOfWeekRow, weekendRow, ...rows]
+    const csvContent = [titleRow, headers, dayOfWeekRow, weekendRow, ...rows]
       .map(row => row.map(cell => `"${cell}"`).join(','))
       .join('\n');
     
@@ -880,7 +887,9 @@ export default function AdminAttendancePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `attendance_heatmap_${heatmapViewType}_${heatmapStartDate}_${heatmapEndDate}.csv`;
+    // File name includes month/year
+    const fileMonthYear = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '_');
+    link.download = `Attendance_Report_${fileMonthYear}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -888,12 +897,16 @@ export default function AdminAttendancePage() {
     
     toast({
       title: "Export Complete",
-      description: "Heatmap data exported to CSV",
+      description: `Heatmap data exported to CSV - ${monthYearTitle}`,
     });
   };
   
   // Export heatmap data to Excel (using HTML table format for styling support)
   const exportToExcel = () => {
+    // Get month/year for title from first day in range
+    const firstDay = heatmapDays[0];
+    const monthYearTitle = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    
     // Build HTML table with yellow highlighting for weekends
     let html = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -905,18 +918,23 @@ export default function AdminAttendancePage() {
           th { background-color: #f0f0f0; font-weight: bold; }
           .weekend { background-color: #FFFF00; }
           .total { background-color: #e0f0e0; font-weight: bold; }
+          .title { font-size: 16px; font-weight: bold; text-align: left; background-color: #fff; border: none; }
         </style>
       </head>
       <body>
         <table>
     `;
     
-    // Header row with formatted dates
+    // Title row with month/year
+    const totalColumns = 4 + heatmapDays.length + 1; // S/N, Name, Code, Dept + days + Total
+    html += `<tr><td colspan="${totalColumns}" class="title">Attendance Report - ${monthYearTitle}</td></tr>`;
+    
+    // Header row with just day numbers (1, 2, 3, etc.)
     html += '<tr>';
     html += '<th>S/N</th><th>Employee Name</th><th>Employee Code</th><th>Department</th>';
     heatmapDays.forEach(day => {
       const isWeekend = isWeekendDate(day);
-      html += `<th class="${isWeekend ? 'weekend' : ''}">${formatDateForExport(day)}</th>`;
+      html += `<th class="${isWeekend ? 'weekend' : ''}">${day.getDate()}</th>`;
     });
     html += '<th class="total">Total Hours</th></tr>';
     
@@ -968,7 +986,9 @@ export default function AdminAttendancePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `attendance_heatmap_${heatmapViewType}_${heatmapStartDate}_${heatmapEndDate}.xls`;
+    // File name includes month/year
+    const fileMonthYear = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '_');
+    link.download = `Attendance_Report_${fileMonthYear}.xls`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -976,7 +996,7 @@ export default function AdminAttendancePage() {
     
     toast({
       title: "Export Complete",
-      description: "Heatmap data exported to Excel (weekends highlighted in yellow)",
+      description: `Attendance report exported to Excel - ${monthYearTitle}`,
     });
   };
   
