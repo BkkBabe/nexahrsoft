@@ -817,9 +817,34 @@ export default function AdminAttendancePage() {
     });
   };
   
+  // Helper function to format date as "Dec 1", "Dec 2", etc.
+  const formatDateForExport = (date: Date) => {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  
+  // Helper function to get day of week abbreviation
+  const getDayOfWeek = (date: Date) => {
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+  };
+  
+  // Check if date is weekend
+  const isWeekendDate = (date: Date) => {
+    const dayOfWeek = date.getDay();
+    return dayOfWeek === 0 || dayOfWeek === 6; // Sunday = 0, Saturday = 6
+  };
+  
   // Export heatmap data to CSV
   const exportToCSV = () => {
-    const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...heatmapDays.map(d => getDateKey(d)), 'Total Hours'];
+    // Header row with formatted dates (Dec 1, Dec 2, etc.)
+    const dateHeaders = heatmapDays.map(d => formatDateForExport(d));
+    const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...dateHeaders, 'Total Hours'];
+    
+    // Day of week row
+    const dayOfWeekRow = ['', '', '', '', ...heatmapDays.map(d => getDayOfWeek(d)), ''];
+    
+    // Weekend indicator row (for reference)
+    const weekendRow = ['', '', '', '', ...heatmapDays.map(d => isWeekendDate(d) ? 'WEEKEND' : ''), ''];
+    
     const rows = filteredUsers.map((user, idx) => {
       const totalHours = heatmapDays.reduce((sum, day) => {
         const today = new Date();
@@ -847,7 +872,7 @@ export default function AdminAttendancePage() {
       ];
     });
     
-    const csvContent = [headers, ...rows]
+    const csvContent = [headers, dayOfWeekRow, weekendRow, ...rows]
       .map(row => row.map(cell => `"${cell}"`).join(','))
       .join('\n');
     
@@ -867,10 +892,45 @@ export default function AdminAttendancePage() {
     });
   };
   
-  // Export heatmap data to Excel (using CSV format with xls extension for basic compatibility)
+  // Export heatmap data to Excel (using HTML table format for styling support)
   const exportToExcel = () => {
-    const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...heatmapDays.map(d => getDateKey(d)), 'Total Hours'];
-    const rows = filteredUsers.map((user, idx) => {
+    // Build HTML table with yellow highlighting for weekends
+    let html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          table { border-collapse: collapse; }
+          th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: center; }
+          th { background-color: #f0f0f0; font-weight: bold; }
+          .weekend { background-color: #FFFF00; }
+          .total { background-color: #e0f0e0; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <table>
+    `;
+    
+    // Header row with formatted dates
+    html += '<tr>';
+    html += '<th>S/N</th><th>Employee Name</th><th>Employee Code</th><th>Department</th>';
+    heatmapDays.forEach(day => {
+      const isWeekend = isWeekendDate(day);
+      html += `<th class="${isWeekend ? 'weekend' : ''}">${formatDateForExport(day)}</th>`;
+    });
+    html += '<th class="total">Total Hours</th></tr>';
+    
+    // Day of week row
+    html += '<tr>';
+    html += '<td></td><td></td><td></td><td></td>';
+    heatmapDays.forEach(day => {
+      const isWeekend = isWeekendDate(day);
+      html += `<td class="${isWeekend ? 'weekend' : ''}">${getDayOfWeek(day)}</td>`;
+    });
+    html += '<td class="total"></td></tr>';
+    
+    // Data rows
+    filteredUsers.forEach((user, idx) => {
       const totalHours = heatmapDays.reduce((sum, day) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -880,29 +940,31 @@ export default function AdminAttendancePage() {
         return sum + (aggData?.totalHours || 0);
       }, 0);
       
-      return [
-        idx + 1,
-        user.name || '',
-        user.employeeCode || '',
-        user.department || '',
-        ...heatmapDays.map(day => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          if (day > today) return '';
+      html += '<tr>';
+      html += `<td>${idx + 1}</td>`;
+      html += `<td>${user.name || ''}</td>`;
+      html += `<td>${user.employeeCode || ''}</td>`;
+      html += `<td>${user.department || ''}</td>`;
+      
+      heatmapDays.forEach(day => {
+        const isWeekend = isWeekendDate(day);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let value: string | number = '';
+        if (day <= today) {
           const dateKey = getDateKey(day);
           const aggData = heatmapDataMap[user.id]?.[dateKey];
-          return aggData?.totalHours || 0;
-        }),
-        totalHours.toFixed(1)
-      ];
+          value = aggData?.totalHours || 0;
+        }
+        html += `<td class="${isWeekend ? 'weekend' : ''}">${value}</td>`;
+      });
+      
+      html += `<td class="total">${totalHours.toFixed(1)}</td></tr>`;
     });
     
-    // Create tab-separated content for Excel
-    const excelContent = [headers, ...rows]
-      .map(row => row.join('\t'))
-      .join('\n');
+    html += '</table></body></html>';
     
-    const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -914,7 +976,7 @@ export default function AdminAttendancePage() {
     
     toast({
       title: "Export Complete",
-      description: "Heatmap data exported to Excel",
+      description: "Heatmap data exported to Excel (weekends highlighted in yellow)",
     });
   };
   
