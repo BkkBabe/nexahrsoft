@@ -2090,26 +2090,52 @@ export default function AdminAttendancePage() {
                                 const isFuture = day > today;
                                 const hasRecord = aggData && recordCount > 0;
 
+                                // Cell content - shared between print and interactive modes
+                                const cellContent = (
+                                  <>
+                                    {!isFuture && hasOpenSession && hours === 0 && (
+                                      <Clock className="h-3 w-3" />
+                                    )}
+                                    {hours > 0 && !isFuture && (
+                                      <span className="font-medium">{Number.isInteger(hours) ? hours : hours.toFixed(1)}</span>
+                                    )}
+                                  </>
+                                );
+                                
+                                const cellClassName = `${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 ${
+                                  isFuture 
+                                    ? 'bg-muted/30' 
+                                    : isWeekend && !hasRecord 
+                                      ? 'bg-muted/50'
+                                      : getHeatmapColor(hours, hasOpenSession)
+                                } ${(hours > 0 || hasOpenSession) ? 'text-white' : ''}`;
+                                
+                                const cellStyle = getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord);
+                                
+                                // When printing, render simple div without Tooltip wrapper
+                                if (isPrinting) {
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className={cellClassName}
+                                      style={cellStyle}
+                                      data-testid={`cell-${user.id}-${dateKey}`}
+                                    >
+                                      {cellContent}
+                                    </div>
+                                  );
+                                }
+                                
+                                // Interactive mode with Tooltip
                                 return (
                                   <Tooltip key={idx}>
                                     <TooltipTrigger asChild>
                                       <div
-                                        className={`${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 cursor-pointer transition-opacity hover:opacity-80 ${
-                                          isFuture 
-                                            ? 'bg-muted/30' 
-                                            : isWeekend && !hasRecord 
-                                              ? 'bg-muted/50'
-                                              : getHeatmapColor(hours, hasOpenSession)
-                                        } ${(hours > 0 || hasOpenSession) ? 'text-white' : ''}`}
-                                        style={getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord)}
+                                        className={`${cellClassName} cursor-pointer transition-opacity hover:opacity-80`}
+                                        style={cellStyle}
                                         data-testid={`cell-${user.id}-${dateKey}`}
                                       >
-                                        {!isFuture && hasOpenSession && hours === 0 && (
-                                          <Clock className="h-3 w-3" />
-                                        )}
-                                        {hours > 0 && !isFuture && (
-                                          <span className="font-medium">{Number.isInteger(hours) ? hours : hours.toFixed(1)}</span>
-                                        )}
+                                        {cellContent}
                                       </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs max-w-xs">
@@ -2149,14 +2175,32 @@ export default function AdminAttendancePage() {
                                 const aggData = heatmapDataMap[user.id]?.[dateKey];
                                 return sum + (aggData?.totalHours || 0);
                               }, 0);
+                              
+                              const totalCellContent = userTotalHours > 0 ? userTotalHours.toFixed(1) : '-';
+                              const totalCellClassName = "w-20 flex-shrink-0 min-h-[36px] flex items-center justify-center text-sm font-bold border-l";
+                              const totalCellStyle: React.CSSProperties = { backgroundColor: '#e0f2fe' }; // Light blue for print
+                              
+                              // When printing, render simple div without Tooltip
+                              if (isPrinting) {
+                                return (
+                                  <div 
+                                    className={totalCellClassName}
+                                    style={totalCellStyle}
+                                    data-testid={`total-hours-${user.id}`}
+                                  >
+                                    {totalCellContent}
+                                  </div>
+                                );
+                              }
+                              
                               return (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div 
-                                      className="w-20 flex-shrink-0 min-h-[36px] flex items-center justify-center text-sm font-bold border-l bg-primary/10 cursor-pointer hover:bg-primary/20"
+                                      className={`${totalCellClassName} bg-primary/10 cursor-pointer hover:bg-primary/20`}
                                       data-testid={`total-hours-${user.id}`}
                                     >
-                                      {userTotalHours > 0 ? userTotalHours.toFixed(1) : '-'}
+                                      {totalCellContent}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="left" className="text-xs">

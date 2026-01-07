@@ -296,8 +296,7 @@
   nav,
   aside,
   .sidebar,
-  button:not(.print-show),
-  [data-state="closed"] {
+  button:not(.print-show) {
     display: none !important;
   }
   
