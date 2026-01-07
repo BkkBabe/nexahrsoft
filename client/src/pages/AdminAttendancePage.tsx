@@ -15,7 +15,7 @@ import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { AttendanceRecord, User, DailyAttendanceSummary, CompanySettings } from "@shared/schema";
 
 // NOTE: Geocoding is now handled server-side during clock-in/out
@@ -899,33 +899,94 @@ export default function AdminAttendancePage() {
     });
   };
   
-  // Export heatmap data to Excel (using xlsx library for proper .xlsx format)
-  const exportToExcel = () => {
+  // Export heatmap data to Excel (using ExcelJS for proper styling)
+  const exportToExcel = async () => {
     // Get month/year for title from first day in range
     const firstDay = heatmapDays[0];
     const monthYearTitle = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     
-    // Build data array for worksheet
-    const data: (string | number)[][] = [];
+    // Create workbook and worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Attendance');
+    
+    // Define yellow fill for weekends
+    const weekendFill: ExcelJS.Fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFFF00' }
+    };
+    
+    // Define header fill
+    const headerFill: ExcelJS.Fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F0F0' }
+    };
+    
+    // Define total column fill
+    const totalFill: ExcelJS.Fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0F0E0' }
+    };
+    
+    // Set column widths
+    worksheet.columns = [
+      { width: 5 },   // S/N
+      { width: 30 },  // Employee Name
+      { width: 15 },  // Employee Code
+      { width: 15 },  // Department
+      ...heatmapDays.map(() => ({ width: 6 })), // Day columns
+      { width: 12 }   // Total Hours
+    ];
     
     // Title row
-    data.push([`Attendance Report - ${monthYearTitle}`]);
+    const totalColumns = 4 + heatmapDays.length + 1;
+    const titleRow = worksheet.addRow([`Attendance Report - ${monthYearTitle}`]);
+    worksheet.mergeCells(1, 1, 1, totalColumns);
+    titleRow.font = { bold: true, size: 14 };
     
     // Header row with day numbers
-    const headerRow: (string | number)[] = ['S/N', 'Employee Name', 'Employee Code', 'Department'];
-    heatmapDays.forEach(day => {
-      headerRow.push(day.getDate());
+    const headerData = ['S/N', 'Employee Name', 'Employee Code', 'Department'];
+    heatmapDays.forEach(day => headerData.push(day.getDate().toString()));
+    headerData.push('Total Hours');
+    const headerRow = worksheet.addRow(headerData);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell, colNumber) => {
+      cell.fill = headerFill;
+      cell.alignment = { horizontal: 'center' };
+      // Apply yellow to weekend columns (columns 5 onwards are days)
+      if (colNumber > 4 && colNumber <= 4 + heatmapDays.length) {
+        const dayIndex = colNumber - 5;
+        if (isWeekendDate(heatmapDays[dayIndex])) {
+          cell.fill = weekendFill;
+        }
+      }
+      // Total column
+      if (colNumber === totalColumns) {
+        cell.fill = totalFill;
+      }
     });
-    headerRow.push('Total Hours');
-    data.push(headerRow);
     
     // Day of week row
-    const dayOfWeekRow: (string | number)[] = ['', '', '', ''];
-    heatmapDays.forEach(day => {
-      dayOfWeekRow.push(getDayOfWeek(day));
+    const dayOfWeekData = ['', '', '', ''];
+    heatmapDays.forEach(day => dayOfWeekData.push(getDayOfWeek(day)));
+    dayOfWeekData.push('');
+    const dowRow = worksheet.addRow(dayOfWeekData);
+    dowRow.eachCell((cell, colNumber) => {
+      cell.alignment = { horizontal: 'center' };
+      // Apply yellow to weekend columns
+      if (colNumber > 4 && colNumber <= 4 + heatmapDays.length) {
+        const dayIndex = colNumber - 5;
+        if (isWeekendDate(heatmapDays[dayIndex])) {
+          cell.fill = weekendFill;
+        }
+      }
+      // Total column
+      if (colNumber === totalColumns) {
+        cell.fill = totalFill;
+      }
     });
-    dayOfWeekRow.push('');
-    data.push(dayOfWeekRow);
     
     // Data rows
     filteredUsers.forEach((user, idx) => {
@@ -938,7 +999,7 @@ export default function AdminAttendancePage() {
         return sum + (aggData?.totalHours || 0);
       }, 0);
       
-      const row: (string | number)[] = [
+      const rowData: (string | number)[] = [
         idx + 1,
         user.name || '',
         user.employeeCode || '',
@@ -951,40 +1012,44 @@ export default function AdminAttendancePage() {
         if (day <= today) {
           const dateKey = getDateKey(day);
           const aggData = heatmapDataMap[user.id]?.[dateKey];
-          row.push(aggData?.totalHours || 0);
+          rowData.push(aggData?.totalHours || 0);
         } else {
-          row.push('');
+          rowData.push('');
         }
       });
       
-      row.push(parseFloat(totalHours.toFixed(1)));
-      data.push(row);
+      rowData.push(parseFloat(totalHours.toFixed(1)));
+      const dataRow = worksheet.addRow(rowData);
+      
+      // Apply weekend styling to data cells
+      dataRow.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: 'center' };
+        // Apply yellow to weekend columns
+        if (colNumber > 4 && colNumber <= 4 + heatmapDays.length) {
+          const dayIndex = colNumber - 5;
+          if (isWeekendDate(heatmapDays[dayIndex])) {
+            cell.fill = weekendFill;
+          }
+        }
+        // Total column
+        if (colNumber === totalColumns) {
+          cell.fill = totalFill;
+        }
+      });
     });
     
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    
-    // Set column widths
-    const colWidths = [
-      { wch: 5 },   // S/N
-      { wch: 30 },  // Employee Name
-      { wch: 15 },  // Employee Code
-      { wch: 15 },  // Department
-      ...heatmapDays.map(() => ({ wch: 5 })), // Day columns
-      { wch: 12 }   // Total Hours
-    ];
-    ws['!cols'] = colWidths;
-    
-    // Merge title row across all columns
-    const totalColumns = 4 + heatmapDays.length + 1;
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalColumns - 1 } }];
-    
-    XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
-    
     // Generate and download file
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
     const fileMonthYear = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '_');
-    XLSX.writeFile(wb, `Attendance_Report_${fileMonthYear}.xlsx`);
+    link.download = `Attendance_Report_${fileMonthYear}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     
     toast({
       title: "Export Complete",
