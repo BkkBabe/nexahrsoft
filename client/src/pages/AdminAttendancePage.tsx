@@ -474,12 +474,13 @@ export default function AdminAttendancePage() {
   }, [heatmapViewType, heatmapSummaries, heatmapRawRecords, heatmapLoading]);
 
 
-  // Filter employees for add attendance dialog (exclude admins)
+  // Filter employees for add attendance dialog (exclude view-only admins only)
+  // Admins can also be employees who need attendance tracking
   const addDialogFilteredEmployees = useMemo(() => {
     if (!addSearchQuery.trim()) return [];
     const query = addSearchQuery.toLowerCase();
     return users
-      .filter(u => u.role !== "admin")
+      .filter(u => u.role !== "viewonly_admin") // Only exclude view-only admins
       .filter(u => 
         u.name?.toLowerCase().includes(query) ||
         u.email?.toLowerCase().includes(query) ||

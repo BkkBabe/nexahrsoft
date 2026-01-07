@@ -1,0 +1,2 @@
+"id","email","username","name","password_hash","mobile_number","auth_id","role","is_approved","created_at","employee_code","short_name","nric_fin","gender","department","section","designation","finger_id","join_date","resign_date","welcome_email_sent_at","must_change_password","is_archived"
+"bd8d48fb-159b-44c7-a7aa-73d1b5606e66","apaccounts@3si.com.sg","admin001","LAKSHMI","$2b$10$x.PeAbmHlCnLn3FJFcb3l.eh7jwgStjv/gkcGjE8WQr9ovJng9RT.",,,"admin","true","""2025-12-09T10:07:35.705Z""",,,,,,,,,,,"""2025-12-09T10:07:48.285Z""","true","false"
