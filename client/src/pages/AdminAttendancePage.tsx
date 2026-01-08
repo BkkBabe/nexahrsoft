@@ -2224,8 +2224,8 @@ export default function AdminAttendancePage() {
                   Print
                 </Button>
                 
-                {/* Import button */}
-                {!isViewOnlyAdmin && (
+                {/* Import button - nexaadmin only */}
+                {isNexaAdmin && (
                   <Button
                     variant="outline"
                     size="sm"
