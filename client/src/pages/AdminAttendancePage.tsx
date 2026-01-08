@@ -11,7 +11,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw, Archive, ArchiveRestore, Download, Printer } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw, Archive, ArchiveRestore, Download, Printer, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
@@ -230,6 +230,29 @@ export default function AdminAttendancePage() {
   const [selectedArchivedUsers, setSelectedArchivedUsers] = useState<Set<string>>(new Set());
   const [isPrinting, setIsPrinting] = useState(false);
   const [showDailyReport, setShowDailyReport] = useState(false);
+  
+  // Import attendance modal state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreviewData, setImportPreviewData] = useState<{
+    employeeName: string;
+    employeeCode: string | null;
+    department: string | null;
+    date: string;
+    hours: number;
+    status: 'pending' | 'matched' | 'not_found';
+    matchedUserId?: string;
+  }[]>([]);
+  const [importOverwrite, setImportOverwrite] = useState(false);
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'importing' | 'results'>('upload');
+  const [importResults, setImportResults] = useState<{
+    success: boolean;
+    employeeName: string;
+    date: string;
+    hours: number;
+    error?: string;
+    action?: string;
+  }[]>([]);
   
   const { toast } = useToast();
 
@@ -794,6 +817,219 @@ export default function AdminAttendancePage() {
       });
     },
   });
+  
+  // Import attendance mutation
+  const importAttendanceMutation = useMutation({
+    mutationFn: async (data: { records: typeof importPreviewData, overwriteExisting: boolean }) => {
+      const response = await apiRequest("POST", "/api/admin/attendance/import", {
+        records: data.records.map(r => ({
+          employeeName: r.employeeName,
+          employeeCode: r.employeeCode,
+          department: r.department,
+          date: r.date,
+          hours: r.hours,
+        })),
+        overwriteExisting: data.overwriteExisting,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setImportResults(data.results);
+      setImportStep('results');
+      toast({
+        title: "Import Complete",
+        description: data.message,
+      });
+      // Refresh attendance data
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/records'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance/summaries'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Import Failed",
+        description: error.message || "Failed to import attendance data",
+        variant: "destructive",
+      });
+      setImportStep('preview');
+    },
+  });
+  
+  // Parse Excel file for import
+  const parseImportFile = async (file: File) => {
+    const workbook = new ExcelJS.Workbook();
+    const arrayBuffer = await file.arrayBuffer();
+    await workbook.xlsx.load(arrayBuffer);
+    
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw new Error("No worksheet found in Excel file");
+    }
+    
+    const records: typeof importPreviewData = [];
+    const allUsersLower = new Map((usersData || []).map(u => [u.name.toLowerCase().trim(), u]));
+    const allUsersCodeLower = new Map((usersData || []).filter(u => u.employeeCode).map(u => [u.employeeCode!.toLowerCase().trim(), u]));
+    
+    // Find header row (row with "Employee Name" or "S/N")
+    let headerRowIndex = 1;
+    let dateColumns: { colIndex: number; date: Date }[] = [];
+    
+    worksheet.eachRow((row, rowNumber) => {
+      const cellValue = row.getCell(1).value?.toString()?.toLowerCase() || '';
+      if (cellValue === 's/n' || cellValue === 'sn' || cellValue.includes('employee')) {
+        headerRowIndex = rowNumber;
+        return;
+      }
+    });
+    
+    // Parse header row to find date columns
+    const headerRow = worksheet.getRow(headerRowIndex);
+    const titleRow = worksheet.getRow(1);
+    
+    // Extract month/year from title row if available
+    // Supports formats:
+    // - "Attendance Report - Dec 2025"
+    // - "Attendance Report - Dec 1 to Dec 9, 2025"
+    // - "Attendance Report - December 2025"
+    let targetYear = new Date().getFullYear();
+    let targetMonth = new Date().getMonth();
+    
+    const titleValue = titleRow.getCell(1).value?.toString() || '';
+    const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    
+    // Try multiple patterns for month/year extraction
+    // Pattern 1: "Dec 2025" or "December 2025" (standard month year)
+    let monthMatch = titleValue.match(/\b([A-Za-z]+)\s+(\d{4})\b/);
+    
+    // Pattern 2: "Dec 1 to Dec 9, 2025" (date range with year at end)
+    if (!monthMatch || !monthNames.includes(monthMatch[1].toLowerCase().slice(0, 3))) {
+      const rangeMatch = titleValue.match(/\b([A-Za-z]+)\s+\d+.*?(\d{4})\b/);
+      if (rangeMatch) {
+        monthMatch = rangeMatch;
+      }
+    }
+    
+    // Pattern 3: Look for any month name followed later by a year
+    if (!monthMatch || !monthNames.includes(monthMatch[1].toLowerCase().slice(0, 3))) {
+      const monthOnly = titleValue.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i);
+      const yearOnly = titleValue.match(/\b(20\d{2})\b/);
+      if (monthOnly && yearOnly) {
+        monthMatch = [titleValue, monthOnly[1], yearOnly[1]];
+      }
+    }
+    
+    if (monthMatch) {
+      const monthName = monthMatch[1].toLowerCase().slice(0, 3);
+      const monthIndex = monthNames.indexOf(monthName);
+      if (monthIndex !== -1) {
+        targetMonth = monthIndex;
+        targetYear = parseInt(monthMatch[2]);
+      }
+    }
+    
+    // Find date columns (columns with numbers 1-31 in header)
+    headerRow.eachCell((cell, colNumber) => {
+      if (colNumber > 4) { // Skip S/N, Employee Name, Employee Code, Department
+        const value = cell.value;
+        if (typeof value === 'number' && value >= 1 && value <= 31) {
+          const date = new Date(targetYear, targetMonth, value);
+          dateColumns.push({ colIndex: colNumber, date });
+        }
+      }
+    });
+    
+    // Parse data rows (start from row after header)
+    const dataStartRow = headerRowIndex + 2; // Skip day-of-week row
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber < dataStartRow) return;
+      
+      const snValue = row.getCell(1).value;
+      // Skip if S/N is not a number (likely header or empty row)
+      if (typeof snValue !== 'number') return;
+      
+      const employeeName = row.getCell(2).value?.toString()?.trim() || '';
+      const employeeCode = row.getCell(3).value?.toString()?.trim() || null;
+      const department = row.getCell(4).value?.toString()?.trim() || null;
+      
+      if (!employeeName) return;
+      
+      // Find matching user
+      let matchedUser = null;
+      if (employeeCode) {
+        matchedUser = allUsersCodeLower.get(employeeCode.toLowerCase().trim());
+      }
+      if (!matchedUser) {
+        matchedUser = allUsersLower.get(employeeName.toLowerCase().trim());
+      }
+      
+      // Extract hours for each date column
+      dateColumns.forEach(({ colIndex, date }) => {
+        const cellValue = row.getCell(colIndex).value;
+        let hours = 0;
+        
+        if (typeof cellValue === 'number') {
+          hours = cellValue;
+        } else if (cellValue) {
+          const parsed = parseFloat(cellValue.toString());
+          if (!isNaN(parsed)) hours = parsed;
+        }
+        
+        if (hours > 0) { // Only include non-zero hours
+          const dateKey = getDateKey(date);
+          records.push({
+            employeeName,
+            employeeCode,
+            department,
+            date: dateKey,
+            hours,
+            status: matchedUser ? 'matched' : 'not_found',
+            matchedUserId: matchedUser?.id,
+          });
+        }
+      });
+    });
+    
+    return records;
+  };
+  
+  // Handle file upload
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImportFile(file);
+    
+    try {
+      const records = await parseImportFile(file);
+      setImportPreviewData(records);
+      setImportStep('preview');
+    } catch (error: any) {
+      toast({
+        title: "Error Parsing File",
+        description: error.message || "Failed to parse the Excel file",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Execute import - only send matched records
+  const executeImport = () => {
+    setImportStep('importing');
+    const matchedRecords = importPreviewData.filter(r => r.status === 'matched');
+    importAttendanceMutation.mutate({
+      records: matchedRecords,
+      overwriteExisting: importOverwrite,
+    });
+  };
+  
+  // Reset import modal
+  const resetImportModal = () => {
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportPreviewData([]);
+    setImportOverwrite(false);
+    setImportStep('upload');
+    setImportResults([]);
+  };
   
   // Handle archive selected users
   const handleArchiveSelected = () => {
@@ -1988,6 +2224,19 @@ export default function AdminAttendancePage() {
                   Print
                 </Button>
                 
+                {/* Import button */}
+                {!isViewOnlyAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowImportModal(true)}
+                    data-testid="button-import-attendance"
+                  >
+                    <Upload className="h-4 w-4 mr-1" />
+                    Import
+                  </Button>
+                )}
+                
                 {/* Selection info */}
                 {selectedHeatmapUsers.size > 0 && (
                   <span className="text-sm text-muted-foreground ml-2">
@@ -2787,6 +3036,223 @@ export default function AdminAttendancePage() {
               <Printer className="h-4 w-4 mr-1" />
               Print Report
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Import Attendance Modal */}
+      <Dialog open={showImportModal} onOpenChange={(open) => {
+        if (!open) resetImportModal();
+        else setShowImportModal(true);
+      }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Import Attendance Data
+            </DialogTitle>
+            <DialogDescription>
+              {importStep === 'upload' && "Upload an Excel file exported from this system to import attendance records."}
+              {importStep === 'preview' && "Review the data below before importing. Green rows will be imported, red rows have issues."}
+              {importStep === 'importing' && "Importing attendance records..."}
+              {importStep === 'results' && "Import complete. See the results below."}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {importStep === 'upload' && (
+            <div className="space-y-4">
+              <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-sm text-muted-foreground mb-4">
+                  Upload an Excel file (.xlsx) exported from the attendance heatmap
+                </p>
+                <Label htmlFor="import-file" className="cursor-pointer">
+                  <Button asChild>
+                    <span>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Select File
+                    </span>
+                  </Button>
+                </Label>
+                <Input
+                  id="import-file"
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleImportFileChange}
+                  data-testid="input-import-file"
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                <p className="font-medium mb-1">Expected file format:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Row 1: Title (e.g., "Attendance Report - Dec 2025")</li>
+                  <li>Row 2: Headers (S/N, Employee Name, Employee Code, Department, 1, 2, 3...)</li>
+                  <li>Row 3: Day of week</li>
+                  <li>Row 4+: Employee attendance data</li>
+                </ul>
+              </div>
+            </div>
+          )}
+          
+          {importStep === 'preview' && (
+            <div className="space-y-4">
+              {importFile && (
+                <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span className="text-sm font-medium">{importFile.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setImportFile(null);
+                      setImportPreviewData([]);
+                      setImportStep('upload');
+                    }}
+                    className="ml-auto"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="overwrite-existing"
+                  checked={importOverwrite}
+                  onCheckedChange={(checked) => setImportOverwrite(checked as boolean)}
+                  data-testid="checkbox-overwrite"
+                />
+                <Label htmlFor="overwrite-existing" className="text-sm">
+                  Overwrite existing records (if unchecked, duplicate dates will be skipped)
+                </Label>
+              </div>
+              
+              <div className="border rounded-lg max-h-[300px] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted sticky top-0">
+                    <tr>
+                      <th className="p-2 text-left">Status</th>
+                      <th className="p-2 text-left">Employee</th>
+                      <th className="p-2 text-left">Code</th>
+                      <th className="p-2 text-left">Date</th>
+                      <th className="p-2 text-right">Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreviewData.map((row, idx) => (
+                      <tr
+                        key={idx}
+                        className={row.status === 'matched' ? 'bg-green-50 dark:bg-green-950/20' : 'bg-red-50 dark:bg-red-950/20'}
+                        data-testid={`import-preview-row-${idx}`}
+                      >
+                        <td className="p-2">
+                          {row.status === 'matched' ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                          )}
+                        </td>
+                        <td className="p-2">{row.employeeName}</td>
+                        <td className="p-2 text-muted-foreground">{row.employeeCode || '-'}</td>
+                        <td className="p-2">{row.date}</td>
+                        <td className="p-2 text-right">{row.hours}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="flex justify-between text-sm">
+                <div className="text-muted-foreground">
+                  {importPreviewData.length} records found
+                </div>
+                <div className="flex gap-4">
+                  <span className="text-green-600">
+                    {importPreviewData.filter(r => r.status === 'matched').length} matched
+                  </span>
+                  <span className="text-red-600">
+                    {importPreviewData.filter(r => r.status === 'not_found').length} not found
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {importStep === 'importing' && (
+            <div className="py-12 text-center">
+              <Loader2 className="h-12 w-12 mx-auto animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Importing attendance records...</p>
+            </div>
+          )}
+          
+          {importStep === 'results' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold">{importResults.length}</div>
+                  <div className="text-sm text-muted-foreground">Total</div>
+                </div>
+                <div className="p-4 bg-green-100 dark:bg-green-950/30 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">{importResults.filter(r => r.success).length}</div>
+                  <div className="text-sm text-green-600">Successful</div>
+                </div>
+                <div className="p-4 bg-red-100 dark:bg-red-950/30 rounded-lg">
+                  <div className="text-2xl font-bold text-red-600">{importResults.filter(r => !r.success).length}</div>
+                  <div className="text-sm text-red-600">Failed</div>
+                </div>
+              </div>
+              
+              {importResults.filter(r => !r.success).length > 0 && (
+                <div className="border rounded-lg max-h-[200px] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted sticky top-0">
+                      <tr>
+                        <th className="p-2 text-left">Employee</th>
+                        <th className="p-2 text-left">Date</th>
+                        <th className="p-2 text-left">Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importResults.filter(r => !r.success).map((row, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="p-2">{row.employeeName}</td>
+                          <td className="p-2">{row.date}</td>
+                          <td className="p-2 text-red-600">{row.error}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            {importStep === 'upload' && (
+              <Button variant="outline" onClick={resetImportModal}>
+                Cancel
+              </Button>
+            )}
+            {importStep === 'preview' && (
+              <>
+                <Button variant="outline" onClick={() => setImportStep('upload')}>
+                  Back
+                </Button>
+                <Button
+                  onClick={executeImport}
+                  disabled={importPreviewData.filter(r => r.status === 'matched').length === 0}
+                  data-testid="button-confirm-import"
+                >
+                  Import {importPreviewData.filter(r => r.status === 'matched').length} Records
+                </Button>
+              </>
+            )}
+            {importStep === 'results' && (
+              <Button onClick={resetImportModal} data-testid="button-close-import">
+                Close
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

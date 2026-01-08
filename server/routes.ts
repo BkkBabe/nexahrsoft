@@ -2098,6 +2098,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Import attendance data from Excel
+  app.post("/api/admin/attendance/import", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    // View-only admins cannot import attendance records
+    if (req.session.isViewOnlyAdmin) {
+      return res.status(403).json({ message: "View-only admins cannot import attendance records" });
+    }
+
+    try {
+      const schema = z.object({
+        records: z.array(z.object({
+          employeeName: z.string(),
+          employeeCode: z.string().optional().nullable(),
+          department: z.string().optional().nullable(),
+          date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+          hours: z.number().min(0).max(24),
+        })),
+        overwriteExisting: z.boolean().default(false),
+      });
+
+      const { records, overwriteExisting } = schema.parse(req.body);
+      
+      // Get all users for matching
+      const allUsers = await storage.getAllUsers();
+      
+      // Get company timezone setting
+      const companySettings = await storage.getCompanySettings();
+      const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
+      
+      // Get timezone offset
+      const getTimezoneOffset = (tz: string): string => {
+        const offsets: Record<string, string> = {
+          'Asia/Singapore': '+08:00',
+          'Asia/Kuala_Lumpur': '+08:00',
+          'Asia/Hong_Kong': '+08:00',
+          'Asia/Shanghai': '+08:00',
+          'Asia/Tokyo': '+09:00',
+          'Asia/Seoul': '+09:00',
+          'Asia/Bangkok': '+07:00',
+          'Asia/Jakarta': '+07:00',
+          'Asia/Kolkata': '+05:30',
+          'Asia/Dubai': '+04:00',
+          'Europe/London': '+00:00',
+          'America/New_York': '-05:00',
+          'America/Los_Angeles': '-08:00',
+          'Australia/Sydney': '+11:00',
+        };
+        return offsets[tz] || '+08:00';
+      };
+      
+      const tzOffset = getTimezoneOffset(timezone);
+      
+      const results: { 
+        success: boolean; 
+        employeeName: string; 
+        date: string; 
+        hours: number;
+        error?: string;
+        action?: string;
+      }[] = [];
+      
+      for (const record of records) {
+        try {
+          // Skip if hours is 0
+          if (record.hours === 0) {
+            results.push({
+              success: true,
+              employeeName: record.employeeName,
+              date: record.date,
+              hours: record.hours,
+              action: 'skipped_zero_hours',
+            });
+            continue;
+          }
+          
+          // Find matching user - prefer employee code, fallback to name
+          let matchedUser = null;
+          
+          if (record.employeeCode) {
+            matchedUser = allUsers.find(u => 
+              u.employeeCode?.toLowerCase().trim() === record.employeeCode?.toLowerCase().trim()
+            );
+          }
+          
+          if (!matchedUser) {
+            // Try matching by name (case-insensitive, trimmed)
+            matchedUser = allUsers.find(u => 
+              u.name.toLowerCase().trim() === record.employeeName.toLowerCase().trim()
+            );
+          }
+          
+          if (!matchedUser) {
+            results.push({
+              success: false,
+              employeeName: record.employeeName,
+              date: record.date,
+              hours: record.hours,
+              error: `Employee not found: ${record.employeeName}${record.employeeCode ? ` (${record.employeeCode})` : ''}`,
+            });
+            continue;
+          }
+          
+          // Check for existing records on this date
+          const existingRecords = await storage.getAttendanceRecordsByUserAndDateRange(
+            matchedUser.id, 
+            record.date, 
+            record.date
+          );
+          
+          if (existingRecords.length > 0) {
+            if (overwriteExisting) {
+              // Delete existing records
+              for (const existing of existingRecords) {
+                await storage.deleteAttendanceRecord(existing.id);
+              }
+            } else {
+              results.push({
+                success: false,
+                employeeName: record.employeeName,
+                date: record.date,
+                hours: record.hours,
+                error: `Attendance record already exists for ${record.date}`,
+              });
+              continue;
+            }
+          }
+          
+          // Create attendance record with calculated clock-in/out times
+          // Clock in at 09:00, clock out at 09:00 + hours
+          const clockInTime = new Date(`${record.date}T09:00:00${tzOffset}`);
+          const clockOutTime = new Date(clockInTime.getTime() + record.hours * 60 * 60 * 1000);
+          
+          await storage.createAttendanceRecord({
+            userId: matchedUser.id,
+            date: record.date,
+            clockInTime,
+            clockOutTime,
+            clockInLocationText: 'Imported from Excel',
+            clockOutLocationText: 'Imported from Excel',
+          });
+          
+          results.push({
+            success: true,
+            employeeName: record.employeeName,
+            date: record.date,
+            hours: record.hours,
+            action: overwriteExisting && existingRecords.length > 0 ? 'replaced' : 'created',
+          });
+        } catch (err: any) {
+          results.push({
+            success: false,
+            employeeName: record.employeeName,
+            date: record.date,
+            hours: record.hours,
+            error: err.message || 'Unknown error',
+          });
+        }
+      }
+      
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+      
+      res.json({
+        success: true,
+        message: `Imported ${successCount} records, ${failureCount} failed`,
+        results,
+        summary: {
+          total: records.length,
+          success: successCount,
+          failed: failureCount,
+          skipped: results.filter(r => r.action === 'skipped_zero_hours').length,
+        }
+      });
+    } catch (error) {
+      console.error("Import attendance error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid import data", 
+          errors: error.errors 
+        });
+      }
+      res.status(500).json({ message: "Failed to import attendance data" });
+    }
+  });
+
   // Admin: Update attendance buffer settings
   app.put("/api/admin/attendance/buffer", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
