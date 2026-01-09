@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { Pool } from "@neondatabase/serverless";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
@@ -13,8 +15,17 @@ console.log('Environment check:', {
   hostname: process.env.REPL_SLUG,
 });
 
+// Create PostgreSQL session store for persistent sessions in production
+const PgStore = connectPgSimple(session);
+const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
+
 app.use(
   session({
+    store: new PgStore({
+      pool: sessionPool,
+      tableName: 'session',
+      createTableIfMissing: true,
+    }),
     secret: process.env.SESSION_SECRET || "nexa-hr-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
@@ -27,8 +38,8 @@ app.use(
       // 'lax' allows cookies in first-party context (works in new tabs)
       // This is correct for apps accessed directly (not in iframes)
       sameSite: 'lax',
-      // No maxAge = session cookie that expires when browser closes
-      // This ensures users are logged out when they close the browser/tab
+      // Session lasts 24 hours for better user experience
+      maxAge: 24 * 60 * 60 * 1000,
       path: '/',
     },
   })
