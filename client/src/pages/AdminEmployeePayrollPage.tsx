@@ -162,10 +162,10 @@ export default function AdminEmployeePayrollPage() {
   const filteredEmployees = employeeList?.employees?.filter(emp => {
     const search = searchTerm.toLowerCase();
     return (
-      emp.name?.toLowerCase().includes(search) ||
-      emp.email?.toLowerCase().includes(search) ||
-      emp.employeeCode?.toLowerCase().includes(search) ||
-      emp.department?.toLowerCase().includes(search)
+      (emp.name || "").toLowerCase().includes(search) ||
+      (emp.email || "").toLowerCase().includes(search) ||
+      (emp.employeeCode || "").toLowerCase().includes(search) ||
+      (emp.department || "").toLowerCase().includes(search)
     );
   }) || [];
 
@@ -406,7 +406,9 @@ function EditEmployeeDialog({ employeeId, open, onOpenChange }: EditEmployeeDial
         title: "Settings Saved",
         description: `Updated ${data.changesLogged} field(s) for ${settings?.name || "employee"}`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/employees/payroll-list"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "payroll-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "audit-logs"] });
       setFormState({});
       onOpenChange(false);
     },

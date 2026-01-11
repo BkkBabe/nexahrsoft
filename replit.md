@@ -79,6 +79,14 @@ Preferred communication style: Simple, everyday language.
   - **Master Admin Password Management**: The master admin (nexaadmin) can change passwords for other admin users. Changed users will be required to update their password on next login.
 
 - **Admin Payroll Management**: Comprehensive payroll functionality including:
+  - **Employee Payroll Settings**: Configure individual employee payroll profiles with:
+    - Residency status (SC/SPR/Foreigner) for CPF calculations
+    - Date of birth and SPR start date for age-based CPF rates
+    - Pay type (monthly/hourly/daily) with corresponding rates
+    - Default allowances (mobile, transport, meal, shift, other, house rental)
+    - Salary adjustment with reason tracking
+    - Full audit trail of all changes with admin identity and timestamps
+    - View-only admins can view but cannot modify settings
   - **Payroll Generation from Attendance**: Automatically generate payroll from clock-in/out records with:
     - Month/year selection for pay period
     - Preview calculations before generating (hours, pay, CPF)
