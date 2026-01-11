@@ -282,6 +282,14 @@ export class MemStorage implements IStorage {
       dailyRate: insertUser.dailyRate ?? null,
       payType: insertUser.payType ?? null,
       regularHoursPerDay: insertUser.regularHoursPerDay ?? 8,
+      defaultMobileAllowance: insertUser.defaultMobileAllowance ?? 0,
+      defaultTransportAllowance: insertUser.defaultTransportAllowance ?? 0,
+      defaultMealAllowance: insertUser.defaultMealAllowance ?? 0,
+      defaultShiftAllowance: insertUser.defaultShiftAllowance ?? 0,
+      defaultOtherAllowance: insertUser.defaultOtherAllowance ?? 0,
+      defaultHouseRentalAllowance: insertUser.defaultHouseRentalAllowance ?? 0,
+      salaryAdjustment: insertUser.salaryAdjustment ?? 0,
+      salaryAdjustmentReason: insertUser.salaryAdjustmentReason ?? null,
     };
     this.users.set(id, user);
     return user;

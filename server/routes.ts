@@ -1005,6 +1005,177 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Employee payroll settings management (admin only)
+  // Get employee payroll settings
+  app.get("/api/admin/employees/:id/payroll-settings", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // Return only payroll-related fields
+      res.json({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        employeeCode: user.employeeCode,
+        department: user.department,
+        designation: user.designation,
+        // Residency and CPF fields
+        residencyStatus: user.residencyStatus,
+        birthDate: user.birthDate,
+        sprStartDate: user.sprStartDate,
+        // Pay configuration
+        payType: user.payType,
+        basicMonthlySalary: user.basicMonthlySalary,
+        hourlyRate: user.hourlyRate,
+        dailyRate: user.dailyRate,
+        regularHoursPerDay: user.regularHoursPerDay,
+        // Default allowances (cents)
+        defaultMobileAllowance: user.defaultMobileAllowance,
+        defaultTransportAllowance: user.defaultTransportAllowance,
+        defaultMealAllowance: user.defaultMealAllowance,
+        defaultShiftAllowance: user.defaultShiftAllowance,
+        defaultOtherAllowance: user.defaultOtherAllowance,
+        defaultHouseRentalAllowance: user.defaultHouseRentalAllowance,
+        // Salary adjustment
+        salaryAdjustment: user.salaryAdjustment,
+        salaryAdjustmentReason: user.salaryAdjustmentReason,
+      });
+    } catch (error) {
+      console.error("Get employee payroll settings error:", error);
+      res.status(500).json({ message: "Failed to fetch employee payroll settings" });
+    }
+  });
+
+  // Update employee payroll settings with audit logging
+  app.patch("/api/admin/employees/:id/payroll-settings", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const schema = z.object({
+        // Residency and CPF fields
+        residencyStatus: z.enum(['SC', 'SPR', 'FOREIGNER']).nullable().optional(),
+        birthDate: z.string().nullable().optional(),
+        sprStartDate: z.string().nullable().optional(),
+        // Pay configuration
+        payType: z.enum(['monthly', 'hourly', 'daily']).nullable().optional(),
+        basicMonthlySalary: z.number().nullable().optional(), // cents
+        hourlyRate: z.number().nullable().optional(), // cents
+        dailyRate: z.number().nullable().optional(), // cents
+        regularHoursPerDay: z.number().nullable().optional(),
+        // Default allowances (cents)
+        defaultMobileAllowance: z.number().nullable().optional(),
+        defaultTransportAllowance: z.number().nullable().optional(),
+        defaultMealAllowance: z.number().nullable().optional(),
+        defaultShiftAllowance: z.number().nullable().optional(),
+        defaultOtherAllowance: z.number().nullable().optional(),
+        defaultHouseRentalAllowance: z.number().nullable().optional(),
+        // Salary adjustment
+        salaryAdjustment: z.number().nullable().optional(),
+        salaryAdjustmentReason: z.string().nullable().optional(),
+      });
+
+      const updates = schema.parse(req.body);
+      
+      // Get the admin identifier for audit logging
+      let changedBy = "admin";
+      if (req.session.userId === "admin") {
+        changedBy = "master_admin (nexaadmin)";
+      } else if (req.session.userId) {
+        const adminUser = await storage.getUser(req.session.userId);
+        if (adminUser) {
+          changedBy = `admin (${adminUser.name || adminUser.email})`;
+        }
+      }
+
+      const { user, auditLogs } = await storage.updateEmployeePayrollSettings(id, updates, changedBy);
+      
+      if (!user) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      res.json({
+        success: true,
+        message: `Updated payroll settings for ${user.name}`,
+        changesLogged: auditLogs.length,
+        user: {
+          id: user.id,
+          name: user.name,
+          employeeCode: user.employeeCode,
+          residencyStatus: user.residencyStatus,
+          payType: user.payType,
+        }
+      });
+    } catch (error) {
+      console.error("Update employee payroll settings error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update employee payroll settings" });
+    }
+  });
+
+  // Get audit logs for an employee
+  app.get("/api/admin/employees/:id/audit-logs", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      const auditLogs = await storage.getAuditLogsByUser(id);
+      
+      res.json({
+        employee: {
+          id: user.id,
+          name: user.name,
+          employeeCode: user.employeeCode,
+        },
+        auditLogs,
+      });
+    } catch (error) {
+      console.error("Get employee audit logs error:", error);
+      res.status(500).json({ message: "Failed to fetch audit logs" });
+    }
+  });
+
+  // Get all employees with payroll summary (for the employee list page)
+  app.get("/api/admin/employees/payroll-list", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      
+      // Filter to only regular employees (not admins)
+      const employees = allUsers
+        .filter(u => u.role !== 'admin' && u.role !== 'viewonly_admin' && !u.isArchived)
+        .map(u => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          employeeCode: u.employeeCode,
+          department: u.department,
+          designation: u.designation,
+          isApproved: u.isApproved,
+          residencyStatus: u.residencyStatus,
+          payType: u.payType,
+          basicMonthlySalary: u.basicMonthlySalary,
+          hourlyRate: u.hourlyRate,
+          dailyRate: u.dailyRate,
+          hasPayrollConfig: !!(u.residencyStatus && u.payType && (u.basicMonthlySalary || u.hourlyRate || u.dailyRate)),
+        }));
+
+      res.json({ employees });
+    } catch (error) {
+      console.error("Get employees payroll list error:", error);
+      res.status(500).json({ message: "Failed to fetch employees" });
+    }
+  });
+
   // Company settings routes
   app.get("/api/company/settings", async (req: Request, res: Response) => {
     try {
