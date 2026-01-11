@@ -89,6 +89,13 @@ export interface IStorage {
   getAuditLogsByFieldPrefix(fieldPrefix: string): Promise<AuditLog[]>;
   getAllAuditLogs(): Promise<AuditLog[]>;
   
+  // Employee payroll settings update with audit logging
+  updateEmployeePayrollSettings(
+    userId: string,
+    updates: Partial<User>,
+    changedBy: string
+  ): Promise<{ user: User | undefined; auditLogs: AuditLog[] }>;
+  
   // Password override log methods
   createPasswordOverrideLog(log: InsertPasswordOverrideLog): Promise<PasswordOverrideLog>;
   getPasswordOverrideLogsByUser(userId: string): Promise<PasswordOverrideLog[]>;
@@ -517,6 +524,14 @@ export class MemStorage implements IStorage {
 
   async getAllAuditLogs(): Promise<AuditLog[]> {
     throw new Error("MemStorage getAllAuditLogs not implemented");
+  }
+
+  async updateEmployeePayrollSettings(
+    userId: string,
+    updates: Partial<User>,
+    changedBy: string
+  ): Promise<{ user: User | undefined; auditLogs: AuditLog[] }> {
+    throw new Error("MemStorage updateEmployeePayrollSettings not implemented");
   }
   
   async createPasswordOverrideLog(log: InsertPasswordOverrideLog): Promise<PasswordOverrideLog> {
@@ -1300,6 +1315,61 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(auditLogs)
       .orderBy(desc(auditLogs.createdAt));
+  }
+
+  async updateEmployeePayrollSettings(
+    userId: string,
+    updates: Partial<User>,
+    changedBy: string
+  ): Promise<{ user: User | undefined; auditLogs: AuditLog[] }> {
+    // Get current user data to compare changes
+    const [currentUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!currentUser) {
+      return { user: undefined, auditLogs: [] };
+    }
+
+    // Track which fields are being changed for audit logging
+    const payrollFields = [
+      'residencyStatus', 'sprStartDate', 'birthDate',
+      'basicMonthlySalary', 'hourlyRate', 'dailyRate', 'payType', 'regularHoursPerDay',
+      'defaultMobileAllowance', 'defaultTransportAllowance', 'defaultMealAllowance',
+      'defaultShiftAllowance', 'defaultOtherAllowance', 'defaultHouseRentalAllowance',
+      'salaryAdjustment', 'salaryAdjustmentReason'
+    ];
+
+    const createdAuditLogs: AuditLog[] = [];
+
+    // Create audit logs for each changed field
+    for (const field of payrollFields) {
+      const key = field as keyof User;
+      if (key in updates) {
+        const oldValue = currentUser[key];
+        const newValue = updates[key];
+        
+        // Only log if value actually changed
+        if (String(oldValue ?? '') !== String(newValue ?? '')) {
+          const [auditLog] = await db.insert(auditLogs)
+            .values({
+              userId,
+              changedBy,
+              fieldChanged: field,
+              oldValue: oldValue != null ? String(oldValue) : null,
+              newValue: newValue != null ? String(newValue) : null,
+              changeType: 'update',
+            })
+            .returning();
+          createdAuditLogs.push(auditLog);
+        }
+      }
+    }
+
+    // Update the user
+    const [updatedUser] = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, userId))
+      .returning();
+
+    return { user: updatedUser, auditLogs: createdAuditLogs };
   }
   
   async createPasswordOverrideLog(log: InsertPasswordOverrideLog): Promise<PasswordOverrideLog> {
