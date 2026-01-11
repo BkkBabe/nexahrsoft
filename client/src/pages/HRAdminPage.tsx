@@ -1,14 +1,15 @@
-import { Users, DollarSign, FileSpreadsheet, BarChart3, CreditCard, Calculator, Settings } from "lucide-react";
+import { Users, DollarSign, FileSpreadsheet, BarChart3, CreditCard, Calculator, Settings, ArrowLeft } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import type { User, PayrollRecord } from "@shared/schema";
 
 export default function HRAdminPage() {
+  const [, setLocation] = useLocation();
   const { data: usersData } = useQuery<User[]>({
     queryKey: ['/api/admin/users'],
   });
@@ -22,15 +23,26 @@ export default function HRAdminPage() {
   const totalPayroll = payrollRecords.reduce((sum, r) => sum + r.nett, 0) / 100;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold mb-2" data-testid="text-page-title">
-          HR Administration
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Manage employees and process payroll
-        </p>
-      </div>
+    <div className="min-h-screen bg-muted/30 p-4 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+              Payroll Management
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground">
+              Manage employees and process payroll
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setLocation("/admin/dashboard")}
+            data-testid="button-back"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
@@ -156,6 +168,7 @@ export default function HRAdminPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   );
