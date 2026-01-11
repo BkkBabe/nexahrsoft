@@ -28,6 +28,15 @@ export const users = pgTable("users", {
   welcomeEmailSentAt: timestamp("welcome_email_sent_at"), // When welcome email was last sent
   mustChangePassword: boolean("must_change_password").notNull().default(false), // Force password change on first login
   isArchived: boolean("is_archived").notNull().default(false), // Hidden from all views when true
+  // CPF and Payroll fields
+  birthDate: text("birth_date"), // YYYY-MM-DD format for age-based CPF calculations
+  residencyStatus: text("residency_status"), // 'SC' (Singapore Citizen), 'SPR' (Permanent Resident), 'FOREIGNER'
+  sprStartDate: text("spr_start_date"), // YYYY-MM-DD when SPR status started (for graduated rates)
+  basicMonthlySalary: integer("basic_monthly_salary"), // cents - for monthly-paid employees
+  hourlyRate: integer("hourly_rate"), // cents - for hourly-paid employees
+  dailyRate: integer("daily_rate"), // cents - for daily-paid employees
+  payType: text("pay_type"), // 'monthly', 'hourly', 'daily'
+  regularHoursPerDay: real("regular_hours_per_day").default(8), // Standard work hours before OT kicks in
 });
 
 export const companySettings = pgTable("company_settings", {
@@ -46,6 +55,11 @@ export const companySettings = pgTable("company_settings", {
   senderEmail: text("sender_email"), // Email address to send from
   senderName: text("sender_name"), // Sender display name
   appUrl: text("app_url").default("https://app.nexahrms.com"), // App URL for QR code
+  // Payroll settings
+  regularHoursPerDay: real("regular_hours_per_day").default(8), // Standard work hours before OT
+  regularDaysPerWeek: real("regular_days_per_week").default(5), // Standard work days per week
+  otMultiplier15: real("ot_multiplier_15").default(1.5), // Weekday OT multiplier
+  otMultiplier20: real("ot_multiplier_20").default(2.0), // Weekend/PH OT multiplier
 });
 
 // Email logs for tracking sent emails

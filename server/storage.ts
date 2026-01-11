@@ -163,6 +163,10 @@ export class MemStorage implements IStorage {
       senderName: null,
       appUrl: "https://app.nexahrms.com",
       ignoreOrphanedSessions: false,
+      regularHoursPerDay: 8,
+      regularDaysPerWeek: 5,
+      otMultiplier15: 1.5,
+      otMultiplier20: 2.0,
     };
   }
   
@@ -263,6 +267,14 @@ export class MemStorage implements IStorage {
       welcomeEmailSentAt: insertUser.welcomeEmailSentAt ?? null,
       mustChangePassword: insertUser.mustChangePassword ?? false,
       isArchived: insertUser.isArchived ?? false,
+      birthDate: insertUser.birthDate ?? null,
+      residencyStatus: insertUser.residencyStatus ?? null,
+      sprStartDate: insertUser.sprStartDate ?? null,
+      basicMonthlySalary: insertUser.basicMonthlySalary ?? null,
+      hourlyRate: insertUser.hourlyRate ?? null,
+      dailyRate: insertUser.dailyRate ?? null,
+      payType: insertUser.payType ?? null,
+      regularHoursPerDay: insertUser.regularHoursPerDay ?? 8,
     };
     this.users.set(id, user);
     return user;
@@ -925,7 +937,7 @@ export class PgStorage implements IStorage {
     
     // First, delete orphaned summaries (summaries for users with no attendance records)
     // This handles the case where all attendance records for a user/date were deleted
-    for (const userId of summaryUserIds) {
+    for (const userId of Array.from(summaryUserIds)) {
       if (!attendanceUserIds.has(userId)) {
         try {
           await db.delete(dailyAttendanceSummary)
@@ -945,7 +957,7 @@ export class PgStorage implements IStorage {
     }
     
     // Then, recalculate summaries for users with attendance records
-    for (const userId of attendanceUserIds) {
+    for (const userId of Array.from(attendanceUserIds)) {
       try {
         await this.recalculateDailyAttendanceSummary(date, userId);
         processed++;

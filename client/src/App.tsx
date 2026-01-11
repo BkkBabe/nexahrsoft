@@ -28,6 +28,7 @@ import AdminEmailsPage from "@/pages/AdminEmailsPage";
 import AdminPayrollImportPage from "@/pages/AdminPayrollImportPage";
 import AdminPayrollReportsPage from "@/pages/AdminPayrollReportsPage";
 import AdminPayrollLoansPage from "@/pages/AdminPayrollLoansPage";
+import AdminPayrollGeneratePage from "@/pages/AdminPayrollGeneratePage";
 import UserLoginPage from "@/pages/UserLoginPage";
 import PendingApprovalPage from "@/pages/PendingApprovalPage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
@@ -229,6 +230,9 @@ function Router() {
       </Route>
       <Route path="/admin/payroll/loans">
         {() => <AdminProtected><AdminPayrollLoansPage /></AdminProtected>}
+      </Route>
+      <Route path="/admin/payroll/generate">
+        {() => <AdminProtected><AdminPayrollGeneratePage /></AdminProtected>}
       </Route>
       <Route path="/change-password">
         {() => session?.authenticated ? <ChangePasswordPage /> : <UserLoginPage />}

@@ -79,6 +79,15 @@ Preferred communication style: Simple, everyday language.
   - **Master Admin Password Management**: The master admin (nexaadmin) can change passwords for other admin users. Changed users will be required to update their password on next login.
 
 - **Admin Payroll Management**: Comprehensive payroll functionality including:
+  - **Payroll Generation from Attendance**: Automatically generate payroll from clock-in/out records with:
+    - Month/year selection for pay period
+    - Preview calculations before generating (hours, pay, CPF)
+    - Singapore CPF contributions calculated based on age, residency status (SC/SPR/Foreigner)
+    - Overtime calculation using company settings (regularHoursPerDay, regularDaysPerWeek, otMultiplier)
+    - Support for hourly, daily, and monthly pay types
+    - Idempotency check prevents duplicate payroll generation for same period
+    - Employees without residency status or FOREIGNER get $0 CPF (no incorrect deductions)
+    - Monthly OW ceiling ($8,000) and phase-in rates for low wages ($500-$750)
   - **Payroll Import**: Import payroll data from CSV files with comprehensive field mapping
   - **Payroll Reports**: View and export payroll records by year/month with search by employee name/code
   - **Editable Payslips**: Admin can edit any payslip component with full audit trail (field changes tracked with old/new values and reasons)

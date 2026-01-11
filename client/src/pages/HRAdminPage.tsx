@@ -1,4 +1,4 @@
-import { Users, DollarSign, FileSpreadsheet, BarChart3, CreditCard } from "lucide-react";
+import { Users, DollarSign, FileSpreadsheet, BarChart3, CreditCard, Calculator } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -139,6 +139,12 @@ export default function HRAdminPage() {
                 <Button variant="outline" className="w-full" data-testid="button-manage-loans">
                   <CreditCard className="mr-2 h-4 w-4" />
                   Manage Loans
+                </Button>
+              </Link>
+              <Link href="/admin/payroll/generate">
+                <Button variant="outline" className="w-full" data-testid="button-generate-payroll">
+                  <Calculator className="mr-2 h-4 w-4" />
+                  Generate from Attendance
                 </Button>
               </Link>
             </div>

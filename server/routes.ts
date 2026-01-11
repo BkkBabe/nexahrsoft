@@ -3329,6 +3329,401 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate payroll from attendance data (admin only)
+  app.post("/api/admin/payroll/generate", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { calculateCPF, calculateAge, calculateSPRYears, splitHours, calculatePayFromHours, monthlyToHourlyRate, dailyToHourlyRate } = await import("./cpf-calculator");
+      
+      const schema = z.object({
+        year: z.number().min(2020).max(2100),
+        month: z.number().min(1).max(12),
+        employeeIds: z.array(z.string()).optional(), // Optional: generate for specific employees only
+      });
+
+      const { year, month } = schema.parse(req.body);
+      const employeeIds = req.body.employeeIds as string[] | undefined;
+      
+      // Get all approved employees (or specific ones if specified)
+      const allUsers = await storage.getAllUsers();
+      const employees = allUsers.filter(u => {
+        if (u.role === 'admin' || u.role === 'viewonly_admin') return false;
+        if (u.isArchived) return false;
+        if (!u.isApproved) return false;
+        if (employeeIds && !employeeIds.includes(u.id)) return false;
+        return true;
+      });
+
+      if (employees.length === 0) {
+        return res.status(400).json({ message: "No eligible employees found" });
+      }
+
+      // Get company settings for work hour configuration
+      const settings = await storage.getCompanySettings();
+      const regularHoursPerDay = settings?.regularHoursPerDay || 8;
+      const regularDaysPerWeek = settings?.regularDaysPerWeek || 5;
+
+      // Define the pay period
+      const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month, 0).getDate(); // Last day of month
+      const periodEnd = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+      const payPeriod = `${new Date(year, month - 1).toLocaleString('default', { month: 'short' }).toUpperCase()} ${year}`;
+
+      // Check for existing payroll records for this period to prevent duplicates
+      const existingRecords = await storage.getPayrollRecords(year, month);
+      if (existingRecords.length > 0) {
+        return res.status(400).json({ 
+          message: `Payroll records already exist for ${payPeriod}. Please delete existing records first or view them in the reports.`,
+          existingCount: existingRecords.length,
+        });
+      }
+
+      // Get attendance records for the period
+      const attendanceData = await storage.getAllUsersAttendanceByDateRange(periodStart, periodEnd);
+
+      const generatedRecords: any[] = [];
+      const skippedEmployees: { employeeCode: string; employeeName: string; reason: string }[] = [];
+
+      for (const employee of employees) {
+        // Get this employee's attendance for the month
+        const empAttendance = attendanceData.filter(a => a.userId === employee.id);
+
+        // Calculate total hours worked from attendance
+        let totalHoursWorked = 0;
+        let daysWorked = 0;
+        const uniqueDays = new Set<string>();
+        
+        for (const record of empAttendance) {
+          if (record.clockInTime && record.clockOutTime) {
+            const clockIn = new Date(record.clockInTime);
+            const clockOut = new Date(record.clockOutTime);
+            const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+            // Round to nearest 0.25 hour
+            totalHoursWorked += Math.round(hoursWorked * 4) / 4;
+            uniqueDays.add(record.date);
+          }
+        }
+        daysWorked = uniqueDays.size;
+
+        // Determine hourly rate based on pay type
+        let hourlyRate = employee.hourlyRate || 0;
+        if (employee.payType === 'monthly' && employee.basicMonthlySalary) {
+          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, regularHoursPerDay, regularDaysPerWeek);
+        } else if (employee.payType === 'daily' && employee.dailyRate) {
+          hourlyRate = dailyToHourlyRate(employee.dailyRate, regularHoursPerDay);
+        }
+
+        // Skip if no rate configured
+        if (!hourlyRate || hourlyRate === 0) {
+          skippedEmployees.push({
+            employeeCode: employee.employeeCode || 'N/A',
+            employeeName: employee.name,
+            reason: 'No pay rate configured (hourly/daily/monthly salary)',
+          });
+          continue;
+        }
+
+        // Split into regular and overtime hours
+        const { regularHours, overtimeHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
+
+        // Calculate pay
+        const otMultiplier = settings?.otMultiplier15 || 1.5;
+        const { regularPay, overtimePay, totalPay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
+
+        // For monthly employees, use base salary as basic pay
+        const basicSalary = employee.payType === 'monthly' && employee.basicMonthlySalary 
+          ? employee.basicMonthlySalary 
+          : regularPay;
+        const otAmount = overtimePay;
+
+        // Calculate gross wages (basic + OT for now, can be extended with allowances)
+        const grossWages = basicSalary + otAmount;
+        
+        // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
+        const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
+        
+        // Calculate CPF only for SC/SPR with explicit configuration
+        let cpfResult: ReturnType<typeof calculateCPF>;
+        
+        if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
+          // Calculate age for CPF rates
+          const referenceDate = new Date(year, month - 1, 1); // First day of pay period
+          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 35; // Default to 35 if no birthdate
+          
+          // Calculate SPR years if applicable
+          let sprYears: number | undefined;
+          if (residencyStatus === 'SPR' && employee.sprStartDate) {
+            sprYears = calculateSPRYears(employee.sprStartDate, referenceDate);
+          }
+
+          // Calculate CPF contributions
+          cpfResult = calculateCPF(grossWages, age, residencyStatus, sprYears);
+        } else {
+          // Foreigner or no residency status - no CPF
+          cpfResult = {
+            grossWages,
+            cpfWages: 0,
+            employeeCPF: 0,
+            employerCPF: 0,
+            totalCPF: 0,
+            netPay: grossWages,
+            isEligible: false,
+            reason: residencyStatus === 'FOREIGNER' ? 'Foreigners are not eligible for CPF' : 'Residency status not configured',
+          };
+        }
+
+        // Calculate net pay
+        const nett = cpfResult.netPay; // After employee CPF deduction
+
+        // Create payroll record
+        const record = {
+          userId: employee.id,
+          payPeriod,
+          payPeriodYear: year,
+          payPeriodMonth: month,
+          employeeCode: employee.employeeCode || '',
+          employeeName: employee.name,
+          deptCode: null,
+          deptName: employee.department || null,
+          secCode: null,
+          secName: employee.section || null,
+          catCode: null,
+          catName: null,
+          nric: employee.nricFin || null,
+          joinDate: employee.joinDate || null,
+          totSalary: basicSalary,
+          basicSalary,
+          monthlyVariablesComponent: 0,
+          flat: 0,
+          ot10: 0,
+          ot15: otAmount, // All OT at 1.5x for now
+          ot20: 0,
+          ot30: 0,
+          shiftAllowance: 0,
+          totRestPhAmount: 0,
+          mobileAllowance: 0,
+          transportAllowance: 0,
+          annualLeaveEncashment: 0,
+          serviceCallAllowances: 0,
+          otherAllowance: 0,
+          houseRentalAllowances: 0,
+          loanRepaymentTotal: 0,
+          loanRepaymentDetails: null,
+          noPayDay: 0,
+          cc: 0,
+          cdac: 0,
+          ecf: 0,
+          mbmf: 0,
+          sinda: 0,
+          bonus: 0,
+          grossWages,
+          cpfWages: cpfResult.cpfWages,
+          sdf: 0,
+          fwl: 0,
+          employerCpf: cpfResult.employerCPF,
+          employeeCpf: -cpfResult.employeeCPF, // Stored as negative (deduction)
+          totalCpf: cpfResult.totalCPF,
+          total: grossWages,
+          nett,
+          payMode: 'BANK DISK',
+          chequeNo: null,
+          importedBy: (req.session as any)?.user?.id || 'system',
+        };
+
+        generatedRecords.push(record);
+      }
+
+      // Save all generated records
+      if (generatedRecords.length > 0) {
+        await storage.bulkCreatePayrollRecords(generatedRecords);
+      }
+
+      res.json({
+        success: true,
+        message: `Generated payroll for ${generatedRecords.length} employees`,
+        generated: generatedRecords.length,
+        skipped: skippedEmployees,
+        period: payPeriod,
+      });
+    } catch (error) {
+      console.error("Generate payroll error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to generate payroll" });
+    }
+  });
+
+  // Preview payroll generation (shows what would be generated without saving)
+  app.post("/api/admin/payroll/generate/preview", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { calculateCPF, calculateAge, calculateSPRYears, splitHours, calculatePayFromHours, monthlyToHourlyRate, dailyToHourlyRate } = await import("./cpf-calculator");
+      
+      const schema = z.object({
+        year: z.number().min(2020).max(2100),
+        month: z.number().min(1).max(12),
+        employeeIds: z.array(z.string()).optional(),
+      });
+
+      const { year, month } = schema.parse(req.body);
+      const employeeIds = req.body.employeeIds as string[] | undefined;
+      
+      // Get all approved employees
+      const allUsers = await storage.getAllUsers();
+      const employees = allUsers.filter(u => {
+        if (u.role === 'admin' || u.role === 'viewonly_admin') return false;
+        if (u.isArchived) return false;
+        if (!u.isApproved) return false;
+        if (employeeIds && !employeeIds.includes(u.id)) return false;
+        return true;
+      });
+
+      const settings = await storage.getCompanySettings();
+      const regularHoursPerDay = settings?.regularHoursPerDay || 8;
+      const regularDaysPerWeek = settings?.regularDaysPerWeek || 5;
+
+      const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const periodEnd = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+      const payPeriod = `${new Date(year, month - 1).toLocaleString('default', { month: 'short' }).toUpperCase()} ${year}`;
+
+      const attendanceData = await storage.getAllUsersAttendanceByDateRange(periodStart, periodEnd);
+
+      const preview: {
+        employeeCode: string;
+        employeeName: string;
+        department: string;
+        totalHoursWorked: number;
+        regularHours: number;
+        overtimeHours: number;
+        daysWorked: number;
+        payType: string;
+        hourlyRate: number;
+        basicPay: number;
+        overtimePay: number;
+        grossWages: number;
+        employeeCPF: number;
+        employerCPF: number;
+        netPay: number;
+        residencyStatus: string;
+        cpfEligible: boolean;
+      }[] = [];
+
+      const skipped: { employeeCode: string; employeeName: string; reason: string }[] = [];
+
+      for (const employee of employees) {
+        const empAttendance = attendanceData.filter(a => a.userId === employee.id);
+
+        let totalHoursWorked = 0;
+        const uniqueDays = new Set<string>();
+        
+        for (const record of empAttendance) {
+          if (record.clockInTime && record.clockOutTime) {
+            const clockIn = new Date(record.clockInTime);
+            const clockOut = new Date(record.clockOutTime);
+            const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+            totalHoursWorked += Math.round(hoursWorked * 4) / 4;
+            uniqueDays.add(record.date);
+          }
+        }
+        const daysWorked = uniqueDays.size;
+
+        let hourlyRate = employee.hourlyRate || 0;
+        let payType = employee.payType || 'hourly';
+        if (payType === 'monthly' && employee.basicMonthlySalary) {
+          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, regularHoursPerDay, regularDaysPerWeek);
+        } else if (payType === 'daily' && employee.dailyRate) {
+          hourlyRate = dailyToHourlyRate(employee.dailyRate, regularHoursPerDay);
+        }
+
+        if (!hourlyRate || hourlyRate === 0) {
+          skipped.push({
+            employeeCode: employee.employeeCode || 'N/A',
+            employeeName: employee.name,
+            reason: 'No pay rate configured',
+          });
+          continue;
+        }
+
+        const { regularHours, overtimeHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
+        const otMultiplier = settings?.otMultiplier15 || 1.5;
+        const { regularPay, overtimePay, totalPay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
+
+        const basicPay = payType === 'monthly' && employee.basicMonthlySalary 
+          ? employee.basicMonthlySalary 
+          : regularPay;
+        const grossWages = basicPay + overtimePay;
+
+        // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
+        const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
+        
+        // Calculate CPF only for SC/SPR with explicit configuration
+        let cpfResult: ReturnType<typeof calculateCPF>;
+        
+        if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
+          const referenceDate = new Date(year, month - 1, 1);
+          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 35;
+          
+          let sprYears: number | undefined;
+          if (residencyStatus === 'SPR' && employee.sprStartDate) {
+            sprYears = calculateSPRYears(employee.sprStartDate, referenceDate);
+          }
+
+          cpfResult = calculateCPF(grossWages, age, residencyStatus, sprYears);
+        } else {
+          // Foreigner or no residency status - no CPF
+          cpfResult = {
+            grossWages,
+            cpfWages: 0,
+            employeeCPF: 0,
+            employerCPF: 0,
+            totalCPF: 0,
+            netPay: grossWages,
+            isEligible: false,
+            reason: residencyStatus === 'FOREIGNER' ? 'Foreigners are not eligible for CPF' : 'Residency status not configured',
+          };
+        }
+
+        preview.push({
+          employeeCode: employee.employeeCode || 'N/A',
+          employeeName: employee.name,
+          department: employee.department || '',
+          totalHoursWorked,
+          regularHours,
+          overtimeHours,
+          daysWorked,
+          payType,
+          hourlyRate,
+          basicPay,
+          overtimePay,
+          grossWages,
+          employeeCPF: cpfResult.employeeCPF,
+          employerCPF: cpfResult.employerCPF,
+          netPay: cpfResult.netPay,
+          residencyStatus: residencyStatus || 'NOT_SET',
+          cpfEligible: cpfResult.isEligible,
+        });
+      }
+
+      res.json({
+        success: true,
+        period: payPeriod,
+        periodStart,
+        periodEnd,
+        preview,
+        skipped,
+        totalEmployees: employees.length,
+        eligibleCount: preview.length,
+        skippedCount: skipped.length,
+      });
+    } catch (error) {
+      console.error("Preview payroll error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to preview payroll" });
+    }
+  });
+
   // Get payroll records with optional year/month filter (admin only)
   app.get("/api/admin/payroll/records", requireAdmin, async (req: Request, res: Response) => {
     try {
