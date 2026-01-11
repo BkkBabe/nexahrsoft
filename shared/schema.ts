@@ -37,6 +37,16 @@ export const users = pgTable("users", {
   dailyRate: integer("daily_rate"), // cents - for daily-paid employees
   payType: text("pay_type"), // 'monthly', 'hourly', 'daily'
   regularHoursPerDay: real("regular_hours_per_day").default(8), // Standard work hours before OT kicks in
+  // Default allowances (cents) - used as defaults when generating payroll
+  defaultMobileAllowance: integer("default_mobile_allowance").default(0),
+  defaultTransportAllowance: integer("default_transport_allowance").default(0),
+  defaultMealAllowance: integer("default_meal_allowance").default(0),
+  defaultShiftAllowance: integer("default_shift_allowance").default(0),
+  defaultOtherAllowance: integer("default_other_allowance").default(0),
+  defaultHouseRentalAllowance: integer("default_house_rental_allowance").default(0),
+  // Salary adjustment (cents) - recurring adjustment added to basic salary
+  salaryAdjustment: integer("salary_adjustment").default(0),
+  salaryAdjustmentReason: text("salary_adjustment_reason"),
 });
 
 export const companySettings = pgTable("company_settings", {
