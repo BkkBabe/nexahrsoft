@@ -40,9 +40,9 @@ export default function AdminDashboardPage() {
       iconColor: "bg-purple-500/10",
     },
     {
-      title: "Payroll Reports",
+      title: "Payroll Management",
       icon: DollarSign,
-      href: "/admin/payroll/reports",
+      href: "/admin/payroll",
       iconColor: "bg-emerald-500/10",
     },
     {
