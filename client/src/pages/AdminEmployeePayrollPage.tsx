@@ -309,6 +309,8 @@ export default function AdminEmployeePayrollPage() {
 
       <EditEmployeeDialog
         employeeId={selectedEmployeeId}
+        employeeName={employeeList?.employees?.find(e => e.id === selectedEmployeeId)?.name || null}
+        employeeCode={employeeList?.employees?.find(e => e.id === selectedEmployeeId)?.employeeCode || null}
         open={editDialogOpen}
         onOpenChange={(open) => {
           setEditDialogOpen(open);
@@ -321,11 +323,13 @@ export default function AdminEmployeePayrollPage() {
 
 interface EditEmployeeDialogProps {
   employeeId: string | null;
+  employeeName: string | null;
+  employeeCode: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-function EditEmployeeDialog({ employeeId, open, onOpenChange }: EditEmployeeDialogProps) {
+function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOpenChange }: EditEmployeeDialogProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("settings");
 
@@ -444,11 +448,11 @@ function EditEmployeeDialog({ employeeId, open, onOpenChange }: EditEmployeeDial
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            {isLoadingSettings ? "Loading..." : settings?.name || "Employee Settings"}
+            {employeeName || settings?.name || "Employee Settings"}
           </DialogTitle>
           <DialogDescription>
-            {settings?.employeeCode && <span className="font-mono">{settings.employeeCode}</span>}
-            {settings?.employeeCode && settings?.department && " • "}
+            {(employeeCode || settings?.employeeCode) && <span className="font-mono">{employeeCode || settings?.employeeCode}</span>}
+            {(employeeCode || settings?.employeeCode) && settings?.department && " • "}
             {settings?.department}
           </DialogDescription>
         </DialogHeader>
