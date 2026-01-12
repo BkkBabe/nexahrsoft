@@ -1398,17 +1398,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const openSession = await storage.getOpenAttendanceRecord(userId);
       if (openSession) {
         const clockInTime = new Date(openSession.clockInTime);
-        const formattedTime = clockInTime.toLocaleString('en-US', { 
-          timeZone: 'Asia/Singapore',
-          hour: '2-digit',
-          minute: '2-digit',
-          month: 'short',
-          day: 'numeric'
-        });
-        return res.status(409).json({ 
-          message: `You already have an active clock-in from ${formattedTime}. Please clock out first before clocking in again.`,
-          existingRecord: openSession
-        });
+        const hoursAgo = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+        
+        // Check if we should ignore orphaned sessions (older than 24 hours)
+        const companySettings = await storage.getCompanySettings();
+        const isOrphaned = hoursAgo >= 24;
+        
+        // If the session is orphaned and ignoreOrphanedSessions is enabled, allow clock-in
+        if (isOrphaned && companySettings?.ignoreOrphanedSessions) {
+          // Allow the clock-in to proceed - orphaned session will be ignored
+          console.log(`Ignoring orphaned session for user ${userId} from ${clockInTime.toISOString()}`);
+        } else {
+          // Block the clock-in - user must clock out first
+          const formattedTime = clockInTime.toLocaleString('en-US', { 
+            timeZone: 'Asia/Singapore',
+            hour: '2-digit',
+            minute: '2-digit',
+            month: 'short',
+            day: 'numeric'
+          });
+          return res.status(409).json({ 
+            message: `You already have an active clock-in from ${formattedTime}. Please clock out first before clocking in again.`,
+            existingRecord: openSession
+          });
+        }
       }
       
       // Get company timezone to store the correct local date
