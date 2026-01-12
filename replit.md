@@ -21,6 +21,7 @@ Preferred communication style: Simple, everyday language.
 
 - **Server Framework**: Express.js with TypeScript, express-session for session management, RESTful API design.
 - **Authentication & Authorization**: Dual admin system (master admin hardcoded + database users with role='admin' or role='viewonly_admin'), user bcrypt-hashed passwords, session-based with secure HTTP-only cookies, role-based access control (admin/viewonly_admin vs. user), security model ensures sessions only for approved users, user approval workflow for new registrations, forced password change on first login via mustChangePassword flag. Admin users have exclusive admin-only access (cannot log in via employee login), and regular users cannot log in via admin login. View-only admins can view all data but cannot edit, delete, or send emails (enforced by requireWriteAccess middleware and UI disabling).
+- **Super Admin Role**: Special privilege level for sensitive operations. Super admins are: 1) Master admin (nexaadmin), 2) Users with email "rebekah.sr@3si.com.sg". Only super admins can archive/unarchive employees. API endpoint GET /api/admin/is-super-admin returns super admin status.
 - **Data Layer**: Drizzle ORM for type-safe queries, Zod validation, PostgreSQL-backed storage (PgStorage) via Neon serverless database.
 - **API Structure**: `/api/admin/*`, `/api/auth/*` following RESTful conventions with Zod schema validation.
 
@@ -48,7 +49,7 @@ Preferred communication style: Simple, everyday language.
     - **Refresh Data button**: Regenerates summaries from raw records for the current month (visible in month view only)
     - **Employee Selection**: Checkbox column for selecting individual or all employees
     - **Serial Numbers**: S/N column for easy reference in printed reports
-    - **Archive/Unarchive**: Hide inactive employees from views without deletion; restore via unarchive modal
+    - **Archive/Unarchive**: Hide inactive employees from views without deletion; restore via unarchive modal (super admin only)
     - **Export Features**: Export heatmap data to CSV or Excel format with employee details and hours worked
     - **Print Functionality**: Print-friendly heatmap layout (checkboxes hidden, serial numbers visible)
   - Attendance details view with audit logging

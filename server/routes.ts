@@ -111,6 +111,29 @@ const ADMIN_CREDENTIALS = {
   password: "nexa123!",
 };
 
+// Super admin emails - only these users can archive/unarchive employees
+const SUPER_ADMIN_EMAILS = [
+  "rebekah.sr@3si.com.sg",
+];
+
+// Helper function to check if current session is a super admin
+async function isSuperAdmin(session: any, storage: any): Promise<boolean> {
+  // Master admin (nexaadmin) is always a super admin
+  if (session.userId === "admin") {
+    return true;
+  }
+  
+  // Check if the logged-in admin's email is in the super admin list
+  if (session.userId) {
+    const user = await storage.getUser(session.userId);
+    if (user && user.email && SUPER_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 // Generate temporary password for welcome emails
 function generateTempPassword(employeeCode: string): string {
   const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -500,9 +523,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Archive users (admin only, write access required)
+  // Check if current admin is a super admin
+  app.get("/api/admin/is-super-admin", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const isSuper = await isSuperAdmin(req.session, storage);
+      res.json({ isSuperAdmin: isSuper });
+    } catch (error) {
+      console.error("Check super admin error:", error);
+      res.status(500).json({ message: "Failed to check super admin status" });
+    }
+  });
+
+  // Archive users (super admin only)
   app.post("/api/admin/users/archive", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
+      // Check if user is a super admin
+      const isSuper = await isSuperAdmin(req.session, storage);
+      if (!isSuper) {
+        return res.status(403).json({ message: "Only super admins can archive employees" });
+      }
+      
       const schema = z.object({
         userIds: z.array(z.string()).min(1, "At least one user ID is required"),
       });
@@ -520,9 +560,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Unarchive users (admin only, write access required)
+  // Unarchive users (super admin only)
   app.post("/api/admin/users/unarchive", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
+      // Check if user is a super admin
+      const isSuper = await isSuperAdmin(req.session, storage);
+      if (!isSuper) {
+        return res.status(403).json({ message: "Only super admins can unarchive employees" });
+      }
+      
       const schema = z.object({
         userIds: z.array(z.string()).min(1, "At least one user ID is required"),
       });

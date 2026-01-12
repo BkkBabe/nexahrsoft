@@ -264,6 +264,12 @@ export default function AdminAttendancePage() {
   // Check if current user is nexaadmin (master admin has user.id === "admin")
   const isNexaAdmin = sessionData?.user?.id === "admin";
   const isViewOnlyAdmin = sessionData?.isViewOnlyAdmin === true;
+  
+  // Check if current admin is a super admin (can archive/unarchive employees)
+  const { data: superAdminData } = useQuery<{ isSuperAdmin: boolean }>({
+    queryKey: ['/api/admin/is-super-admin'],
+  });
+  const isSuperAdmin = superAdminData?.isSuperAdmin === true;
 
   // Fetch all users
   const { data: usersData } = useQuery<User[]>({
@@ -2168,8 +2174,8 @@ export default function AdminAttendancePage() {
               
               {/* Action Buttons Row */}
               <div className="flex flex-wrap items-center gap-2 print:hidden">
-                {/* Archive button - only when users selected */}
-                {!isViewOnlyAdmin && selectedHeatmapUsers.size > 0 && (
+                {/* Archive button - super admin only, only when users selected */}
+                {isSuperAdmin && selectedHeatmapUsers.size > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -2182,8 +2188,8 @@ export default function AdminAttendancePage() {
                   </Button>
                 )}
                 
-                {/* Unarchive button - opens modal */}
-                {!isViewOnlyAdmin && (
+                {/* Unarchive button - super admin only, opens modal */}
+                {isSuperAdmin && (
                   <Button
                     variant="outline"
                     size="sm"
