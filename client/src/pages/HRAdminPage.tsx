@@ -23,8 +23,7 @@ export default function HRAdminPage() {
   const totalPayroll = payrollRecords.reduce((sum, r) => sum + r.nett, 0) / 100;
 
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
@@ -174,7 +173,6 @@ export default function HRAdminPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
       </div>
     </div>
   );
