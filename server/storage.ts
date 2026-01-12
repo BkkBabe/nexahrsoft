@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -159,6 +159,12 @@ export interface IStorage {
   // Payroll Adjustment Audit Log methods
   createPayrollAdjustmentAuditLog(log: InsertPayrollAdjustmentAuditLog): Promise<PayrollAdjustmentAuditLog>;
   getPayrollAdjustmentAuditLogs(adjustmentId: string): Promise<PayrollAdjustmentAuditLog[]>;
+  
+  // Employee Salary Adjustments
+  getEmployeeSalaryAdjustments(userId: string): Promise<EmployeeSalaryAdjustment[]>;
+  createEmployeeSalaryAdjustment(adjustment: InsertEmployeeSalaryAdjustment): Promise<EmployeeSalaryAdjustment>;
+  updateEmployeeSalaryAdjustment(id: string, updates: Partial<EmployeeSalaryAdjustment>): Promise<EmployeeSalaryAdjustment | undefined>;
+  deleteEmployeeSalaryAdjustment(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -670,6 +676,20 @@ export class MemStorage implements IStorage {
   }
   async getPayrollAdjustmentAuditLogs(adjustmentId: string): Promise<PayrollAdjustmentAuditLog[]> {
     throw new Error("MemStorage getPayrollAdjustmentAuditLogs not implemented");
+  }
+  
+  // Employee Salary Adjustments stubs
+  async getEmployeeSalaryAdjustments(userId: string): Promise<EmployeeSalaryAdjustment[]> {
+    throw new Error("MemStorage getEmployeeSalaryAdjustments not implemented");
+  }
+  async createEmployeeSalaryAdjustment(adjustment: InsertEmployeeSalaryAdjustment): Promise<EmployeeSalaryAdjustment> {
+    throw new Error("MemStorage createEmployeeSalaryAdjustment not implemented");
+  }
+  async updateEmployeeSalaryAdjustment(id: string, updates: Partial<EmployeeSalaryAdjustment>): Promise<EmployeeSalaryAdjustment | undefined> {
+    throw new Error("MemStorage updateEmployeeSalaryAdjustment not implemented");
+  }
+  async deleteEmployeeSalaryAdjustment(id: string): Promise<boolean> {
+    throw new Error("MemStorage deleteEmployeeSalaryAdjustment not implemented");
   }
 }
 
@@ -1826,6 +1846,39 @@ export class PgStorage implements IStorage {
       .from(payrollAdjustmentAuditLogs)
       .where(eq(payrollAdjustmentAuditLogs.adjustmentId, adjustmentId))
       .orderBy(desc(payrollAdjustmentAuditLogs.changedAt));
+  }
+  
+  // Employee Salary Adjustments
+  async getEmployeeSalaryAdjustments(userId: string): Promise<EmployeeSalaryAdjustment[]> {
+    return await db.select()
+      .from(employeeSalaryAdjustments)
+      .where(eq(employeeSalaryAdjustments.userId, userId))
+      .orderBy(desc(employeeSalaryAdjustments.createdAt));
+  }
+  
+  async createEmployeeSalaryAdjustment(adjustment: InsertEmployeeSalaryAdjustment): Promise<EmployeeSalaryAdjustment> {
+    const [created] = await db.insert(employeeSalaryAdjustments)
+      .values(adjustment)
+      .returning();
+    return created;
+  }
+  
+  async updateEmployeeSalaryAdjustment(id: string, updates: Partial<EmployeeSalaryAdjustment>): Promise<EmployeeSalaryAdjustment | undefined> {
+    const [updated] = await db.update(employeeSalaryAdjustments)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(employeeSalaryAdjustments.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteEmployeeSalaryAdjustment(id: string): Promise<boolean> {
+    const result = await db.delete(employeeSalaryAdjustments)
+      .where(eq(employeeSalaryAdjustments.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 

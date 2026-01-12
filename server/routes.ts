@@ -1147,6 +1147,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get salary adjustments for an employee
+  app.get("/api/admin/employees/:id/salary-adjustments", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adjustments = await storage.getEmployeeSalaryAdjustments(id);
+      res.json({ adjustments });
+    } catch (error) {
+      console.error("Get salary adjustments error:", error);
+      res.status(500).json({ message: "Failed to fetch salary adjustments" });
+    }
+  });
+
+  // Create a salary adjustment for an employee
+  app.post("/api/admin/employees/:id/salary-adjustments", requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adminUser = req.session?.userId 
+        ? await storage.getUser(req.session.userId)
+        : null;
+      const changedBy = adminUser?.username || "nexaadmin";
+
+      const schema = z.object({
+        adjustmentType: z.enum(['addition', 'deduction']),
+        amount: z.number().positive(),
+        description: z.string().min(1),
+      });
+
+      const data = schema.parse(req.body);
+      
+      const adjustment = await storage.createEmployeeSalaryAdjustment({
+        userId: id,
+        adjustmentType: data.adjustmentType,
+        amount: data.amount,
+        description: data.description,
+        createdBy: changedBy,
+        isActive: true,
+      });
+
+      res.json({ adjustment });
+    } catch (error) {
+      console.error("Create salary adjustment error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create salary adjustment" });
+    }
+  });
+
+  // Update a salary adjustment
+  app.patch("/api/admin/employees/:userId/salary-adjustments/:id", requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const schema = z.object({
+        adjustmentType: z.enum(['addition', 'deduction']).optional(),
+        amount: z.number().positive().optional(),
+        description: z.string().min(1).optional(),
+        isActive: z.boolean().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      
+      const adjustment = await storage.updateEmployeeSalaryAdjustment(id, data);
+
+      if (!adjustment) {
+        return res.status(404).json({ message: "Adjustment not found" });
+      }
+
+      res.json({ adjustment });
+    } catch (error) {
+      console.error("Update salary adjustment error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update salary adjustment" });
+    }
+  });
+
+  // Delete a salary adjustment
+  app.delete("/api/admin/employees/:userId/salary-adjustments/:id", requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteEmployeeSalaryAdjustment(id);
+
+      if (!deleted) {
+        return res.status(404).json({ message: "Adjustment not found" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete salary adjustment error:", error);
+      res.status(500).json({ message: "Failed to delete salary adjustment" });
+    }
+  });
+
   // Get all employees with payroll summary (for the employee list page)
   app.get("/api/admin/employees/payroll-list", requireAdmin, async (req: Request, res: Response) => {
     try {
