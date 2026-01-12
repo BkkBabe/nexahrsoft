@@ -157,7 +157,7 @@ export default function AdminEmployeePayrollPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  const { data: employeeList, isLoading: isLoadingList } = useQuery<{ employees: EmployeePayrollSummary[] }>({
+  const { data: employeeList, isLoading: isLoadingList, error: listError } = useQuery<{ employees: EmployeePayrollSummary[] }>({
     queryKey: ["/api/admin/employees/payroll-list"],
   });
 
@@ -224,6 +224,14 @@ export default function AdminEmployeePayrollPage() {
           {isLoadingList ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : listError ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
+              <p className="text-destructive font-medium">Failed to load employees</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {(listError as Error).message || "Please try refreshing the page"}
+              </p>
             </div>
           ) : filteredEmployees.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
