@@ -918,7 +918,17 @@ export default function AdminPayrollReportsPage() {
                 companySettings={companySettings}
                 defaultMode="employer"
                 showToggle={true}
-                onPrint={() => window.print()}
+                onPrint={() => {
+                  const companyName = companySettings?.companyName || "Company";
+                  const employeeName = selectedPayslip.employeeName || "Employee";
+                  const payPeriod = selectedPayslip.payPeriod || "";
+                  const originalTitle = document.title;
+                  document.title = `${companyName} - ${employeeName} Salary Voucher ${payPeriod}`.trim();
+                  setTimeout(() => {
+                    window.print();
+                    document.title = originalTitle;
+                  }, 100);
+                }}
               />
 
               <div className="flex justify-end gap-2 pt-4 print:hidden">
