@@ -356,6 +356,16 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   const [editingAdjustment, setEditingAdjustment] = useState<SalaryAdjustment | null>(null);
   const [salaryInputText, setSalaryInputText] = useState<string>("");
   const [salaryInputDirty, setSalaryInputDirty] = useState(false);
+  
+  const [allowanceInputs, setAllowanceInputs] = useState({
+    mobile: "",
+    transport: "",
+    meal: "",
+    shift: "",
+    other: "",
+    houseRental: "",
+  });
+  const [allowancesDirty, setAllowancesDirty] = useState(false);
 
   useEffect(() => {
     if (!salaryInputDirty) {
@@ -371,11 +381,56 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
     if (!open) {
       setSalaryInputDirty(false);
       setSalaryInputText("");
+      setAllowancesDirty(false);
+      setAllowanceInputs({ mobile: "", transport: "", meal: "", shift: "", other: "", houseRental: "" });
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!allowancesDirty && settings) {
+      setAllowanceInputs({
+        mobile: centsToDisplay(settings.defaultMobileAllowance ?? null),
+        transport: centsToDisplay(settings.defaultTransportAllowance ?? null),
+        meal: centsToDisplay(settings.defaultMealAllowance ?? null),
+        shift: centsToDisplay(settings.defaultShiftAllowance ?? null),
+        other: centsToDisplay(settings.defaultOtherAllowance ?? null),
+        houseRental: centsToDisplay(settings.defaultHouseRentalAllowance ?? null),
+      });
+    }
+  }, [settings, allowancesDirty]);
+
   const updateField = (field: keyof EmployeePayrollSettings, value: any) => {
     setFormState(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAllowanceChange = (key: keyof typeof allowanceInputs, value: string) => {
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setAllowanceInputs(prev => ({ ...prev, [key]: value }));
+      setAllowancesDirty(true);
+    }
+  };
+
+  const handleAllowanceBlur = (key: keyof typeof allowanceInputs, field: keyof EmployeePayrollSettings) => {
+    const value = allowanceInputs[key];
+    if (value && !isNaN(parseFloat(value))) {
+      const formatted = parseFloat(value).toFixed(2);
+      setAllowanceInputs(prev => ({ ...prev, [key]: formatted }));
+      updateField(field, displayToCents(formatted));
+    } else if (value === "") {
+      updateField(field, null);
+    }
+  };
+
+  const allowanceKeyDownHandler = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (allowedKeys.includes(e.key)) return;
+    if ((e.metaKey || e.ctrlKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+    if (!/[\d.]/.test(e.key)) {
+      e.preventDefault();
+    }
+    if (e.key === '.' && e.currentTarget.value.includes('.')) {
+      e.preventDefault();
+    }
   };
 
   const saveMutation = useMutation({
@@ -560,7 +615,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                           value={salaryInputText}
                           onChange={(e) => {
                             const value = e.target.value;
-                            if (value === "" || /^\d*\.?\d{0,2}$/.test(value)) {
+                            if (value === "" || /^\d*\.?\d*$/.test(value)) {
                               setSalaryInputText(value);
                               setSalaryInputDirty(true);
                             }
@@ -683,33 +738,39 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                         <div>
                           <Label>Mobile Allowance ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0.00"
-                            value={centsToDisplay(getValue("defaultMobileAllowance") ?? null)}
-                            onChange={(e) => updateField("defaultMobileAllowance", displayToCents(e.target.value))}
+                            value={allowanceInputs.mobile}
+                            onChange={(e) => handleAllowanceChange("mobile", e.target.value)}
+                            onKeyDown={allowanceKeyDownHandler}
+                            onBlur={() => handleAllowanceBlur("mobile", "defaultMobileAllowance")}
                             data-testid="input-mobile-allowance"
                           />
                         </div>
                         <div>
                           <Label>Transport Allowance ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0.00"
-                            value={centsToDisplay(getValue("defaultTransportAllowance") ?? null)}
-                            onChange={(e) => updateField("defaultTransportAllowance", displayToCents(e.target.value))}
+                            value={allowanceInputs.transport}
+                            onChange={(e) => handleAllowanceChange("transport", e.target.value)}
+                            onKeyDown={allowanceKeyDownHandler}
+                            onBlur={() => handleAllowanceBlur("transport", "defaultTransportAllowance")}
                             data-testid="input-transport-allowance"
                           />
                         </div>
                         <div>
                           <Label>Meal Allowance ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0.00"
-                            value={centsToDisplay(getValue("defaultMealAllowance") ?? null)}
-                            onChange={(e) => updateField("defaultMealAllowance", displayToCents(e.target.value))}
+                            value={allowanceInputs.meal}
+                            onChange={(e) => handleAllowanceChange("meal", e.target.value)}
+                            onKeyDown={allowanceKeyDownHandler}
+                            onBlur={() => handleAllowanceBlur("meal", "defaultMealAllowance")}
                             data-testid="input-meal-allowance"
                           />
                         </div>
@@ -718,33 +779,39 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                         <div>
                           <Label>Shift Allowance ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0.00"
-                            value={centsToDisplay(getValue("defaultShiftAllowance") ?? null)}
-                            onChange={(e) => updateField("defaultShiftAllowance", displayToCents(e.target.value))}
+                            value={allowanceInputs.shift}
+                            onChange={(e) => handleAllowanceChange("shift", e.target.value)}
+                            onKeyDown={allowanceKeyDownHandler}
+                            onBlur={() => handleAllowanceBlur("shift", "defaultShiftAllowance")}
                             data-testid="input-shift-allowance"
                           />
                         </div>
                         <div>
                           <Label>Other Allowance ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0.00"
-                            value={centsToDisplay(getValue("defaultOtherAllowance") ?? null)}
-                            onChange={(e) => updateField("defaultOtherAllowance", displayToCents(e.target.value))}
+                            value={allowanceInputs.other}
+                            onChange={(e) => handleAllowanceChange("other", e.target.value)}
+                            onKeyDown={allowanceKeyDownHandler}
+                            onBlur={() => handleAllowanceBlur("other", "defaultOtherAllowance")}
                             data-testid="input-other-allowance"
                           />
                         </div>
                         <div>
                           <Label>House Rental ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0.00"
-                            value={centsToDisplay(getValue("defaultHouseRentalAllowance") ?? null)}
-                            onChange={(e) => updateField("defaultHouseRentalAllowance", displayToCents(e.target.value))}
+                            value={allowanceInputs.houseRental}
+                            onChange={(e) => handleAllowanceChange("houseRental", e.target.value)}
+                            onKeyDown={allowanceKeyDownHandler}
+                            onBlur={() => handleAllowanceBlur("houseRental", "defaultHouseRentalAllowance")}
                             data-testid="input-house-rental"
                           />
                         </div>
