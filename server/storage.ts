@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -147,6 +147,18 @@ export interface IStorage {
   archiveUsers(userIds: string[]): Promise<void>;
   unarchiveUsers(userIds: string[]): Promise<void>;
   getArchivedUsers(): Promise<User[]>;
+  
+  // Payroll Adjustment methods
+  createPayrollAdjustment(adjustment: InsertPayrollAdjustment): Promise<PayrollAdjustment>;
+  updatePayrollAdjustment(id: string, updates: Partial<PayrollAdjustment>): Promise<PayrollAdjustment | undefined>;
+  getPayrollAdjustment(id: string): Promise<PayrollAdjustment | undefined>;
+  getPayrollAdjustmentsByEmployee(userId: string, year?: number, month?: number): Promise<PayrollAdjustment[]>;
+  getPayrollAdjustmentsByPeriod(year: number, month: number): Promise<PayrollAdjustment[]>;
+  deletePayrollAdjustment(id: string): Promise<void>;
+  
+  // Payroll Adjustment Audit Log methods
+  createPayrollAdjustmentAuditLog(log: InsertPayrollAdjustmentAuditLog): Promise<PayrollAdjustmentAuditLog>;
+  getPayrollAdjustmentAuditLogs(adjustmentId: string): Promise<PayrollAdjustmentAuditLog[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -632,6 +644,32 @@ export class MemStorage implements IStorage {
   
   async getLeaveAuditLogs(limit?: number): Promise<LeaveAuditLog[]> {
     throw new Error("MemStorage getLeaveAuditLogs not implemented");
+  }
+  
+  // Payroll Adjustment stubs
+  async createPayrollAdjustment(adjustment: InsertPayrollAdjustment): Promise<PayrollAdjustment> {
+    throw new Error("MemStorage createPayrollAdjustment not implemented");
+  }
+  async updatePayrollAdjustment(id: string, updates: Partial<PayrollAdjustment>): Promise<PayrollAdjustment | undefined> {
+    throw new Error("MemStorage updatePayrollAdjustment not implemented");
+  }
+  async getPayrollAdjustment(id: string): Promise<PayrollAdjustment | undefined> {
+    throw new Error("MemStorage getPayrollAdjustment not implemented");
+  }
+  async getPayrollAdjustmentsByEmployee(userId: string, year?: number, month?: number): Promise<PayrollAdjustment[]> {
+    throw new Error("MemStorage getPayrollAdjustmentsByEmployee not implemented");
+  }
+  async getPayrollAdjustmentsByPeriod(year: number, month: number): Promise<PayrollAdjustment[]> {
+    throw new Error("MemStorage getPayrollAdjustmentsByPeriod not implemented");
+  }
+  async deletePayrollAdjustment(id: string): Promise<void> {
+    throw new Error("MemStorage deletePayrollAdjustment not implemented");
+  }
+  async createPayrollAdjustmentAuditLog(log: InsertPayrollAdjustmentAuditLog): Promise<PayrollAdjustmentAuditLog> {
+    throw new Error("MemStorage createPayrollAdjustmentAuditLog not implemented");
+  }
+  async getPayrollAdjustmentAuditLogs(adjustmentId: string): Promise<PayrollAdjustmentAuditLog[]> {
+    throw new Error("MemStorage getPayrollAdjustmentAuditLogs not implemented");
   }
 }
 
@@ -1717,6 +1755,77 @@ export class PgStorage implements IStorage {
       .from(users)
       .where(eq(users.isArchived, true))
       .orderBy(users.name);
+  }
+  
+  // Payroll Adjustment methods
+  async createPayrollAdjustment(adjustment: InsertPayrollAdjustment): Promise<PayrollAdjustment> {
+    const [created] = await db.insert(payrollAdjustments)
+      .values(adjustment)
+      .returning();
+    return created;
+  }
+  
+  async updatePayrollAdjustment(id: string, updates: Partial<PayrollAdjustment>): Promise<PayrollAdjustment | undefined> {
+    const [updated] = await db.update(payrollAdjustments)
+      .set(updates)
+      .where(eq(payrollAdjustments.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async getPayrollAdjustment(id: string): Promise<PayrollAdjustment | undefined> {
+    const [adjustment] = await db.select()
+      .from(payrollAdjustments)
+      .where(eq(payrollAdjustments.id, id));
+    return adjustment;
+  }
+  
+  async getPayrollAdjustmentsByEmployee(userId: string, year?: number, month?: number): Promise<PayrollAdjustment[]> {
+    let conditions = [eq(payrollAdjustments.userId, userId)];
+    if (year !== undefined) {
+      conditions.push(eq(payrollAdjustments.payPeriodYear, year));
+    }
+    if (month !== undefined) {
+      conditions.push(eq(payrollAdjustments.payPeriodMonth, month));
+    }
+    return await db.select()
+      .from(payrollAdjustments)
+      .where(and(...conditions))
+      .orderBy(desc(payrollAdjustments.createdAt));
+  }
+  
+  async getPayrollAdjustmentsByPeriod(year: number, month: number): Promise<PayrollAdjustment[]> {
+    return await db.select()
+      .from(payrollAdjustments)
+      .where(and(
+        eq(payrollAdjustments.payPeriodYear, year),
+        eq(payrollAdjustments.payPeriodMonth, month)
+      ))
+      .orderBy(desc(payrollAdjustments.createdAt));
+  }
+  
+  async deletePayrollAdjustment(id: string): Promise<void> {
+    // First delete any audit logs
+    await db.delete(payrollAdjustmentAuditLogs)
+      .where(eq(payrollAdjustmentAuditLogs.adjustmentId, id));
+    // Then delete the adjustment
+    await db.delete(payrollAdjustments)
+      .where(eq(payrollAdjustments.id, id));
+  }
+  
+  // Payroll Adjustment Audit Log methods
+  async createPayrollAdjustmentAuditLog(log: InsertPayrollAdjustmentAuditLog): Promise<PayrollAdjustmentAuditLog> {
+    const [created] = await db.insert(payrollAdjustmentAuditLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+  
+  async getPayrollAdjustmentAuditLogs(adjustmentId: string): Promise<PayrollAdjustmentAuditLog[]> {
+    return await db.select()
+      .from(payrollAdjustmentAuditLogs)
+      .where(eq(payrollAdjustmentAuditLogs.adjustmentId, adjustmentId))
+      .orderBy(desc(payrollAdjustmentAuditLogs.changedAt));
   }
 }
 

@@ -47,6 +47,8 @@ export const users = pgTable("users", {
   // Salary adjustment (cents) - recurring adjustment added to basic salary
   salaryAdjustment: integer("salary_adjustment").default(0),
   salaryAdjustmentReason: text("salary_adjustment_reason"),
+  // Work schedule - for salary calculations
+  regularDaysPerWeek: real("regular_days_per_week").default(5), // 5 or 5.5 days per week
 });
 
 export const companySettings = pgTable("company_settings", {
@@ -565,3 +567,64 @@ export const insertPayrollAuditLogSchema = createInsertSchema(payrollAuditLogs).
 
 export type InsertPayrollAuditLog = z.infer<typeof insertPayrollAuditLogSchema>;
 export type PayrollAuditLog = typeof payrollAuditLogs.$inferSelect;
+
+// Payroll Adjustments - Admin entries for OT, MC, AL, late hours, advances, claims
+export const payrollAdjustments = pgTable("payroll_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  payPeriodYear: integer("pay_period_year").notNull(), // e.g., 2025
+  payPeriodMonth: integer("pay_period_month").notNull(), // 1-12
+  
+  // Adjustment type
+  adjustmentType: text("adjustment_type").notNull(), // 'overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus'
+  
+  // Amounts
+  hours: real("hours"), // For OT, late hours
+  days: real("days"), // For MC, AL days
+  amount: integer("amount"), // cents - for claims, advances, fixed amounts
+  rate: integer("rate"), // cents - custom rate (e.g., OT hourly rate override)
+  rateMultiplier: real("rate_multiplier"), // e.g., 1.5 for OT, null to use employee's calculated rate
+  
+  // Descriptions
+  description: text("description"), // Brief description
+  notes: text("notes"), // Detailed admin notes for audit
+  
+  // Status
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected', 'processed'
+  
+  // Audit trail
+  createdBy: text("created_by").notNull(), // Admin who created
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  approvedBy: text("approved_by"), // Admin who approved
+  approvedAt: timestamp("approved_at"),
+  processedInPayroll: varchar("processed_in_payroll").references(() => payrollRecords.id), // Link to payroll record when processed
+});
+
+export const insertPayrollAdjustmentSchema = createInsertSchema(payrollAdjustments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPayrollAdjustment = z.infer<typeof insertPayrollAdjustmentSchema>;
+export type PayrollAdjustment = typeof payrollAdjustments.$inferSelect;
+
+// Payroll Adjustment Audit Logs - tracks all changes to adjustment records
+export const payrollAdjustmentAuditLogs = pgTable("payroll_adjustment_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adjustmentId: varchar("adjustment_id").notNull().references(() => payrollAdjustments.id),
+  action: text("action").notNull(), // 'create', 'update', 'approve', 'reject', 'delete'
+  fieldName: text("field_name"), // Which field was changed (for updates)
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  notes: text("notes"), // Admin notes explaining the change
+  changedBy: text("changed_by").notNull(),
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+});
+
+export const insertPayrollAdjustmentAuditLogSchema = createInsertSchema(payrollAdjustmentAuditLogs).omit({
+  id: true,
+  changedAt: true,
+});
+
+export type InsertPayrollAdjustmentAuditLog = z.infer<typeof insertPayrollAdjustmentAuditLogSchema>;
+export type PayrollAdjustmentAuditLog = typeof payrollAdjustmentAuditLogs.$inferSelect;
