@@ -264,16 +264,30 @@ export function calculatePayFromHours(
 }
 
 /**
- * Convert monthly salary to hourly rate
+ * Convert monthly salary to daily rate using MOM formula
+ * Daily rate = (Monthly Salary × 12) ÷ (Days per Week × 52)
+ */
+export function monthlyToDailyRate(
+  monthlySalary: number, // cents
+  regularDaysPerWeek: number = 5
+): number {
+  // MOM formula: Daily rate = (Monthly × 12) / (Days per Week × 52)
+  return Math.round((monthlySalary * 12) / (regularDaysPerWeek * 52));
+}
+
+/**
+ * Convert monthly salary to hourly rate using MOM formula
+ * Hourly rate = Daily rate ÷ Hours per Day
  */
 export function monthlyToHourlyRate(
   monthlySalary: number, // cents
   regularHoursPerDay: number = 8,
   regularDaysPerWeek: number = 5
 ): number {
-  // Assuming ~4.33 weeks per month
-  const hoursPerMonth = regularHoursPerDay * regularDaysPerWeek * 4.33;
-  return Math.round(monthlySalary / hoursPerMonth);
+  // MOM formula: Daily rate = (Monthly × 12) / (Days per Week × 52)
+  // Hourly rate = Daily rate / Hours per Day
+  const dailyRate = monthlyToDailyRate(monthlySalary, regularDaysPerWeek);
+  return Math.round(dailyRate / regularHoursPerDay);
 }
 
 /**

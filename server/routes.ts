@@ -3870,10 +3870,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const otMultiplier = settings?.otMultiplier15 || 1.5;
         const { regularPay, overtimePay, totalPay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
 
-        // For monthly employees, use base salary as basic pay
-        const basicSalary = payType === 'monthly' && employee.basicMonthlySalary 
-          ? employee.basicMonthlySalary 
-          : regularPay;
+        // For all pay types (monthly/daily/hourly), calculate basic pay based on hours worked
+        // Monthly employees: hourlyRate is already calculated from MOM formula
+        // Daily rate = (Monthly × 12) / (Days per Week × 52)
+        // Hourly rate = Daily rate / Hours per Day
+        const basicSalary = regularPay;
         const otAmount = overtimePay;
 
         // Calculate gross wages (basic + OT for now, can be extended with allowances)
@@ -4094,9 +4095,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const otMultiplier = settings?.otMultiplier15 || 1.5;
         const { regularPay, overtimePay, totalPay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
 
-        const basicPay = payType === 'monthly' && employee.basicMonthlySalary 
-          ? employee.basicMonthlySalary 
-          : regularPay;
+        // For monthly employees, calculate basic pay based on days worked using MOM daily wage formula
+        // Daily rate = (Monthly × 12) / (Days per Week × 52)
+        // Basic pay = Days Worked × Daily Rate
+        const basicPay = regularPay; // Always use regularPay calculated from hours worked
         const grossWages = basicPay + overtimePay;
 
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
