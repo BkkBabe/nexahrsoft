@@ -628,3 +628,25 @@ export const insertPayrollAdjustmentAuditLogSchema = createInsertSchema(payrollA
 
 export type InsertPayrollAdjustmentAuditLog = z.infer<typeof insertPayrollAdjustmentAuditLogSchema>;
 export type PayrollAdjustmentAuditLog = typeof payrollAdjustmentAuditLogs.$inferSelect;
+
+// Employee Salary Adjustments - Recurring additions/deductions to base salary configuration
+export const employeeSalaryAdjustments = pgTable("employee_salary_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  adjustmentType: text("adjustment_type").notNull(), // 'addition' or 'deduction'
+  amount: integer("amount").notNull(), // cents
+  description: text("description").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertEmployeeSalaryAdjustmentSchema = createInsertSchema(employeeSalaryAdjustments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertEmployeeSalaryAdjustment = z.infer<typeof insertEmployeeSalaryAdjustmentSchema>;
+export type EmployeeSalaryAdjustment = typeof employeeSalaryAdjustments.$inferSelect;
