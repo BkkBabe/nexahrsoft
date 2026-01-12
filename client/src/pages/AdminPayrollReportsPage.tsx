@@ -320,22 +320,20 @@ export default function AdminPayrollReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 flex-wrap">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setLocation("/admin/payslip")}
-          data-testid="button-back"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Payroll Reports</h1>
           <p className="text-muted-foreground" data-testid="text-page-description">Browse and export imported payroll data</p>
         </div>
-        <Button onClick={() => setLocation("/admin/payroll/import")} data-testid="button-import-new">
-          <FileSpreadsheet className="h-4 w-4 mr-2" />
-          Import New Data
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setLocation("/admin/payslip")} data-testid="button-back-payslip">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Payslip Management
+          </Button>
+          <Button onClick={() => setLocation("/admin/payroll/import")} data-testid="button-import-new">
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Import New Data
+          </Button>
+        </div>
       </div>
 
       <Card data-testid="card-filter">
