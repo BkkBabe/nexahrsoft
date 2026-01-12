@@ -354,9 +354,39 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   });
 
   const [formState, setFormState] = useState<Partial<EmployeePayrollSettings>>({});
+  const [hoursPerDayInput, setHoursPerDayInput] = useState<string>("");
+  const [hoursPerDayError, setHoursPerDayError] = useState<string | null>(null);
 
   const updateField = (field: keyof EmployeePayrollSettings, value: any) => {
     setFormState(prev => ({ ...prev, [field]: value }));
+  };
+  
+  const validateHoursPerDay = (value: string): boolean => {
+    if (!value || value.trim() === "") {
+      setHoursPerDayError(null);
+      return true; // Empty is valid (will use default)
+    }
+    const num = parseFloat(value);
+    if (isNaN(num)) {
+      setHoursPerDayError("Must be a valid number");
+      return false;
+    }
+    if (num < 1 || num > 24) {
+      setHoursPerDayError("Must be between 1 and 24 hours");
+      return false;
+    }
+    setHoursPerDayError(null);
+    return true;
+  };
+  
+  const handleHoursPerDayChange = (value: string) => {
+    setHoursPerDayInput(value);
+    if (validateHoursPerDay(value)) {
+      const num = parseFloat(value);
+      if (!isNaN(num) && num >= 1 && num <= 24) {
+        updateField("regularHoursPerDay", num);
+      }
+    }
   };
 
   const saveMutation = useMutation({
@@ -427,6 +457,8 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "payroll-settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "audit-logs"] });
       setFormState({});
+      setHoursPerDayInput("");
+      setHoursPerDayError(null);
       onOpenChange(false);
     },
     onError: (error: any) => {
@@ -439,6 +471,16 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   });
 
   const handleSave = () => {
+    // Validate hours per day before saving
+    if (hoursPerDayInput && !validateHoursPerDay(hoursPerDayInput)) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the Regular Hours/Day value before saving",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (Object.keys(formState).length === 0) {
       toast({
         title: "No Changes",
@@ -561,12 +603,16 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                         <div>
                           <Label>Regular Hours/Day</Label>
                           <Input
-                            type="number"
-                            step="0.5"
-                            value={getValue("regularHoursPerDay") ?? 8}
-                            onChange={(e) => updateField("regularHoursPerDay", parseFloat(e.target.value) || 8)}
+                            type="text"
+                            placeholder="8"
+                            value={hoursPerDayInput || String(getValue("regularHoursPerDay") ?? "")}
+                            onChange={(e) => handleHoursPerDayChange(e.target.value)}
+                            className={hoursPerDayError ? "border-destructive" : ""}
                             data-testid="input-hours-per-day"
                           />
+                          {hoursPerDayError && (
+                            <p className="text-xs text-destructive mt-1">{hoursPerDayError}</p>
+                          )}
                         </div>
                         <div>
                           <Label>Work Schedule</Label>
@@ -746,7 +792,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                 <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save">
+              <Button onClick={handleSave} disabled={saveMutation.isPending || !!hoursPerDayError} data-testid="button-save">
                 {saveMutation.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
