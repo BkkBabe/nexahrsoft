@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Users, DollarSign, Save, Loader2, History, User, Building, Calendar, X, Search, AlertCircle, CheckCircle2, Edit } from "lucide-react";
+import { ArrowLeft, Users, DollarSign, Save, Loader2, History, User, Building, Calendar, X, Search, AlertCircle, CheckCircle2, Edit, Plus, Trash2, PlusCircle, MinusCircle } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Tabs,
@@ -77,6 +78,18 @@ interface EmployeePayrollSettings {
   salaryAdjustmentReason: string | null;
 }
 
+interface SalaryAdjustment {
+  id: string;
+  userId: string;
+  adjustmentType: "addition" | "deduction";
+  amount: number;
+  description: string | null;
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface AuditLog {
   id: number;
   userId: string;
@@ -112,16 +125,6 @@ function getResidencyLabel(status: string | null): string {
     case "SPR": return "Singapore PR";
     case "FOREIGNER": return "Foreigner";
     default: return status;
-  }
-}
-
-function getPayTypeLabel(payType: string | null): string {
-  if (!payType) return "Not Set";
-  switch (payType) {
-    case "monthly": return "Monthly";
-    case "hourly": return "Hourly";
-    case "daily": return "Daily";
-    default: return payType;
   }
 }
 
@@ -193,7 +196,7 @@ export default function AdminEmployeePayrollPage() {
             Employee Payroll Settings
           </h1>
           <p className="text-sm text-muted-foreground">
-            Configure employee pay rates, residency status, and default allowances
+            Configure employee residency status, monthly salary, and allowances
           </p>
         </div>
       </div>
@@ -246,8 +249,7 @@ export default function AdminEmployeePayrollPage() {
                     <TableHead>Code</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Residency</TableHead>
-                    <TableHead>Pay Type</TableHead>
-                    <TableHead>Rate</TableHead>
+                    <TableHead>Monthly Salary</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -271,17 +273,8 @@ export default function AdminEmployeePayrollPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={employee.payType ? "secondary" : "outline"}>
-                          {getPayTypeLabel(employee.payType)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {employee.payType === "monthly" && employee.basicMonthlySalary
+                        {employee.basicMonthlySalary
                           ? formatCurrency(employee.basicMonthlySalary)
-                          : employee.payType === "hourly" && employee.hourlyRate
-                          ? `${formatCurrency(employee.hourlyRate)}/hr`
-                          : employee.payType === "daily" && employee.dailyRate
-                          ? `${formatCurrency(employee.dailyRate)}/day`
                           : "-"}
                       </TableCell>
                       <TableCell>
@@ -348,45 +341,22 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
     enabled: !!employeeId && open,
   });
 
+  const { data: salaryAdjustments, isLoading: isLoadingAdjustments, refetch: refetchAdjustments } = useQuery<{ adjustments: SalaryAdjustment[] }>({
+    queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`],
+    enabled: !!employeeId && open,
+  });
+
   const { data: auditData, isLoading: isLoadingAudit } = useQuery<{ employee: { id: string; name: string; employeeCode: string | null }; auditLogs: AuditLog[] }>({
     queryKey: ["/api/admin/employees", employeeId, "audit-logs"],
     enabled: !!employeeId && open && activeTab === "history",
   });
 
   const [formState, setFormState] = useState<Partial<EmployeePayrollSettings>>({});
-  const [hoursPerDayInput, setHoursPerDayInput] = useState<string>("");
-  const [hoursPerDayError, setHoursPerDayError] = useState<string | null>(null);
+  const [addAdjustmentOpen, setAddAdjustmentOpen] = useState(false);
+  const [editingAdjustment, setEditingAdjustment] = useState<SalaryAdjustment | null>(null);
 
   const updateField = (field: keyof EmployeePayrollSettings, value: any) => {
     setFormState(prev => ({ ...prev, [field]: value }));
-  };
-  
-  const validateHoursPerDay = (value: string): boolean => {
-    if (!value || value.trim() === "") {
-      setHoursPerDayError(null);
-      return true; // Empty is valid (will use default)
-    }
-    const num = parseFloat(value);
-    if (isNaN(num)) {
-      setHoursPerDayError("Must be a valid number");
-      return false;
-    }
-    if (num < 1 || num > 24) {
-      setHoursPerDayError("Must be between 1 and 24 hours");
-      return false;
-    }
-    setHoursPerDayError(null);
-    return true;
-  };
-  
-  const handleHoursPerDayChange = (value: string) => {
-    setHoursPerDayInput(value);
-    if (validateHoursPerDay(value)) {
-      const num = parseFloat(value);
-      if (!isNaN(num) && num >= 1 && num <= 24) {
-        updateField("regularHoursPerDay", num);
-      }
-    }
   };
 
   const saveMutation = useMutation({
@@ -402,23 +372,8 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       if (formState.sprStartDate !== undefined) {
         updates.sprStartDate = formState.sprStartDate || null;
       }
-      if (formState.payType !== undefined) {
-        updates.payType = formState.payType || null;
-      }
       if (formState.basicMonthlySalary !== undefined) {
         updates.basicMonthlySalary = formState.basicMonthlySalary;
-      }
-      if (formState.hourlyRate !== undefined) {
-        updates.hourlyRate = formState.hourlyRate;
-      }
-      if (formState.dailyRate !== undefined) {
-        updates.dailyRate = formState.dailyRate;
-      }
-      if (formState.regularHoursPerDay !== undefined) {
-        updates.regularHoursPerDay = formState.regularHoursPerDay;
-      }
-      if (formState.regularDaysPerWeek !== undefined) {
-        updates.regularDaysPerWeek = formState.regularDaysPerWeek;
       }
       if (formState.defaultMobileAllowance !== undefined) {
         updates.defaultMobileAllowance = formState.defaultMobileAllowance;
@@ -438,12 +393,6 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       if (formState.defaultHouseRentalAllowance !== undefined) {
         updates.defaultHouseRentalAllowance = formState.defaultHouseRentalAllowance;
       }
-      if (formState.salaryAdjustment !== undefined) {
-        updates.salaryAdjustment = formState.salaryAdjustment;
-      }
-      if (formState.salaryAdjustmentReason !== undefined) {
-        updates.salaryAdjustmentReason = formState.salaryAdjustmentReason || null;
-      }
 
       const response = await apiRequest("PATCH", `/api/admin/employees/${employeeId}/payroll-settings`, updates);
       return response.json();
@@ -457,8 +406,6 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "payroll-settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "audit-logs"] });
       setFormState({});
-      setHoursPerDayInput("");
-      setHoursPerDayError(null);
       onOpenChange(false);
     },
     onError: (error: any) => {
@@ -471,16 +418,6 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   });
 
   const handleSave = () => {
-    // Validate hours per day before saving
-    if (hoursPerDayInput && !validateHoursPerDay(hoursPerDayInput)) {
-      toast({
-        title: "Validation Error",
-        description: "Please fix the Regular Hours/Day value before saving",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     if (Object.keys(formState).length === 0) {
       toast({
         title: "No Changes",
@@ -496,6 +433,14 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
     if (field in formState) return formState[field] as EmployeePayrollSettings[K];
     return settings?.[field];
   };
+
+  const totalAdditions = (salaryAdjustments?.adjustments || [])
+    .filter(adj => adj.adjustmentType === "addition" && adj.isActive)
+    .reduce((sum, adj) => sum + adj.amount, 0);
+  
+  const totalDeductions = (salaryAdjustments?.adjustments || [])
+    .filter(adj => adj.adjustmentType === "deduction" && adj.isActive)
+    .reduce((sum, adj) => sum + adj.amount, 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -553,6 +498,9 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                               <SelectItem value="FOREIGNER">Foreigner</SelectItem>
                             </SelectContent>
                           </Select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {getValue("residencyStatus") === "FOREIGNER" && "No CPF contributions for foreigners"}
+                          </p>
                         </div>
                         <div>
                           <Label>Date of Birth</Label>
@@ -580,97 +528,102 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
 
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">Pay Configuration</CardTitle>
+                      <CardTitle className="text-lg">Monthly Salary</CardTitle>
+                      <CardDescription>Base monthly salary before allowances and adjustments</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <Label>Pay Type</Label>
-                          <Select
-                            value={getValue("payType") || ""}
-                            onValueChange={(v) => updateField("payType", v || null)}
-                          >
-                            <SelectTrigger data-testid="select-paytype">
-                              <SelectValue placeholder="Select pay type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="monthly">Monthly</SelectItem>
-                              <SelectItem value="hourly">Hourly</SelectItem>
-                              <SelectItem value="daily">Daily</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Regular Hours/Day</Label>
-                          <Input
-                            type="text"
-                            placeholder="8"
-                            value={hoursPerDayInput || String(getValue("regularHoursPerDay") ?? "")}
-                            onChange={(e) => handleHoursPerDayChange(e.target.value)}
-                            className={hoursPerDayError ? "border-destructive" : ""}
-                            data-testid="input-hours-per-day"
-                          />
-                          {hoursPerDayError && (
-                            <p className="text-xs text-destructive mt-1">{hoursPerDayError}</p>
-                          )}
-                        </div>
-                        <div>
-                          <Label>Work Schedule</Label>
-                          <Select
-                            value={String(getValue("regularDaysPerWeek") ?? 5)}
-                            onValueChange={(v) => updateField("regularDaysPerWeek", parseFloat(v))}
-                          >
-                            <SelectTrigger data-testid="select-days-per-week">
-                              <SelectValue placeholder="Select schedule" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="5">5-Day Week</SelectItem>
-                              <SelectItem value="5.5">5.5-Day Week</SelectItem>
-                              <SelectItem value="0">Executive (Monthly)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {(getValue("regularDaysPerWeek") ?? 5) === 0 
-                              ? "Executive: Monthly salary, no daily/hourly rate calculation"
-                              : `Daily rate = (Basic × 12) ÷ (${getValue("regularDaysPerWeek") ?? 5} × 52)`}
-                          </p>
-                        </div>
+                    <CardContent>
+                      <div>
+                        <Label>Basic Monthly Salary ($)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={centsToDisplay(getValue("basicMonthlySalary") ?? null)}
+                          onChange={(e) => updateField("basicMonthlySalary", displayToCents(e.target.value))}
+                          className="max-w-xs"
+                          data-testid="input-monthly-salary"
+                        />
                       </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <Label>Basic Monthly Salary ($)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={centsToDisplay(getValue("basicMonthlySalary") ?? null)}
-                            onChange={(e) => updateField("basicMonthlySalary", displayToCents(e.target.value))}
-                            data-testid="input-monthly-salary"
-                          />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center justify-between">
+                        <span>Salary Adjustments</span>
+                        <Button 
+                          size="sm" 
+                          onClick={() => setAddAdjustmentOpen(true)}
+                          data-testid="button-add-adjustment"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add
+                        </Button>
+                      </CardTitle>
+                      <CardDescription>Recurring additions or deductions applied each pay period</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {isLoadingAdjustments ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                         </div>
-                        <div>
-                          <Label>Hourly Rate ($)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={centsToDisplay(getValue("hourlyRate") ?? null)}
-                            onChange={(e) => updateField("hourlyRate", displayToCents(e.target.value))}
-                            data-testid="input-hourly-rate"
-                          />
+                      ) : (salaryAdjustments?.adjustments || []).length === 0 ? (
+                        <div className="text-center py-6 text-muted-foreground">
+                          <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>No salary adjustments configured</p>
+                          <p className="text-xs mt-1">Click "Add" to create an adjustment</p>
                         </div>
-                        <div>
-                          <Label>Daily Rate ($)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={centsToDisplay(getValue("dailyRate") ?? null)}
-                            onChange={(e) => updateField("dailyRate", displayToCents(e.target.value))}
-                            data-testid="input-daily-rate"
-                          />
+                      ) : (
+                        <div className="space-y-2">
+                          {(salaryAdjustments?.adjustments || []).map((adj) => (
+                            <div 
+                              key={adj.id} 
+                              className={`flex items-center justify-between p-3 rounded-lg border ${!adj.isActive ? 'opacity-50 bg-muted' : ''}`}
+                              data-testid={`adjustment-${adj.id}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                {adj.adjustmentType === "addition" ? (
+                                  <PlusCircle className="h-5 w-5 text-green-600" />
+                                ) : (
+                                  <MinusCircle className="h-5 w-5 text-red-600" />
+                                )}
+                                <div>
+                                  <div className="font-medium">
+                                    {adj.adjustmentType === "addition" ? "+" : "-"}
+                                    {formatCurrency(adj.amount)}
+                                  </div>
+                                  {adj.description && (
+                                    <div className="text-sm text-muted-foreground">{adj.description}</div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {!adj.isActive && (
+                                  <Badge variant="outline">Inactive</Badge>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setEditingAdjustment(adj)}
+                                  data-testid={`button-edit-adjustment-${adj.id}`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                          <div className="flex justify-between pt-3 border-t mt-3">
+                            <div className="text-sm">
+                              <span className="text-green-600">+{formatCurrency(totalAdditions)}</span>
+                              {" / "}
+                              <span className="text-red-600">-{formatCurrency(totalDeductions)}</span>
+                            </div>
+                            <div className="font-medium">
+                              Net: {formatCurrency(totalAdditions - totalDeductions)}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -752,37 +705,6 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                       </div>
                     </CardContent>
                   </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">Salary Adjustment</CardTitle>
-                      <CardDescription>One-time adjustment to base salary (positive or negative)</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Adjustment Amount ($)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={centsToDisplay(getValue("salaryAdjustment") ?? null)}
-                            onChange={(e) => updateField("salaryAdjustment", displayToCents(e.target.value))}
-                            data-testid="input-salary-adjustment"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Adjustment Reason</Label>
-                        <Textarea
-                          placeholder="Reason for salary adjustment..."
-                          value={getValue("salaryAdjustmentReason") || ""}
-                          onChange={(e) => updateField("salaryAdjustmentReason", e.target.value || null)}
-                          data-testid="input-adjustment-reason"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
                 </div>
               </ScrollArea>
             )}
@@ -792,7 +714,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                 <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={saveMutation.isPending || !!hoursPerDayError} data-testid="button-save">
+              <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save">
                 {saveMutation.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -853,6 +775,329 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
             )}
           </TabsContent>
         </Tabs>
+      </DialogContent>
+
+      {employeeId && (
+        <>
+          <AddAdjustmentDialog
+            employeeId={employeeId}
+            open={addAdjustmentOpen}
+            onOpenChange={setAddAdjustmentOpen}
+            onSuccess={() => refetchAdjustments()}
+          />
+          <EditAdjustmentDialog
+            adjustment={editingAdjustment}
+            open={!!editingAdjustment}
+            onOpenChange={(open) => !open && setEditingAdjustment(null)}
+            onSuccess={() => refetchAdjustments()}
+          />
+        </>
+      )}
+    </Dialog>
+  );
+}
+
+interface AddAdjustmentDialogProps {
+  employeeId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}
+
+function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddAdjustmentDialogProps) {
+  const { toast } = useToast();
+  const [adjustmentType, setAdjustmentType] = useState<"addition" | "deduction">("addition");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/admin/employees/${employeeId}/salary-adjustments`, {
+        adjustmentType,
+        amount: displayToCents(amount) || 0,
+        description: description || null,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Adjustment Added",
+        description: `Successfully added ${adjustmentType} of ${formatCurrency(displayToCents(amount) || 0)}`,
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`] });
+      onSuccess();
+      onOpenChange(false);
+      setAdjustmentType("addition");
+      setAmount("");
+      setDescription("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add adjustment",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!amount || displayToCents(amount) === null || displayToCents(amount) === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+    createMutation.mutate();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Salary Adjustment</DialogTitle>
+          <DialogDescription>Add a recurring adjustment to this employee's salary</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div>
+            <Label>Adjustment Type</Label>
+            <Select value={adjustmentType} onValueChange={(v) => setAdjustmentType(v as "addition" | "deduction")}>
+              <SelectTrigger data-testid="select-adjustment-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="addition">
+                  <span className="flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4 text-green-600" />
+                    Addition
+                  </span>
+                </SelectItem>
+                <SelectItem value="deduction">
+                  <span className="flex items-center gap-2">
+                    <MinusCircle className="h-4 w-4 text-red-600" />
+                    Deduction
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Amount ($)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              data-testid="input-adjustment-amount"
+            />
+          </div>
+          <div>
+            <Label>Description</Label>
+            <Textarea
+              placeholder="e.g., Housing allowance, Car loan deduction..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              data-testid="input-adjustment-description"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={createMutation.isPending} data-testid="button-save-adjustment">
+            {createMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            Add Adjustment
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface EditAdjustmentDialogProps {
+  adjustment: SalaryAdjustment | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}
+
+function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: EditAdjustmentDialogProps) {
+  const { toast } = useToast();
+  const [adjustmentType, setAdjustmentType] = useState<"addition" | "deduction">("addition");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [isActive, setIsActive] = useState(true);
+
+  // Sync form state when adjustment changes
+  useState(() => {
+    if (adjustment) {
+      setAdjustmentType(adjustment.adjustmentType);
+      setAmount(centsToDisplay(adjustment.amount));
+      setDescription(adjustment.description || "");
+      setIsActive(adjustment.isActive);
+    }
+  });
+
+  // Update form when adjustment changes
+  if (adjustment && amount === "" && adjustment.amount) {
+    setAdjustmentType(adjustment.adjustmentType);
+    setAmount(centsToDisplay(adjustment.amount));
+    setDescription(adjustment.description || "");
+    setIsActive(adjustment.isActive);
+  }
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("PATCH", `/api/admin/employees/${adjustment?.userId}/salary-adjustments/${adjustment?.id}`, {
+        adjustmentType,
+        amount: displayToCents(amount) || 0,
+        description: description || null,
+        isActive,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Adjustment Updated",
+        description: "Successfully updated the salary adjustment",
+      });
+      if (adjustment) {
+        queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${adjustment.userId}/salary-adjustments`] });
+      }
+      onSuccess();
+      onOpenChange(false);
+      setAmount("");
+      setDescription("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update adjustment",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", `/api/admin/employees/${adjustment?.userId}/salary-adjustments/${adjustment?.id}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Adjustment Deleted",
+        description: "Successfully deleted the salary adjustment",
+      });
+      if (adjustment) {
+        queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${adjustment.userId}/salary-adjustments`] });
+      }
+      onSuccess();
+      onOpenChange(false);
+      setAmount("");
+      setDescription("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete adjustment",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!amount || displayToCents(amount) === null || displayToCents(amount) === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+    updateMutation.mutate();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Salary Adjustment</DialogTitle>
+          <DialogDescription>Modify or delete this salary adjustment</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div>
+            <Label>Adjustment Type</Label>
+            <Select value={adjustmentType} onValueChange={(v) => setAdjustmentType(v as "addition" | "deduction")}>
+              <SelectTrigger data-testid="select-edit-adjustment-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="addition">
+                  <span className="flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4 text-green-600" />
+                    Addition
+                  </span>
+                </SelectItem>
+                <SelectItem value="deduction">
+                  <span className="flex items-center gap-2">
+                    <MinusCircle className="h-4 w-4 text-red-600" />
+                    Deduction
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Amount ($)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              data-testid="input-edit-adjustment-amount"
+            />
+          </div>
+          <div>
+            <Label>Description</Label>
+            <Textarea
+              placeholder="e.g., Housing allowance, Car loan deduction..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              data-testid="input-edit-adjustment-description"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="isActive"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="h-4 w-4"
+              data-testid="checkbox-adjustment-active"
+            />
+            <Label htmlFor="isActive" className="cursor-pointer">Active (applied to payroll)</Label>
+          </div>
+        </div>
+        <DialogFooter className="flex justify-between gap-2">
+          <Button 
+            variant="destructive" 
+            onClick={() => deleteMutation.mutate()} 
+            disabled={deleteMutation.isPending}
+            data-testid="button-delete-adjustment"
+          >
+            {deleteMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Delete
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={updateMutation.isPending} data-testid="button-update-adjustment">
+              {updateMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save Changes
+            </Button>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
