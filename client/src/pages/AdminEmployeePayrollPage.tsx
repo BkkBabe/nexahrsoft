@@ -580,10 +580,13 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                             <SelectContent>
                               <SelectItem value="5">5-Day Week</SelectItem>
                               <SelectItem value="5.5">5.5-Day Week</SelectItem>
+                              <SelectItem value="0">Executive (Monthly)</SelectItem>
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Daily rate = (Basic × 12) ÷ ({getValue("regularDaysPerWeek") ?? 5} × 52)
+                            {(getValue("regularDaysPerWeek") ?? 5) === 0 
+                              ? "Executive: Monthly salary, no daily/hourly rate calculation"
+                              : `Daily rate = (Basic × 12) ÷ (${getValue("regularDaysPerWeek") ?? 5} × 52)`}
                           </p>
                         </div>
                       </div>

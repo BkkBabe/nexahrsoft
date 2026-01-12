@@ -3590,20 +3590,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         daysWorked = uniqueDays.size;
 
+        // Use employee-specific settings if available, otherwise fall back to company settings
+        const empDaysPerWeek = employee.regularDaysPerWeek ?? regularDaysPerWeek;
+        const empHoursPerDay = employee.regularHoursPerDay ?? regularHoursPerDay;
+        const isExecutive = empDaysPerWeek === 0;
+        
         // Determine hourly rate based on pay type
+        // Executive employees (daysPerWeek = 0) don't need hourly rate calculation
         let hourlyRate = employee.hourlyRate || 0;
-        if (employee.payType === 'monthly' && employee.basicMonthlySalary) {
-          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, regularHoursPerDay, regularDaysPerWeek);
+        if (isExecutive && employee.payType === 'monthly' && employee.basicMonthlySalary) {
+          // Executive: use monthly salary directly, no hourly rate needed
+          hourlyRate = 0;
+        } else if (employee.payType === 'monthly' && employee.basicMonthlySalary && empDaysPerWeek > 0) {
+          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, empHoursPerDay, empDaysPerWeek);
         } else if (employee.payType === 'daily' && employee.dailyRate) {
-          hourlyRate = dailyToHourlyRate(employee.dailyRate, regularHoursPerDay);
+          hourlyRate = dailyToHourlyRate(employee.dailyRate, empHoursPerDay);
         }
 
-        // Skip if no rate configured
-        if (!hourlyRate || hourlyRate === 0) {
+        // Skip if no rate configured (except for Executive employees who use monthly salary)
+        if (!isExecutive && (!hourlyRate || hourlyRate === 0)) {
           skippedEmployees.push({
             employeeCode: employee.employeeCode || 'N/A',
             employeeName: employee.name,
             reason: 'No pay rate configured (hourly/daily/monthly salary)',
+          });
+          continue;
+        }
+        
+        // For Executive, ensure they have basic monthly salary configured
+        if (isExecutive && (!employee.basicMonthlySalary || employee.basicMonthlySalary === 0)) {
+          skippedEmployees.push({
+            employeeCode: employee.employeeCode || 'N/A',
+            employeeName: employee.name,
+            reason: 'Executive employee has no basic monthly salary configured',
           });
           continue;
         }
@@ -4581,12 +4600,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const basicMonthlySalary = user.basicMonthlySalary || 0; // in cents
       const daysPerWeek = user.regularDaysPerWeek || 5;
       const hoursPerDay = user.regularHoursPerDay || 8;
+      const isExecutive = daysPerWeek === 0; // Executive employees don't have daily/hourly rates
       
-      // Calculate derived rates
-      const annualSalary = basicMonthlySalary * 12;
-      const workDaysPerYear = daysPerWeek * 52;
-      const dailyRate = Math.round(annualSalary / workDaysPerYear); // cents
-      const hourlyRate = Math.round(dailyRate / hoursPerDay); // cents
+      // Calculate derived rates (Executive gets monthly salary only, no daily/hourly rates)
+      let dailyRate = 0;
+      let hourlyRate = 0;
+      
+      if (!isExecutive && daysPerWeek > 0) {
+        const annualSalary = basicMonthlySalary * 12;
+        const workDaysPerYear = daysPerWeek * 52;
+        dailyRate = Math.round(annualSalary / workDaysPerYear); // cents
+        hourlyRate = Math.round(dailyRate / hoursPerDay); // cents
+      }
       
       // Get attendance records for the period
       const startDate = `${yearNum}-${String(monthNum).padStart(2, '0')}-01`;
@@ -4608,17 +4633,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Calculate regular hours vs overtime
-      const regularHoursLimit = daysPerWeek * hoursPerDay * 4.33; // ~4.33 weeks per month
-      const regularHours = Math.min(totalHoursWorked, regularHoursLimit);
-      const overtimeHours = Math.max(0, totalHoursWorked - regularHoursLimit);
+      // Executive employees get full monthly salary regardless of hours, no OT calculation
+      let regularHours = totalHoursWorked;
+      let overtimeHours = 0;
+      
+      if (!isExecutive && daysPerWeek > 0) {
+        const regularHoursLimit = daysPerWeek * hoursPerDay * 4.33; // ~4.33 weeks per month
+        regularHours = Math.min(totalHoursWorked, regularHoursLimit);
+        overtimeHours = Math.max(0, totalHoursWorked - regularHoursLimit);
+      }
       
       // Get company OT settings
       const companySettings = await storage.getCompanySettings();
       const otMultiplier = companySettings?.otMultiplier15 || 1.5;
       
       // Calculate base earnings from attendance
-      const baseEarnings = Math.round(regularHours * hourlyRate);
-      const autoOvertimePay = Math.round(overtimeHours * hourlyRate * otMultiplier);
+      // Executive employees get full monthly salary, not hourly calculation
+      let baseEarnings = 0;
+      let autoOvertimePay = 0;
+      
+      if (isExecutive) {
+        // Executive gets full monthly salary
+        baseEarnings = basicMonthlySalary;
+      } else {
+        baseEarnings = Math.round(regularHours * hourlyRate);
+        autoOvertimePay = Math.round(overtimeHours * hourlyRate * otMultiplier);
+      }
       
       // Get adjustments for this period
       const adjustments = await storage.getPayrollAdjustmentsByEmployee(userId, yearNum, monthNum);
@@ -4686,6 +4726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           hoursPerDay,
           dailyRate,
           hourlyRate,
+          isExecutive,
         },
         attendance: {
           totalHoursWorked: Math.round(totalHoursWorked * 100) / 100,
