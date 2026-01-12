@@ -181,23 +181,27 @@ export default function AdminEmployeePayrollPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="space-y-4">
         <Button
           variant="ghost"
-          size="icon"
+          size="sm"
           onClick={() => setLocation("/admin/payroll")}
           data-testid="button-back"
+          className="text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Payroll Management
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="h-6 w-6" />
-            Employee Payroll Settings
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Configure employee residency status, monthly salary, and allowances
-          </p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Users className="h-6 w-6" />
+              Employee Payroll Settings
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Configure employee residency status, monthly salary, and allowances
+            </p>
+          </div>
         </div>
       </div>
 
