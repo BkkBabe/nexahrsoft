@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil, UserPlus, CheckCircle2, Copy, Check } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil, UserPlus, CheckCircle2, Copy, Check, CreditCard, Calculator, ClipboardEdit, Settings, BarChart3 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -321,13 +321,13 @@ export default function AdminPayrollReportsPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex-1">
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Payroll Reports</h1>
-          <p className="text-muted-foreground" data-testid="text-page-description">Browse and export imported payroll data</p>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Payroll Management</h1>
+          <p className="text-muted-foreground" data-testid="text-page-description">Manage payroll, loans, adjustments, and employee settings</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setLocation("/admin/payslip")} data-testid="button-back-payslip">
+          <Button variant="outline" onClick={() => setLocation("/admin/dashboard")} data-testid="button-back-dashboard">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Payslip Management
+            Back to Dashboard
           </Button>
           <Button onClick={() => setLocation("/admin/payroll/import")} data-testid="button-import-new">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -335,6 +335,71 @@ export default function AdminPayrollReportsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Quick Actions Navigation */}
+      <Card data-testid="card-quick-actions">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg" data-testid="text-quick-actions-title">Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <Button 
+              variant="outline" 
+              className="flex flex-col h-auto py-4 gap-2"
+              onClick={() => setLocation("/admin/payroll/loans")}
+              data-testid="button-manage-loans"
+            >
+              <CreditCard className="h-5 w-5" />
+              <span className="text-xs">Manage Loans</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex flex-col h-auto py-4 gap-2"
+              onClick={() => setLocation("/admin/payroll/generate")}
+              data-testid="button-generate-payroll"
+            >
+              <Calculator className="h-5 w-5" />
+              <span className="text-xs">Generate from Attendance</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex flex-col h-auto py-4 gap-2"
+              onClick={() => setLocation("/admin/payroll/adjustments")}
+              data-testid="button-payroll-adjustments"
+            >
+              <ClipboardEdit className="h-5 w-5" />
+              <span className="text-xs">Payroll Adjustments</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex flex-col h-auto py-4 gap-2"
+              onClick={() => setLocation("/admin/payroll/employees")}
+              data-testid="button-employee-payroll"
+            >
+              <Settings className="h-5 w-5" />
+              <span className="text-xs">Employee Payroll Settings</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex flex-col h-auto py-4 gap-2"
+              onClick={() => setLocation("/admin/attendance?tab=heatmap&from=payroll")}
+              data-testid="button-heatmap"
+            >
+              <BarChart3 className="h-5 w-5" />
+              <span className="text-xs">Attendance Heatmap</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex flex-col h-auto py-4 gap-2"
+              onClick={() => setLocation("/admin/payroll/import")}
+              data-testid="button-import-payroll"
+            >
+              <FileSpreadsheet className="h-5 w-5" />
+              <span className="text-xs">Import Payroll</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card data-testid="card-filter">
         <CardHeader>

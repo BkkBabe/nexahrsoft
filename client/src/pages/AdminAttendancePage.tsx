@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw, Archive, ArchiveRestore, Download, Printer, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import ExcelJS from "exceljs";
 import type { AttendanceRecord, User, DailyAttendanceSummary, CompanySettings } from "@shared/schema";
 
@@ -157,6 +157,11 @@ function getHeatmapTextColor(hours: number): string {
 }
 
 export default function AdminAttendancePage() {
+  // Check if navigated from payroll page for "Back to Payroll Reports" button
+  const searchString = useSearch();
+  const urlParams = new URLSearchParams(searchString);
+  const fromPayroll = urlParams.get('from') === 'payroll';
+  
   // Default to heatmap view to prevent geocoding on initial page load
   const [viewMode, setViewMode] = useState<'today' | 'orphaned' | 'heatmap' | 'details'>('heatmap');
   const [heatmapViewType, setHeatmapViewType] = useState<'week' | 'month'>('week');
@@ -1546,12 +1551,21 @@ export default function AdminAttendancePage() {
             <History className="h-4 w-4 mr-1" />
             Attendance Details
           </Button>
-          <Link href="/admin/dashboard">
-            <Button variant="outline" size="sm" data-testid="button-back-dashboard">
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              Back
-            </Button>
-          </Link>
+          {fromPayroll ? (
+            <Link href="/admin/payroll">
+              <Button variant="outline" size="sm" data-testid="button-back-payroll">
+                <ArrowLeft className="mr-1 h-4 w-4" />
+                Back to Payroll Reports
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/admin/dashboard">
+              <Button variant="outline" size="sm" data-testid="button-back-dashboard">
+                <ArrowLeft className="mr-1 h-4 w-4" />
+                Back
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 

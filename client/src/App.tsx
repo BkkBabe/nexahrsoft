@@ -243,7 +243,7 @@ function Router() {
         {() => <AdminProtected><AdminEmployeePayrollPage /></AdminProtected>}
       </Route>
       <Route path="/admin/payroll">
-        {() => <AdminProtected><HRAdminPage /></AdminProtected>}
+        {() => <AdminProtected><AdminPayrollReportsPage /></AdminProtected>}
       </Route>
       <Route path="/change-password">
         {() => session?.authenticated ? <ChangePasswordPage /> : <UserLoginPage />}
