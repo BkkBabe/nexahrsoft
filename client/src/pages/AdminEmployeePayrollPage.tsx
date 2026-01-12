@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -354,6 +354,25 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   const [formState, setFormState] = useState<Partial<EmployeePayrollSettings>>({});
   const [addAdjustmentOpen, setAddAdjustmentOpen] = useState(false);
   const [editingAdjustment, setEditingAdjustment] = useState<SalaryAdjustment | null>(null);
+  const [salaryInputText, setSalaryInputText] = useState<string>("");
+  const [salaryInputDirty, setSalaryInputDirty] = useState(false);
+
+  useEffect(() => {
+    if (!salaryInputDirty) {
+      if (settings?.basicMonthlySalary !== undefined && settings.basicMonthlySalary !== null) {
+        setSalaryInputText(centsToDisplay(settings.basicMonthlySalary));
+      } else {
+        setSalaryInputText("");
+      }
+    }
+  }, [settings?.basicMonthlySalary, salaryInputDirty]);
+
+  useEffect(() => {
+    if (!open) {
+      setSalaryInputDirty(false);
+      setSalaryInputText("");
+    }
+  }, [open]);
 
   const updateField = (field: keyof EmployeePayrollSettings, value: any) => {
     setFormState(prev => ({ ...prev, [field]: value }));
@@ -535,11 +554,38 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                       <div>
                         <Label>Basic Monthly Salary ($)</Label>
                         <Input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           placeholder="0.00"
-                          value={centsToDisplay(getValue("basicMonthlySalary") ?? null)}
-                          onChange={(e) => updateField("basicMonthlySalary", displayToCents(e.target.value))}
+                          value={salaryInputText}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "" || /^\d*\.?\d{0,2}$/.test(value)) {
+                              setSalaryInputText(value);
+                              setSalaryInputDirty(true);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+                            if (allowedKeys.includes(e.key)) return;
+                            if ((e.metaKey || e.ctrlKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+                            if (!/[\d.]/.test(e.key)) {
+                              e.preventDefault();
+                            }
+                            if (e.key === '.' && e.currentTarget.value.includes('.')) {
+                              e.preventDefault();
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            if (value && !isNaN(parseFloat(value))) {
+                              const formatted = parseFloat(value).toFixed(2);
+                              setSalaryInputText(formatted);
+                              updateField("basicMonthlySalary", displayToCents(formatted));
+                            } else if (value === "") {
+                              updateField("basicMonthlySalary", null);
+                            }
+                          }}
                           className="max-w-xs"
                           data-testid="input-monthly-salary"
                         />
