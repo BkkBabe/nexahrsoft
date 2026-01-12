@@ -100,6 +100,17 @@ Preferred communication style: Simple, everyday language.
   - **Payroll Reports**: View and export payroll records by year/month with search by employee name/code
   - **Editable Payslips**: Admin can edit any payslip component with full audit trail (field changes tracked with old/new values and reasons)
   - **Loan Management**: Create and manage employee loans (Company, Study, Housing types) with repayment tracking
+  - **Payroll Adjustments**: Admin-controlled adjustments for running payroll entries:
+    - Adjustment types: Overtime, MC Days, AL Days, Late Hours Deduction, Salary Advance, Expense Claims, Other Deductions, Bonus
+    - Each adjustment tracks: hours/days, rate, amount, description, notes for audit trail
+    - Status workflow: pending → approved → processed (or rejected)
+    - Full audit logging with timestamp, admin identity, and change details
+  - **Running Payroll Summary**: Real-time earnings calculation from attendance using formula-based rate derivation:
+    - Daily rate = (Basic Monthly × 12) ÷ (Days per Week × 52)
+    - Hourly rate = Daily rate ÷ Hours per Day
+    - Supports 5-day and 5.5-day work schedules per employee (regularDaysPerWeek field)
+    - Automatic overtime calculation when hours exceed regular threshold
+    - Integrates manual adjustments (OT, claims, bonuses, deductions) with attendance-based earnings
   - **Payslip View**: Structured 10-section payslip display (A-J) following Singapore CPF regulations with:
     - Company logo and branding from settings
     - Zero-value fields automatically hidden for cleaner display

@@ -1377,7 +1377,7 @@ export class PgStorage implements IStorage {
     // Track which fields are being changed for audit logging
     const payrollFields = [
       'residencyStatus', 'sprStartDate', 'birthDate',
-      'basicMonthlySalary', 'hourlyRate', 'dailyRate', 'payType', 'regularHoursPerDay',
+      'basicMonthlySalary', 'hourlyRate', 'dailyRate', 'payType', 'regularHoursPerDay', 'regularDaysPerWeek',
       'defaultMobileAllowance', 'defaultTransportAllowance', 'defaultMealAllowance',
       'defaultShiftAllowance', 'defaultOtherAllowance', 'defaultHouseRentalAllowance',
       'salaryAdjustment', 'salaryAdjustmentReason'

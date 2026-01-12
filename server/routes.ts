@@ -1034,6 +1034,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hourlyRate: user.hourlyRate,
         dailyRate: user.dailyRate,
         regularHoursPerDay: user.regularHoursPerDay,
+        regularDaysPerWeek: user.regularDaysPerWeek,
         // Default allowances (cents)
         defaultMobileAllowance: user.defaultMobileAllowance,
         defaultTransportAllowance: user.defaultTransportAllowance,
@@ -1067,6 +1068,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hourlyRate: z.number().nullable().optional(), // cents
         dailyRate: z.number().nullable().optional(), // cents
         regularHoursPerDay: z.number().nullable().optional(),
+        regularDaysPerWeek: z.number().nullable().optional(),
         // Default allowances (cents)
         defaultMobileAllowance: z.number().nullable().optional(),
         defaultTransportAllowance: z.number().nullable().optional(),
@@ -4304,6 +4306,417 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get employee loan repayments error:", error);
       res.status(500).json({ message: "Failed to fetch employee loan repayments" });
+    }
+  });
+
+  // ============= PAYROLL ADJUSTMENTS =============
+  
+  // Get all payroll adjustments for a period
+  app.get("/api/admin/payroll/adjustments", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { year, month, userId } = req.query;
+      
+      if (userId) {
+        const adjustments = await storage.getPayrollAdjustmentsByEmployee(
+          userId as string, 
+          year ? parseInt(year as string) : undefined,
+          month ? parseInt(month as string) : undefined
+        );
+        return res.json({ adjustments });
+      }
+      
+      if (year && month) {
+        const adjustments = await storage.getPayrollAdjustmentsByPeriod(
+          parseInt(year as string),
+          parseInt(month as string)
+        );
+        return res.json({ adjustments });
+      }
+      
+      res.status(400).json({ message: "Please provide year/month or userId" });
+    } catch (error) {
+      console.error("Get payroll adjustments error:", error);
+      res.status(500).json({ message: "Failed to fetch payroll adjustments" });
+    }
+  });
+  
+  // Get single adjustment with audit logs
+  app.get("/api/admin/payroll/adjustments/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adjustment = await storage.getPayrollAdjustment(id);
+      
+      if (!adjustment) {
+        return res.status(404).json({ message: "Adjustment not found" });
+      }
+      
+      const auditLogs = await storage.getPayrollAdjustmentAuditLogs(id);
+      
+      res.json({ adjustment, auditLogs });
+    } catch (error) {
+      console.error("Get payroll adjustment error:", error);
+      res.status(500).json({ message: "Failed to fetch adjustment" });
+    }
+  });
+  
+  // Create payroll adjustment
+  app.post("/api/admin/payroll/adjustments", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.string().min(1),
+        payPeriodYear: z.number().min(2000).max(2100),
+        payPeriodMonth: z.number().min(1).max(12),
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other']),
+        description: z.string().optional(),
+        hours: z.number().positive().optional(), // Must be > 0 if provided
+        days: z.number().positive().optional(), // Must be > 0 if provided
+        rate: z.number().positive().optional(), // Must be > 0 if provided (cents per hour/day)
+        amount: z.number().optional(), // cents for fixed amounts (will be stored as absolute value)
+        notes: z.string().optional(),
+      }).refine(
+        (data) => {
+          // Must have either (hours and rate) OR amount, with at least one being positive
+          const hasHoursRate = (data.hours !== undefined && data.hours > 0) && 
+                               (data.rate !== undefined && data.rate > 0);
+          const hasAmount = data.amount !== undefined && Math.abs(data.amount) > 0;
+          const hasDays = data.days !== undefined && data.days > 0;
+          // For day-based adjustments (mc_days, al_days), days is sufficient
+          if (data.adjustmentType === 'mc_days' || data.adjustmentType === 'al_days') {
+            return hasDays;
+          }
+          return hasHoursRate || hasAmount;
+        },
+        {
+          message: "Must provide either (hours and rate) or a non-zero amount",
+        }
+      );
+      
+      const data = schema.parse(req.body);
+      
+      // Get admin info for audit
+      let createdBy = "admin";
+      if (req.session.userId === "admin") {
+        createdBy = "master_admin (nexaadmin)";
+      } else if (req.session.userId) {
+        const adminUser = await storage.getUser(req.session.userId);
+        if (adminUser) {
+          createdBy = adminUser.name || adminUser.email;
+        }
+      }
+      
+      // Ensure all amounts are stored as positive values
+      const adjustedData = {
+        ...data,
+        amount: data.amount !== undefined ? Math.abs(data.amount) : undefined,
+        hours: data.hours !== undefined ? Math.abs(data.hours) : undefined,
+        days: data.days !== undefined ? Math.abs(data.days) : undefined,
+        rate: data.rate !== undefined ? Math.abs(data.rate) : undefined,
+      };
+      
+      const adjustment = await storage.createPayrollAdjustment({
+        ...adjustedData,
+        createdBy,
+        status: 'pending',
+      });
+      
+      // Create audit log entry
+      await storage.createPayrollAdjustmentAuditLog({
+        adjustmentId: adjustment.id,
+        action: 'created',
+        changedBy: createdBy,
+        newValue: JSON.stringify(data),
+        notes: data.notes,
+      });
+      
+      res.json({ adjustment, message: "Adjustment created successfully" });
+    } catch (error) {
+      console.error("Create payroll adjustment error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create adjustment" });
+    }
+  });
+  
+  // Update payroll adjustment
+  app.patch("/api/admin/payroll/adjustments/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const schema = z.object({
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other']).optional(),
+        description: z.string().optional(),
+        hours: z.number().positive().optional(), // Must be > 0 if provided
+        days: z.number().positive().optional(), // Must be > 0 if provided
+        rate: z.number().positive().optional(), // Must be > 0 if provided
+        amount: z.number().optional(), // Will be stored as absolute value
+        notes: z.string().optional(),
+        status: z.enum(['pending', 'approved', 'rejected', 'processed']).optional(),
+      });
+      
+      const updates = schema.parse(req.body);
+      
+      const currentAdjustment = await storage.getPayrollAdjustment(id);
+      if (!currentAdjustment) {
+        return res.status(404).json({ message: "Adjustment not found" });
+      }
+      
+      // Compute merged state for validation (current + updates)
+      const mergedType = updates.adjustmentType || currentAdjustment.adjustmentType;
+      const mergedHours = updates.hours !== undefined ? updates.hours : currentAdjustment.hours;
+      const mergedDays = updates.days !== undefined ? updates.days : currentAdjustment.days;
+      const mergedRate = updates.rate !== undefined ? updates.rate : currentAdjustment.rate;
+      const mergedAmount = updates.amount !== undefined ? updates.amount : currentAdjustment.amount;
+      
+      // If updating value fields (not just status), validate the merged result
+      const isValueUpdate = updates.hours !== undefined || updates.days !== undefined || 
+                           updates.rate !== undefined || updates.amount !== undefined ||
+                           updates.adjustmentType !== undefined;
+      
+      if (isValueUpdate) {
+        const hasHoursRate = (mergedHours !== null && mergedHours !== undefined && mergedHours > 0) && 
+                             (mergedRate !== null && mergedRate !== undefined && mergedRate > 0);
+        const hasAmount = mergedAmount !== null && mergedAmount !== undefined && Math.abs(mergedAmount) > 0;
+        const hasDays = mergedDays !== null && mergedDays !== undefined && mergedDays > 0;
+        
+        // For day-based adjustments (mc_days, al_days), days is sufficient
+        if (mergedType === 'mc_days' || mergedType === 'al_days') {
+          if (!hasDays) {
+            return res.status(400).json({ message: "Day-based adjustments require days > 0" });
+          }
+        } else {
+          if (!hasHoursRate && !hasAmount) {
+            return res.status(400).json({ message: "Must provide either (hours and rate) or a non-zero amount" });
+          }
+        }
+      }
+      
+      // Normalize values to absolute before storage
+      const normalizedUpdates = {
+        ...updates,
+        amount: updates.amount !== undefined ? Math.abs(updates.amount) : undefined,
+        hours: updates.hours !== undefined ? Math.abs(updates.hours) : undefined,
+        days: updates.days !== undefined ? Math.abs(updates.days) : undefined,
+        rate: updates.rate !== undefined ? Math.abs(updates.rate) : undefined,
+      };
+      
+      // Get admin info for audit
+      let changedBy = "admin";
+      if (req.session.userId === "admin") {
+        changedBy = "master_admin (nexaadmin)";
+      } else if (req.session.userId) {
+        const adminUser = await storage.getUser(req.session.userId);
+        if (adminUser) {
+          changedBy = adminUser.name || adminUser.email;
+        }
+      }
+      
+      const adjustment = await storage.updatePayrollAdjustment(id, normalizedUpdates);
+      
+      // Create audit log entry
+      await storage.createPayrollAdjustmentAuditLog({
+        adjustmentId: id,
+        action: 'updated',
+        changedBy,
+        oldValue: JSON.stringify({
+          adjustmentType: currentAdjustment.adjustmentType,
+          hours: currentAdjustment.hours,
+          days: currentAdjustment.days,
+          rate: currentAdjustment.rate,
+          amount: currentAdjustment.amount,
+          status: currentAdjustment.status,
+        }),
+        newValue: JSON.stringify(updates),
+        notes: updates.notes,
+      });
+      
+      res.json({ adjustment, message: "Adjustment updated successfully" });
+    } catch (error) {
+      console.error("Update payroll adjustment error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update adjustment" });
+    }
+  });
+  
+  // Delete payroll adjustment
+  app.delete("/api/admin/payroll/adjustments/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const adjustment = await storage.getPayrollAdjustment(id);
+      if (!adjustment) {
+        return res.status(404).json({ message: "Adjustment not found" });
+      }
+      
+      // Only allow deleting pending adjustments
+      if (adjustment.status !== 'pending') {
+        return res.status(400).json({ message: "Can only delete pending adjustments" });
+      }
+      
+      await storage.deletePayrollAdjustment(id);
+      
+      res.json({ message: "Adjustment deleted successfully" });
+    } catch (error) {
+      console.error("Delete payroll adjustment error:", error);
+      res.status(500).json({ message: "Failed to delete adjustment" });
+    }
+  });
+  
+  // Get running payroll summary for an employee (to-date earnings)
+  app.get("/api/admin/payroll/summary/:userId/:year/:month", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId, year, month } = req.params;
+      const yearNum = parseInt(year);
+      const monthNum = parseInt(month);
+      
+      // Get employee details
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      // Calculate daily rate from monthly salary using formula: (Basic × 12) / (daysPerWeek × 52)
+      const basicMonthlySalary = user.basicMonthlySalary || 0; // in cents
+      const daysPerWeek = user.regularDaysPerWeek || 5;
+      const hoursPerDay = user.regularHoursPerDay || 8;
+      
+      // Calculate derived rates
+      const annualSalary = basicMonthlySalary * 12;
+      const workDaysPerYear = daysPerWeek * 52;
+      const dailyRate = Math.round(annualSalary / workDaysPerYear); // cents
+      const hourlyRate = Math.round(dailyRate / hoursPerDay); // cents
+      
+      // Get attendance records for the period
+      const startDate = `${yearNum}-${String(monthNum).padStart(2, '0')}-01`;
+      const lastDay = new Date(yearNum, monthNum, 0).getDate();
+      const endDate = `${yearNum}-${String(monthNum).padStart(2, '0')}-${lastDay}`;
+      
+      const attendanceRecords = await storage.getAttendanceRecordsByUserAndDateRange(userId, startDate, endDate);
+      const userAttendance = attendanceRecords.filter(r => r.clockOutTime !== null);
+      
+      // Calculate total hours worked
+      let totalHoursWorked = 0;
+      for (const record of userAttendance) {
+        if (record.clockOutTime && record.clockInTime) {
+          const clockIn = new Date(record.clockInTime);
+          const clockOut = new Date(record.clockOutTime);
+          const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+          totalHoursWorked += hoursWorked;
+        }
+      }
+      
+      // Calculate regular hours vs overtime
+      const regularHoursLimit = daysPerWeek * hoursPerDay * 4.33; // ~4.33 weeks per month
+      const regularHours = Math.min(totalHoursWorked, regularHoursLimit);
+      const overtimeHours = Math.max(0, totalHoursWorked - regularHoursLimit);
+      
+      // Get company OT settings
+      const companySettings = await storage.getCompanySettings();
+      const otMultiplier = companySettings?.otMultiplier15 || 1.5;
+      
+      // Calculate base earnings from attendance
+      const baseEarnings = Math.round(regularHours * hourlyRate);
+      const autoOvertimePay = Math.round(overtimeHours * hourlyRate * otMultiplier);
+      
+      // Get adjustments for this period
+      const adjustments = await storage.getPayrollAdjustmentsByEmployee(userId, yearNum, monthNum);
+      
+      // Calculate totals from adjustments
+      let totalOvertimeFromAdj = 0;
+      let totalClaims = 0;
+      let totalDeductions = 0;
+      let totalBonus = 0;
+      let totalMcDays = 0;
+      let totalAlDays = 0;
+      
+      for (const adj of adjustments) {
+        // Calculate the monetary value from amount or hours*rate
+        const rawValue = adj.amount || (adj.hours && adj.rate ? Math.round(adj.hours * adj.rate) : 0);
+        // Always use absolute value to ensure consistent handling
+        const value = Math.abs(rawValue);
+        
+        switch (adj.adjustmentType) {
+          case 'overtime':
+            totalOvertimeFromAdj += value;
+            break;
+          case 'claim':
+          case 'other':
+            // Other adjustments can be positive (additions) - use raw value but ensure positive
+            totalClaims += value;
+            break;
+          case 'advance':
+          case 'deduction':
+          case 'late_hours':
+            // Deductions are always subtracted, use absolute value
+            totalDeductions += value;
+            break;
+          case 'bonus':
+            totalBonus += value;
+            break;
+          case 'mc_days':
+            totalMcDays += Math.abs(adj.days || 0);
+            break;
+          case 'al_days':
+            totalAlDays += Math.abs(adj.days || 0);
+            break;
+        }
+      }
+      
+      // Calculate leave pay (paid at daily rate)
+      const leavePay = Math.round((totalMcDays + totalAlDays) * dailyRate);
+      
+      // Calculate totals
+      const totalOvertimePay = autoOvertimePay + totalOvertimeFromAdj;
+      const grossPay = baseEarnings + totalOvertimePay + totalClaims + totalBonus + leavePay;
+      const netPay = grossPay - totalDeductions;
+      
+      res.json({
+        employee: {
+          id: user.id,
+          name: user.name,
+          employeeCode: user.employeeCode,
+          department: user.department,
+        },
+        period: { year: yearNum, month: monthNum },
+        paySettings: {
+          basicMonthlySalary,
+          daysPerWeek,
+          hoursPerDay,
+          dailyRate,
+          hourlyRate,
+        },
+        attendance: {
+          totalHoursWorked: Math.round(totalHoursWorked * 100) / 100,
+          regularHours: Math.round(regularHours * 100) / 100,
+          overtimeHours: Math.round(overtimeHours * 100) / 100,
+          daysWorked: userAttendance.length,
+        },
+        earnings: {
+          baseEarnings,
+          autoOvertimePay,
+          manualOvertimePay: totalOvertimeFromAdj,
+          totalOvertimePay,
+          claims: totalClaims,
+          bonus: totalBonus,
+          leavePay,
+          mcDays: totalMcDays,
+          alDays: totalAlDays,
+        },
+        deductions: {
+          total: totalDeductions,
+        },
+        summary: {
+          grossPay,
+          totalDeductions,
+          netPay,
+        },
+        adjustments,
+      });
+    } catch (error) {
+      console.error("Get payroll summary error:", error);
+      res.status(500).json({ message: "Failed to calculate payroll summary" });
     }
   });
 

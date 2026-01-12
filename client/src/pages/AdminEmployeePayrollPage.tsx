@@ -66,6 +66,7 @@ interface EmployeePayrollSettings {
   hourlyRate: number | null;
   dailyRate: number | null;
   regularHoursPerDay: number | null;
+  regularDaysPerWeek: number | null;
   defaultMobileAllowance: number | null;
   defaultTransportAllowance: number | null;
   defaultMealAllowance: number | null;
@@ -134,6 +135,7 @@ function getFieldLabel(field: string): string {
     hourlyRate: "Hourly Rate",
     dailyRate: "Daily Rate",
     regularHoursPerDay: "Regular Hours/Day",
+    regularDaysPerWeek: "Regular Days/Week",
     defaultMobileAllowance: "Mobile Allowance",
     defaultTransportAllowance: "Transport Allowance",
     defaultMealAllowance: "Meal Allowance",
@@ -377,6 +379,9 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       if (formState.regularHoursPerDay !== undefined) {
         updates.regularHoursPerDay = formState.regularHoursPerDay;
       }
+      if (formState.regularDaysPerWeek !== undefined) {
+        updates.regularDaysPerWeek = formState.regularDaysPerWeek;
+      }
       if (formState.defaultMobileAllowance !== undefined) {
         updates.defaultMobileAllowance = formState.defaultMobileAllowance;
       }
@@ -528,7 +533,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                       <CardTitle className="text-lg">Pay Configuration</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
                         <div>
                           <Label>Pay Type</Label>
                           <Select
@@ -554,6 +559,24 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                             onChange={(e) => updateField("regularHoursPerDay", parseFloat(e.target.value) || 8)}
                             data-testid="input-hours-per-day"
                           />
+                        </div>
+                        <div>
+                          <Label>Work Schedule</Label>
+                          <Select
+                            value={String(getValue("regularDaysPerWeek") ?? 5)}
+                            onValueChange={(v) => updateField("regularDaysPerWeek", parseFloat(v))}
+                          >
+                            <SelectTrigger data-testid="select-days-per-week">
+                              <SelectValue placeholder="Select schedule" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="5">5-Day Week</SelectItem>
+                              <SelectItem value="5.5">5.5-Day Week</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Daily rate = (Basic × 12) ÷ ({getValue("regularDaysPerWeek") ?? 5} × 52)
+                          </p>
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-4">
