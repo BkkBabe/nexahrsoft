@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus, Globe, KeyRound } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus, Globe, KeyRound, Eye, Plus } from "lucide-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -74,6 +74,17 @@ export default function AdminSettingsPage() {
   
   const isMasterAdmin = sessionData?.isMasterAdmin === true;
   const isViewOnlyAdmin = sessionData?.isViewOnlyAdmin === true;
+  
+  // Check if current admin is a super admin (can manage attendance view admins)
+  const { data: superAdminData } = useQuery<{ isSuperAdmin: boolean }>({
+    queryKey: ['/api/admin/is-super-admin'],
+  });
+  const isSuperAdmin = superAdminData?.isSuperAdmin === true;
+  
+  // Attendance View Admin management state
+  const [showAddAttendanceAdminDialog, setShowAddAttendanceAdminDialog] = useState(false);
+  const [attendanceAdminSearchQuery, setAttendanceAdminSearchQuery] = useState<string>("");
+  const [selectedAttendanceAdminUserId, setSelectedAttendanceAdminUserId] = useState<string>("");
 
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
@@ -135,6 +146,24 @@ export default function AdminSettingsPage() {
     (u.employeeCode && u.employeeCode.toLowerCase().includes(adminSearchQuery.toLowerCase())) ||
     (u.username && u.username.toLowerCase().includes(adminSearchQuery.toLowerCase()))
   );
+  
+  // Fetch attendance view admins (super admin only)
+  const { data: attendanceViewAdmins = [], isLoading: attendanceAdminsLoading } = useQuery<User[]>({
+    queryKey: ['/api/admin/users/attendance-view-admins'],
+    enabled: isSuperAdmin,
+  });
+  
+  // Filter users eligible for attendance view admin (regular users and attendance_view_admin, not full admin or viewonly_admin)
+  const eligibleForAttendanceAdmin = allUsers.filter(u => u.role === "user");
+  
+  // Filter eligible users by search query for attendance view admin dialog
+  const filteredEligibleForAttendanceAdmin = eligibleForAttendanceAdmin.filter(u =>
+    attendanceAdminSearchQuery.trim() === "" ? false :
+    u.name.toLowerCase().includes(attendanceAdminSearchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(attendanceAdminSearchQuery.toLowerCase()) ||
+    (u.employeeCode && u.employeeCode.toLowerCase().includes(attendanceAdminSearchQuery.toLowerCase())) ||
+    (u.username && u.username.toLowerCase().includes(attendanceAdminSearchQuery.toLowerCase()))
+  );
 
   // Mutation to update user role
   const updateRoleMutation = useMutation({
@@ -174,6 +203,53 @@ export default function AdminSettingsPage() {
       setShowPasswordDialog(false);
       setPasswordTargetUser(null);
       setNewPassword("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Mutation to promote user to attendance view admin (super admin only)
+  const promoteToAttendanceViewAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("POST", `/api/admin/users/${userId}/set-attendance-view-admin`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/attendance-view-admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Success",
+        description: "User is now an Attendance View-Only Admin",
+      });
+      setShowAddAttendanceAdminDialog(false);
+      setSelectedAttendanceAdminUserId("");
+      setAttendanceAdminSearchQuery("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Mutation to remove attendance view admin role (super admin only)
+  const removeAttendanceViewAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("POST", `/api/admin/users/${userId}/remove-attendance-view-admin`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/attendance-view-admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Success",
+        description: "User is no longer an Attendance View-Only Admin",
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -1510,6 +1586,81 @@ export default function AdminSettingsPage() {
             </Alert>
           </CardContent>
         </Card>
+        
+        {/* Attendance View-Only Admins Card - Super Admin Only */}
+        {isSuperAdmin && (
+          <Card data-testid="card-attendance-view-admins">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                Attendance View-Only Admins
+              </CardTitle>
+              <Button
+                onClick={() => setShowAddAttendanceAdminDialog(true)}
+                size="sm"
+                data-testid="button-add-attendance-admin"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {attendanceAdminsLoading ? (
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              ) : attendanceViewAdmins.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No attendance view-only admins configured</p>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Username</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {attendanceViewAdmins.map((admin) => (
+                        <TableRow key={admin.id} data-testid={`row-attendance-admin-${admin.id}`}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Eye className="h-4 w-4 text-blue-500" />
+                              {admin.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>{admin.email}</TableCell>
+                          <TableCell className="font-mono text-sm">{admin.username}</TableCell>
+                          <TableCell>{admin.department || "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removeAttendanceViewAdminMutation.mutate(admin.id)}
+                              disabled={removeAttendanceViewAdminMutation.isPending}
+                              data-testid={`button-remove-attendance-admin-${admin.id}`}
+                            >
+                              <ShieldOff className="h-4 w-4 mr-1" />
+                              Remove
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Attendance view-only admins can only view attendance data. They cannot access payroll, settings, or other admin features.
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Add Admin Dialog */}
@@ -1692,6 +1843,94 @@ export default function AdminSettingsPage() {
               data-testid="button-confirm-password"
             >
               {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Attendance View Admin Dialog (super admin only) */}
+      <Dialog open={showAddAttendanceAdminDialog} onOpenChange={(open) => {
+        setShowAddAttendanceAdminDialog(open);
+        if (!open) {
+          setAttendanceAdminSearchQuery("");
+          setSelectedAttendanceAdminUserId("");
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Attendance View-Only Admin</DialogTitle>
+            <DialogDescription>
+              Search for an employee to grant attendance view-only access. They will only be able to view attendance data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Search Employee</Label>
+              <Input
+                placeholder="Type name, email, or employee code..."
+                value={attendanceAdminSearchQuery}
+                onChange={(e) => {
+                  setAttendanceAdminSearchQuery(e.target.value);
+                  setSelectedAttendanceAdminUserId("");
+                }}
+                data-testid="input-search-attendance-admin"
+              />
+            </div>
+            
+            {attendanceAdminSearchQuery.trim() !== "" && (
+              <div className="border rounded-lg max-h-48 overflow-auto">
+                {filteredEligibleForAttendanceAdmin.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground text-center">
+                    No matching employees found
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {filteredEligibleForAttendanceAdmin.slice(0, 10).map((user) => (
+                      <div
+                        key={user.id}
+                        className={`p-3 cursor-pointer hover-elevate ${selectedAttendanceAdminUserId === user.id ? "bg-primary/10" : ""}`}
+                        onClick={() => setSelectedAttendanceAdminUserId(user.id)}
+                        data-testid={`option-attendance-admin-${user.id}`}
+                      >
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {user.email} {user.employeeCode && `· ${user.employeeCode}`}
+                        </div>
+                      </div>
+                    ))}
+                    {filteredEligibleForAttendanceAdmin.length > 10 && (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        +{filteredEligibleForAttendanceAdmin.length - 10} more results. Refine your search.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {selectedAttendanceAdminUserId && (
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="text-sm text-muted-foreground">Selected:</div>
+                <div className="font-medium">
+                  {eligibleForAttendanceAdmin.find(u => u.id === selectedAttendanceAdminUserId)?.name}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddAttendanceAdminDialog(false)} data-testid="button-cancel-attendance-admin">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedAttendanceAdminUserId) {
+                  promoteToAttendanceViewAdminMutation.mutate(selectedAttendanceAdminUserId);
+                }
+              }}
+              disabled={!selectedAttendanceAdminUserId || promoteToAttendanceViewAdminMutation.isPending}
+              data-testid="button-confirm-attendance-admin"
+            >
+              {promoteToAttendanceViewAdminMutation.isPending ? "Adding..." : "Add Attendance View Admin"}
             </Button>
           </DialogFooter>
         </DialogContent>

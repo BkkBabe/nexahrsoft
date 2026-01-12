@@ -257,13 +257,17 @@ export default function AdminAttendancePage() {
   const { toast } = useToast();
 
   // Fetch session to check if user is nexaadmin (master admin) or view-only admin
-  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isViewOnlyAdmin?: boolean; user?: { id: string; name: string; email: string } }>({
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin: boolean; isViewOnlyAdmin?: boolean; isAttendanceViewAdmin?: boolean; user?: { id: string; name: string; email: string } }>({
     queryKey: ['/api/auth/session'],
   });
   
   // Check if current user is nexaadmin (master admin has user.id === "admin")
   const isNexaAdmin = sessionData?.user?.id === "admin";
   const isViewOnlyAdmin = sessionData?.isViewOnlyAdmin === true;
+  const isAttendanceViewAdmin = sessionData?.isAttendanceViewAdmin === true;
+  
+  // Combined read-only flag: both view-only admins and attendance view admins cannot edit
+  const cannotEdit = isViewOnlyAdmin || isAttendanceViewAdmin;
   
   // Check if current admin is a super admin (can archive/unarchive employees)
   const { data: superAdminData } = useQuery<{ isSuperAdmin: boolean }>({
@@ -1492,7 +1496,7 @@ export default function AdminAttendancePage() {
           <Button
             size="sm"
             onClick={() => setShowAddDialog(true)}
-            disabled={isViewOnlyAdmin}
+            disabled={cannotEdit}
             data-testid="button-add-attendance"
           >
             <Plus className="h-4 w-4 mr-1" />
@@ -1782,13 +1786,13 @@ export default function AdminAttendancePage() {
                                     setSelectedRecord(record);
                                     setShowEndClockInDialog(true);
                                   }}
-                                  disabled={isViewOnlyAdmin}
+                                  disabled={cannotEdit}
                                   data-testid={`button-end-clockin-today-${record.id}`}
                                 >
                                   End Clock-in
                                 </Button>
                               )}
-                              {isNexaAdmin && !isViewOnlyAdmin && (
+                              {isNexaAdmin && !cannotEdit && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1875,7 +1879,7 @@ export default function AdminAttendancePage() {
                     <Button
                       size="sm"
                       onClick={handleBulkCloseOrphaned}
-                      disabled={selectedOrphanedIds.size === 0 || isViewOnlyAdmin || bulkCloseOrphanedMutation.isPending}
+                      disabled={selectedOrphanedIds.size === 0 || cannotEdit || bulkCloseOrphanedMutation.isPending}
                       data-testid="button-bulk-close-orphaned"
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -1969,7 +1973,7 @@ export default function AdminAttendancePage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                disabled={isViewOnlyAdmin}
+                                disabled={cannotEdit}
                                 data-testid={`button-actions-orphaned-${record.id}`}
                               >
                                 <MoreVertical className="h-4 w-4" />
@@ -2070,7 +2074,7 @@ export default function AdminAttendancePage() {
                     </Button>
                   </div>
                   {/* Regenerate summaries button (month view only) */}
-                  {heatmapViewType === 'month' && !isViewOnlyAdmin && (
+                  {heatmapViewType === 'month' && !cannotEdit && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
