@@ -300,6 +300,7 @@ export class MemStorage implements IStorage {
       dailyRate: insertUser.dailyRate ?? null,
       payType: insertUser.payType ?? null,
       regularHoursPerDay: insertUser.regularHoursPerDay ?? 8,
+      regularDaysPerWeek: insertUser.regularDaysPerWeek ?? null,
       defaultMobileAllowance: insertUser.defaultMobileAllowance ?? 0,
       defaultTransportAllowance: insertUser.defaultTransportAllowance ?? 0,
       defaultMealAllowance: insertUser.defaultMealAllowance ?? 0,

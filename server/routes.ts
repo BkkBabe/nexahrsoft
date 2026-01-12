@@ -1383,7 +1383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Filter to only regular employees (not admins)
       const employees = allUsers
-        .filter(u => u.role !== 'admin' && u.role !== 'viewonly_admin' && !u.isArchived)
+        .filter(u => u.role !== 'admin' && u.role !== 'viewonly_admin' && u.role !== 'attendance_view_admin' && !u.isArchived)
         .map(u => ({
           id: u.id,
           name: u.name,

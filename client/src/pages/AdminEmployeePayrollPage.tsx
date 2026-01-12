@@ -128,6 +128,15 @@ function getResidencyLabel(status: string | null): string {
   }
 }
 
+function calculateCompletionPercentage(employee: EmployeePayrollSummary): number {
+  const fields = [
+    employee.residencyStatus,
+    employee.basicMonthlySalary,
+  ];
+  const filledCount = fields.filter(f => f !== null && f !== undefined).length;
+  return Math.round((filledCount / fields.length) * 100);
+}
+
 function getFieldLabel(field: string): string {
   const labels: Record<string, string> = {
     residencyStatus: "Residency Status",
@@ -282,17 +291,30 @@ export default function AdminEmployeePayrollPage() {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {employee.hasPayrollConfig ? (
-                          <Badge variant="default" className="bg-green-600">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Configured
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            <AlertCircle className="h-3 w-3 mr-1" />
-                            Incomplete
-                          </Badge>
-                        )}
+                        {(() => {
+                          const completion = calculateCompletionPercentage(employee);
+                          if (completion === 100) {
+                            return (
+                              <Badge variant="default" className="bg-green-600">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Complete
+                              </Badge>
+                            );
+                          } else if (completion > 0) {
+                            return (
+                              <Badge variant="outline" className="border-amber-500 text-amber-600">
+                                {completion}% Complete
+                              </Badge>
+                            );
+                          } else {
+                            return (
+                              <Badge variant="destructive">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                Incomplete
+                              </Badge>
+                            );
+                          }
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -315,6 +337,7 @@ export default function AdminEmployeePayrollPage() {
       </Card>
 
       <EditEmployeeDialog
+        key={selectedEmployeeId || "empty"}
         employeeId={selectedEmployeeId}
         employeeName={employeeList?.employees?.find(e => e.id === selectedEmployeeId)?.name || null}
         employeeCode={employeeList?.employees?.find(e => e.id === selectedEmployeeId)?.employeeCode || null}
@@ -341,7 +364,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   const [activeTab, setActiveTab] = useState("settings");
 
   const { data: settings, isLoading: isLoadingSettings } = useQuery<EmployeePayrollSettings>({
-    queryKey: ["/api/admin/employees", employeeId, "payroll-settings"],
+    queryKey: [`/api/admin/employees/${employeeId}/payroll-settings`],
     enabled: !!employeeId && open,
   });
 
@@ -351,7 +374,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   });
 
   const { data: auditData, isLoading: isLoadingAudit } = useQuery<{ employee: { id: string; name: string; employeeCode: string | null }; auditLogs: AuditLog[] }>({
-    queryKey: ["/api/admin/employees", employeeId, "audit-logs"],
+    queryKey: [`/api/admin/employees/${employeeId}/audit-logs`],
     enabled: !!employeeId && open && activeTab === "history",
   });
 
@@ -481,8 +504,8 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
         description: `Updated ${data.changesLogged} field(s) for ${settings?.name || "employee"}`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/employees/payroll-list"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "payroll-settings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/employees", employeeId, "audit-logs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/payroll-settings`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/audit-logs`] });
       setFormState({});
       onOpenChange(false);
     },
@@ -571,9 +594,9 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                               <SelectValue placeholder="Select status" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="SC">Singapore Citizen</SelectItem>
-                              <SelectItem value="SPR">Singapore PR</SelectItem>
-                              <SelectItem value="FOREIGNER">Foreigner</SelectItem>
+                              <SelectItem value="SC" data-testid="option-residency-sc">Singapore Citizen</SelectItem>
+                              <SelectItem value="SPR" data-testid="option-residency-spr">Singapore PR</SelectItem>
+                              <SelectItem value="FOREIGNER" data-testid="option-residency-foreigner">Foreigner</SelectItem>
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground mt-1">
@@ -622,6 +645,12 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                             if (value === "" || /^\d*\.?\d*$/.test(value)) {
                               setSalaryInputText(value);
                               setSalaryInputDirty(true);
+                              // Also update formState on change so the save button knows there are changes
+                              if (value && !isNaN(parseFloat(value))) {
+                                updateField("basicMonthlySalary", displayToCents(value));
+                              } else if (value === "") {
+                                updateField("basicMonthlySalary", null);
+                              }
                             }
                           }}
                           onKeyDown={(e) => {
