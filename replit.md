@@ -82,9 +82,10 @@ Preferred communication style: Simple, everyday language.
   - **Employee Payroll Settings**: Configure individual employee payroll profiles with:
     - Residency status (SC/SPR/Foreigner) for CPF calculations
     - Date of birth and SPR start date for age-based CPF rates
-    - Pay type (monthly/hourly/daily) with corresponding rates
-    - Default allowances (mobile, transport, meal, shift, other, house rental)
-    - Salary adjustment with reason tracking
+    - Monthly salary (simplified from previous Pay Type/Rate configuration)
+    - **Recurring Salary Adjustments**: Multiple additions/deductions per employee stored in employee_salary_adjustments table
+      - Each adjustment has type (addition/deduction), amount, description, and active status
+      - Full CRUD operations via /api/admin/employees/:id/salary-adjustments
     - Full audit trail of all changes with admin identity and timestamps
     - View-only admins can view but cannot modify settings
   - **Payroll Generation from Attendance**: Automatically generate payroll from clock-in/out records with:
