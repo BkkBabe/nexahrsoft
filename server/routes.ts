@@ -203,15 +203,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Then check database users with role='admin' or 'viewonly_admin'
+      // Then check database users with role='admin', 'viewonly_admin', or 'attendance_view_admin'
       const user = await storage.getUserByUsername(username);
       
-      // If user exists but is not an admin or viewonly_admin, reject with helpful message
-      if (user && user.role !== "admin" && user.role !== "viewonly_admin") {
+      // Define admin roles that can log in via admin portal
+      const adminRoles = ["admin", "viewonly_admin", "attendance_view_admin"];
+      
+      // If user exists but is not an admin role, reject with helpful message
+      if (user && !adminRoles.includes(user.role)) {
         return res.status(403).json({ message: "Please use the Employee Login page to access your account" });
       }
       
-      if (user && (user.role === "admin" || user.role === "viewonly_admin") && user.isApproved) {
+      if (user && adminRoles.includes(user.role) && user.isApproved) {
         // Security: Only allow login if user has a valid password hash
         if (!user.passwordHash) {
           console.log(`Admin login rejected: User ${username} has no password set`);
@@ -222,6 +225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.session.userId = user.id;
           req.session.isAdmin = true;
           req.session.isViewOnlyAdmin = user.role === "viewonly_admin";
+          req.session.isAttendanceViewAdmin = user.role === "attendance_view_admin";
           return res.json({ success: true, message: "Admin login successful" });
         }
       }
@@ -263,13 +267,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             user: { id: "admin", name: "Admin", email: "admin@nexahr.com" },
           });
         }
-        // Database admin user (admin or viewonly_admin)
+        // Database admin user (admin, viewonly_admin, or attendance_view_admin)
         const adminUser = await storage.getUser(req.session.userId);
         if (adminUser) {
           return res.json({
             authenticated: true,
             isAdmin: true,
             isViewOnlyAdmin: req.session.isViewOnlyAdmin || false,
+            isAttendanceViewAdmin: req.session.isAttendanceViewAdmin || false,
             user: {
               id: adminUser.id,
               name: adminUser.name,
@@ -495,8 +500,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Middleware to block view-only admins from write operations
   const requireWriteAccess = (req: Request, res: Response, next: any) => {
-    if (req.session.isViewOnlyAdmin) {
+    if (req.session.isViewOnlyAdmin || req.session.isAttendanceViewAdmin) {
       return res.status(403).json({ message: "View-only admins cannot perform this action" });
+    }
+    next();
+  };
+  
+  // Middleware to block attendance-only admins from non-attendance routes
+  const requireFullAdmin = (req: Request, res: Response, next: any) => {
+    if (req.session.isAttendanceViewAdmin) {
+      return res.status(403).json({ message: "Attendance view-only admins cannot access this feature" });
     }
     next();
   };
@@ -583,6 +596,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: error.errors[0].message });
       }
       res.status(500).json({ message: "Failed to unarchive users" });
+    }
+  });
+
+  // Set user role to attendance_view_admin (super admin only)
+  app.post("/api/admin/users/:id/set-attendance-view-admin", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      // Check if user is a super admin
+      const isSuper = await isSuperAdmin(req.session, storage);
+      if (!isSuper) {
+        return res.status(403).json({ message: "Only super admins can manage admin roles" });
+      }
+      
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Prevent modifying super admins
+      if (user.role === "admin") {
+        return res.status(400).json({ message: "Cannot modify full admin users" });
+      }
+      
+      // Update user role to attendance_view_admin
+      await storage.updateUser(id, { role: "attendance_view_admin" });
+      
+      res.json({ success: true, message: `${user.name} is now an Attendance View-Only Admin` });
+    } catch (error) {
+      console.error("Set attendance view admin error:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+  
+  // Remove attendance_view_admin role (demote back to user) (super admin only)
+  app.post("/api/admin/users/:id/remove-attendance-view-admin", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      // Check if user is a super admin
+      const isSuper = await isSuperAdmin(req.session, storage);
+      if (!isSuper) {
+        return res.status(403).json({ message: "Only super admins can manage admin roles" });
+      }
+      
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Only allow demoting attendance_view_admin users
+      if (user.role !== "attendance_view_admin") {
+        return res.status(400).json({ message: "User is not an Attendance View-Only Admin" });
+      }
+      
+      // Update user role back to user
+      await storage.updateUser(id, { role: "user" });
+      
+      res.json({ success: true, message: `${user.name} is no longer an Attendance View-Only Admin` });
+    } catch (error) {
+      console.error("Remove attendance view admin error:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+  
+  // Get all attendance view admins (super admin only)
+  app.get("/api/admin/users/attendance-view-admins", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const attendanceViewAdmins = allUsers.filter(u => u.role === "attendance_view_admin");
+      res.json(attendanceViewAdmins);
+    } catch (error) {
+      console.error("Get attendance view admins error:", error);
+      res.status(500).json({ message: "Failed to fetch attendance view admins" });
     }
   });
 

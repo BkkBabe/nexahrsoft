@@ -11,7 +11,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"), // Password hash (nullable for OAuth users)
   mobileNumber: text("mobile_number"), // Mobile number (optional)
   authId: text("auth_id").unique(), // Replit Auth ID for OAuth users
-  role: text("role").notNull().default("user"), // 'admin', 'viewonly_admin', or 'user'
+  role: text("role").notNull().default("user"), // 'admin', 'viewonly_admin', 'attendance_view_admin', or 'user'
   isApproved: boolean("is_approved").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   // HR metadata fields

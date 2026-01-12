@@ -56,6 +56,7 @@ declare module 'express-session' {
     userId?: string;
     isAdmin?: boolean;
     isViewOnlyAdmin?: boolean;
+    isAttendanceViewAdmin?: boolean;
     codeVerifier?: string;
   }
 }
