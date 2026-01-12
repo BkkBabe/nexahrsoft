@@ -3826,13 +3826,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Determine hourly rate based on pay type
         // Executive employees (daysPerWeek = 0) don't need hourly rate calculation
+        // Auto-detect pay type based on what's configured (priority: monthly > daily > hourly)
         let hourlyRate = employee.hourlyRate || 0;
-        if (isExecutive && employee.payType === 'monthly' && employee.basicMonthlySalary) {
-          // Executive: use monthly salary directly, no hourly rate needed
-          hourlyRate = 0;
-        } else if (employee.payType === 'monthly' && employee.basicMonthlySalary && empDaysPerWeek > 0) {
-          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, empHoursPerDay, empDaysPerWeek);
-        } else if (employee.payType === 'daily' && employee.dailyRate) {
+        let payType = employee.payType || 'hourly';
+        
+        if (employee.basicMonthlySalary && employee.basicMonthlySalary > 0) {
+          payType = 'monthly';
+          if (isExecutive) {
+            // Executive: use monthly salary directly, no hourly rate needed
+            hourlyRate = 0;
+          } else {
+            hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, empHoursPerDay, empDaysPerWeek);
+          }
+        } else if (employee.dailyRate && employee.dailyRate > 0) {
+          payType = 'daily';
           hourlyRate = dailyToHourlyRate(employee.dailyRate, empHoursPerDay);
         }
 
@@ -3864,7 +3871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { regularPay, overtimePay, totalPay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
 
         // For monthly employees, use base salary as basic pay
-        const basicSalary = employee.payType === 'monthly' && employee.basicMonthlySalary 
+        const basicSalary = payType === 'monthly' && employee.basicMonthlySalary 
           ? employee.basicMonthlySalary 
           : regularPay;
         const otAmount = overtimePay;
@@ -4063,9 +4070,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         let hourlyRate = employee.hourlyRate || 0;
         let payType = employee.payType || 'hourly';
-        if (payType === 'monthly' && employee.basicMonthlySalary) {
-          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, regularHoursPerDay, regularDaysPerWeek);
-        } else if (payType === 'daily' && employee.dailyRate) {
+        
+        // Auto-detect pay type based on what's configured
+        // Priority: monthly salary > daily rate > hourly rate
+        if (employee.basicMonthlySalary && employee.basicMonthlySalary > 0) {
+          payType = 'monthly';
+          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, regularHoursPerDay, employee.regularDaysPerWeek || regularDaysPerWeek);
+        } else if (employee.dailyRate && employee.dailyRate > 0) {
+          payType = 'daily';
           hourlyRate = dailyToHourlyRate(employee.dailyRate, regularHoursPerDay);
         }
 
