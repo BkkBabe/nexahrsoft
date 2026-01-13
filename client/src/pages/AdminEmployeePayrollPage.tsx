@@ -35,6 +35,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 
 interface EmployeePayrollSummary {
   id: string;
@@ -85,6 +86,7 @@ interface SalaryAdjustment {
   amount: number;
   description: string | null;
   isActive: boolean;
+  showForEmployee: boolean;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -973,6 +975,7 @@ function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddA
   const [adjustmentType, setAdjustmentType] = useState<"addition" | "deduction">("addition");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [showForEmployee, setShowForEmployee] = useState(true);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -980,6 +983,7 @@ function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddA
         adjustmentType,
         amount: displayToDollars(amount) || 0,
         description: description || null,
+        showForEmployee,
       });
       return response.json();
     },
@@ -994,6 +998,7 @@ function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddA
       setAdjustmentType("addition");
       setAmount("");
       setDescription("");
+      setShowForEmployee(true);
     },
     onError: (error: any) => {
       toast({
@@ -1066,6 +1071,19 @@ function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddA
               data-testid="input-adjustment-description"
             />
           </div>
+          <div className="flex items-center justify-between border rounded-md p-3 bg-muted/30">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Show for Employee</Label>
+              <p className="text-xs text-muted-foreground">
+                When disabled, this adjustment is hidden from the employee's payslip view
+              </p>
+            </div>
+            <Switch
+              checked={showForEmployee}
+              onCheckedChange={setShowForEmployee}
+              data-testid="switch-show-for-employee"
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1092,6 +1110,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [showForEmployee, setShowForEmployee] = useState(true);
 
   // Sync form state when adjustment changes
   useState(() => {
@@ -1100,6 +1119,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
       setAmount(dollarsToDisplay(adjustment.amount));
       setDescription(adjustment.description || "");
       setIsActive(adjustment.isActive);
+      setShowForEmployee(adjustment.showForEmployee);
     }
   });
 
@@ -1109,6 +1129,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
     setAmount(dollarsToDisplay(adjustment.amount));
     setDescription(adjustment.description || "");
     setIsActive(adjustment.isActive);
+    setShowForEmployee(adjustment.showForEmployee);
   }
 
   const updateMutation = useMutation({
@@ -1118,6 +1139,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
         amount: displayToDollars(amount) || 0,
         description: description || null,
         isActive,
+        showForEmployee,
       });
       return response.json();
     },
@@ -1242,6 +1264,19 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
               data-testid="checkbox-adjustment-active"
             />
             <Label htmlFor="isActive" className="cursor-pointer">Active (applied to payroll)</Label>
+          </div>
+          <div className="flex items-center justify-between border rounded-md p-3 bg-muted/30">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Show for Employee</Label>
+              <p className="text-xs text-muted-foreground">
+                When disabled, this adjustment is hidden from the employee's payslip view
+              </p>
+            </div>
+            <Switch
+              checked={showForEmployee}
+              onCheckedChange={setShowForEmployee}
+              data-testid="switch-edit-show-for-employee"
+            />
           </div>
         </div>
         <DialogFooter className="flex justify-between gap-2">

@@ -637,6 +637,7 @@ export const employeeSalaryAdjustments = pgTable("employee_salary_adjustments", 
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(), // dollars (e.g., 50.00)
   description: text("description").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  showForEmployee: boolean("show_for_employee").notNull().default(true), // If false, hidden in employee payslip view
   createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

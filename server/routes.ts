@@ -1347,6 +1347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adjustmentType: z.enum(['addition', 'deduction']),
         amount: z.number().positive(),
         description: z.string().min(1),
+        showForEmployee: z.boolean().optional().default(true),
       });
 
       const data = schema.parse(req.body);
@@ -1354,10 +1355,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const adjustment = await storage.createEmployeeSalaryAdjustment({
         userId: id,
         adjustmentType: data.adjustmentType,
-        amount: data.amount,
+        amount: toNumericString(data.amount),
         description: data.description,
         createdBy: changedBy,
         isActive: true,
+        showForEmployee: data.showForEmployee,
       });
 
       res.json({ adjustment });
@@ -1380,11 +1382,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: z.number().positive().optional(),
         description: z.string().min(1).optional(),
         isActive: z.boolean().optional(),
+        showForEmployee: z.boolean().optional(),
       });
 
       const data = schema.parse(req.body);
       
-      const adjustment = await storage.updateEmployeeSalaryAdjustment(id, data);
+      // Convert amount to string if provided
+      const updateData: any = { ...data };
+      if (data.amount !== undefined) {
+        updateData.amount = toNumericString(data.amount);
+      }
+      
+      const adjustment = await storage.updateEmployeeSalaryAdjustment(id, updateData);
 
       if (!adjustment) {
         return res.status(404).json({ message: "Adjustment not found" });
