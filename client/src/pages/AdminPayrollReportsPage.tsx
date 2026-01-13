@@ -52,10 +52,32 @@ const MONTH_NAMES: Record<number, string> = {
 };
 
 const currentYear = new Date().getFullYear();
+const currentMonth = new Date().getMonth() + 1;
 const YEARS = Array.from({ length: 5 }, (_, i) => ({
   value: String(currentYear - i),
   label: String(currentYear - i),
 }));
+
+const generatePeriodOptions = () => {
+  const options: { value: string; label: string; isYearOnly?: boolean }[] = [];
+  
+  for (let yearOffset = 0; yearOffset < 3; yearOffset++) {
+    const year = currentYear - yearOffset;
+    options.push({ value: `${year}-all`, label: `All ${year}`, isYearOnly: true });
+    
+    const startMonth = yearOffset === 0 ? currentMonth : 12;
+    for (let month = startMonth; month >= 1; month--) {
+      options.push({ 
+        value: `${year}-${month}`, 
+        label: `${MONTH_NAMES[month]} ${year}` 
+      });
+    }
+  }
+  
+  return options;
+};
+
+const PERIOD_OPTIONS = generatePeriodOptions();
 
 function escapeCsvField(value: string): string {
   if (value.includes(',') || value.includes('"') || value.includes('\n')) {
@@ -93,9 +115,18 @@ const initialFormState: NewUserForm = {
 export default function AdminPayrollReportsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(`${currentYear}-all`);
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
+  
+  const parsePeriod = (period: string) => {
+    const [year, monthOrAll] = period.split('-');
+    return {
+      year,
+      month: monthOrAll === 'all' ? '' : monthOrAll
+    };
+  };
+  
+  const { year: selectedYear, month: selectedMonth } = parsePeriod(selectedPeriod);
   const [payslipDialogOpen, setPayslipDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [editRecord, setEditRecord] = useState<PayrollRecord | null>(null);
@@ -404,31 +435,25 @@ export default function AdminPayrollReportsPage() {
       <Card data-testid="card-filter">
         <CardHeader>
           <CardTitle data-testid="text-filter-title">Filter Records</CardTitle>
-          <CardDescription data-testid="text-filter-description">Select year and month to filter payroll records, or search by employee name</CardDescription>
+          <CardDescription data-testid="text-filter-description">Select period to filter payroll records, or search by employee name</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 flex-wrap">
-            <div className="w-40">
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger data-testid="select-year">
-                  <SelectValue placeholder="Select Year" />
+            <div className="w-48">
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger data-testid="select-period">
+                  <SelectValue placeholder="Select Period" />
                 </SelectTrigger>
                 <SelectContent>
-                  {YEARS.map(y => (
-                    <SelectItem key={y.value} value={y.value} data-testid={`option-year-${y.value}`}>{y.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-40">
-              <Select value={selectedMonth} onValueChange={(val) => setSelectedMonth(val === "all" ? "" : val)}>
-                <SelectTrigger data-testid="select-month">
-                  <SelectValue placeholder="All Months" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" data-testid="option-month-all">All Months</SelectItem>
-                  {MONTHS.map(m => (
-                    <SelectItem key={m.value} value={m.value} data-testid={`option-month-${m.value}`}>{m.label}</SelectItem>
+                  {PERIOD_OPTIONS.map(p => (
+                    <SelectItem 
+                      key={p.value} 
+                      value={p.value} 
+                      data-testid={`option-period-${p.value}`}
+                      className={p.isYearOnly ? "font-semibold" : ""}
+                    >
+                      {p.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
