@@ -243,15 +243,25 @@ export default function AdminPayrollReportsPage() {
     );
   }, [allRecords, searchQuery]);
 
-  const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toFixed(2)}`;
+  // Helper to safely parse numeric values (API returns strings from PostgreSQL numeric type)
+  const parseAmount = (value: string | number | null | undefined): number => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return value;
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
   };
 
-  const totalNett = records.reduce((sum, r) => sum + r.nett, 0);
-  const totalGross = records.reduce((sum, r) => sum + r.grossWages, 0);
-  const totalCpf = records.reduce((sum, r) => sum + r.employerCpf + r.employeeCpf, 0);
-  const totalLeaveEncashment = records.reduce((sum, r) => sum + r.annualLeaveEncashment, 0);
-  const totalNoPayDeduction = records.reduce((sum, r) => sum + r.noPayDay, 0);
+  // Format currency from dollars (not cents anymore)
+  const formatCurrency = (dollars: number | string | null | undefined) => {
+    const amount = parseAmount(dollars);
+    return `$${amount.toFixed(2)}`;
+  };
+
+  const totalNett = records.reduce((sum, r) => sum + parseAmount(r.nett), 0);
+  const totalGross = records.reduce((sum, r) => sum + parseAmount(r.grossWages), 0);
+  const totalCpf = records.reduce((sum, r) => sum + parseAmount(r.employerCpf) + Math.abs(parseAmount(r.employeeCpf)), 0);
+  const totalLeaveEncashment = records.reduce((sum, r) => sum + parseAmount(r.annualLeaveEncashment), 0);
+  const totalNoPayDeduction = records.reduce((sum, r) => sum + parseAmount(r.noPayDay), 0);
 
   const groupedByPeriod = records.reduce((acc, record) => {
     const key = `${record.payPeriodYear}-${record.payPeriodMonth}`;
@@ -266,8 +276,8 @@ export default function AdminPayrollReportsPage() {
       };
     }
     acc[key].records.push(record);
-    acc[key].totalNett += record.nett;
-    acc[key].totalGross += record.grossWages;
+    acc[key].totalNett += parseAmount(record.nett);
+    acc[key].totalGross += parseAmount(record.grossWages);
     return acc;
   }, {} as Record<string, { year: number; month: number; display: string; records: PayrollRecord[]; totalNett: number; totalGross: number }>);
 
