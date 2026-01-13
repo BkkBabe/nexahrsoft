@@ -101,21 +101,21 @@ interface AuditLog {
   createdAt: string;
 }
 
-function formatCurrency(cents: number | null): string {
-  if (cents === null || cents === undefined) return "$0.00";
-  return `$${(cents / 100).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function formatCurrency(dollars: number | null): string {
+  if (dollars === null || dollars === undefined) return "$0.00";
+  return `$${Number(dollars).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function centsToDisplay(cents: number | null): string {
-  if (cents === null || cents === undefined) return "";
-  return (cents / 100).toFixed(2);
+function dollarsToDisplay(dollars: number | null): string {
+  if (dollars === null || dollars === undefined) return "";
+  return Number(dollars).toFixed(2);
 }
 
-function displayToCents(display: string): number | null {
+function displayToDollars(display: string): number | null {
   if (!display || display.trim() === "") return null;
   const value = parseFloat(display);
   if (isNaN(value)) return null;
-  return Math.round(value * 100);
+  return Math.round(value * 100) / 100; // Round to 2 decimal places
 }
 
 function getResidencyLabel(status: string | null): string {
@@ -415,7 +415,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   useEffect(() => {
     if (!salaryInputDirty) {
       if (settings?.basicMonthlySalary !== undefined && settings.basicMonthlySalary !== null) {
-        setSalaryInputText(centsToDisplay(settings.basicMonthlySalary));
+        setSalaryInputText(dollarsToDisplay(settings.basicMonthlySalary));
       } else {
         setSalaryInputText("");
       }
@@ -434,12 +434,12 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
   useEffect(() => {
     if (!allowancesDirty && settings) {
       setAllowanceInputs({
-        mobile: centsToDisplay(settings.defaultMobileAllowance ?? null),
-        transport: centsToDisplay(settings.defaultTransportAllowance ?? null),
-        meal: centsToDisplay(settings.defaultMealAllowance ?? null),
-        shift: centsToDisplay(settings.defaultShiftAllowance ?? null),
-        other: centsToDisplay(settings.defaultOtherAllowance ?? null),
-        houseRental: centsToDisplay(settings.defaultHouseRentalAllowance ?? null),
+        mobile: dollarsToDisplay(settings.defaultMobileAllowance ?? null),
+        transport: dollarsToDisplay(settings.defaultTransportAllowance ?? null),
+        meal: dollarsToDisplay(settings.defaultMealAllowance ?? null),
+        shift: dollarsToDisplay(settings.defaultShiftAllowance ?? null),
+        other: dollarsToDisplay(settings.defaultOtherAllowance ?? null),
+        houseRental: dollarsToDisplay(settings.defaultHouseRentalAllowance ?? null),
       });
     }
   }, [settings, allowancesDirty]);
@@ -460,7 +460,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
     if (value && !isNaN(parseFloat(value))) {
       const formatted = parseFloat(value).toFixed(2);
       setAllowanceInputs(prev => ({ ...prev, [key]: formatted }));
-      updateField(field, displayToCents(formatted));
+      updateField(field, displayToDollars(formatted));
     } else if (value === "") {
       updateField(field, null);
     }
@@ -665,7 +665,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                               setSalaryInputDirty(true);
                               // Also update formState on change so the save button knows there are changes
                               if (value && !isNaN(parseFloat(value))) {
-                                updateField("basicMonthlySalary", displayToCents(value));
+                                updateField("basicMonthlySalary", displayToDollars(value));
                               } else if (value === "") {
                                 updateField("basicMonthlySalary", null);
                               }
@@ -687,7 +687,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                             if (value && !isNaN(parseFloat(value))) {
                               const formatted = parseFloat(value).toFixed(2);
                               setSalaryInputText(formatted);
-                              updateField("basicMonthlySalary", displayToCents(formatted));
+                              updateField("basicMonthlySalary", displayToDollars(formatted));
                             } else if (value === "") {
                               updateField("basicMonthlySalary", null);
                             }
@@ -978,7 +978,7 @@ function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddA
     mutationFn: async () => {
       const response = await apiRequest("POST", `/api/admin/employees/${employeeId}/salary-adjustments`, {
         adjustmentType,
-        amount: displayToCents(amount) || 0,
+        amount: displayToDollars(amount) || 0,
         description: description || null,
       });
       return response.json();
@@ -986,7 +986,7 @@ function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddA
     onSuccess: () => {
       toast({
         title: "Adjustment Added",
-        description: `Successfully added ${adjustmentType} of ${formatCurrency(displayToCents(amount) || 0)}`,
+        description: `Successfully added ${adjustmentType} of ${formatCurrency(displayToDollars(amount) || 0)}`,
       });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`] });
       onSuccess();
@@ -1005,7 +1005,7 @@ function AddAdjustmentDialog({ employeeId, open, onOpenChange, onSuccess }: AddA
   });
 
   const handleSubmit = () => {
-    if (!amount || displayToCents(amount) === null || displayToCents(amount) === 0) {
+    if (!amount || displayToDollars(amount) === null || displayToDollars(amount) === 0) {
       toast({
         title: "Validation Error",
         description: "Please enter a valid amount",
@@ -1097,7 +1097,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
   useState(() => {
     if (adjustment) {
       setAdjustmentType(adjustment.adjustmentType);
-      setAmount(centsToDisplay(adjustment.amount));
+      setAmount(dollarsToDisplay(adjustment.amount));
       setDescription(adjustment.description || "");
       setIsActive(adjustment.isActive);
     }
@@ -1106,7 +1106,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
   // Update form when adjustment changes
   if (adjustment && amount === "" && adjustment.amount) {
     setAdjustmentType(adjustment.adjustmentType);
-    setAmount(centsToDisplay(adjustment.amount));
+    setAmount(dollarsToDisplay(adjustment.amount));
     setDescription(adjustment.description || "");
     setIsActive(adjustment.isActive);
   }
@@ -1115,7 +1115,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
     mutationFn: async () => {
       const response = await apiRequest("PATCH", `/api/admin/employees/${adjustment?.userId}/salary-adjustments/${adjustment?.id}`, {
         adjustmentType,
-        amount: displayToCents(amount) || 0,
+        amount: displayToDollars(amount) || 0,
         description: description || null,
         isActive,
       });
@@ -1171,7 +1171,7 @@ function EditAdjustmentDialog({ adjustment, open, onOpenChange, onSuccess }: Edi
   });
 
   const handleSubmit = () => {
-    if (!amount || displayToCents(amount) === null || displayToCents(amount) === 0) {
+    if (!amount || displayToDollars(amount) === null || displayToDollars(amount) === 0) {
       toast({
         title: "Validation Error",
         description: "Please enter a valid amount",

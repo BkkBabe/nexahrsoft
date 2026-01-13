@@ -399,6 +399,9 @@ export default function AdminPayrollImportPage() {
       return;
     }
 
+    // Convert numeric values to strings for PostgreSQL numeric columns
+    const toNumericStr = (val: number): string => val.toFixed(2);
+    
     const records: Partial<InsertPayrollRecord>[] = parsedData.map(row => ({
       userId: row.matchedUser?.id || null,
       payPeriod: payPeriod.display,
@@ -414,40 +417,40 @@ export default function AdminPayrollImportPage() {
       catName: row.catName || null,
       nric: row.nric || null,
       joinDate: row.joinDate || null,
-      totSalary: row.totSalary,
-      basicSalary: row.basicSalary,
-      monthlyVariablesComponent: row.monthlyVariablesComponent,
-      flat: row.flat,
-      ot10: row.ot10,
-      ot15: row.ot15,
-      ot20: row.ot20,
-      ot30: row.ot30,
-      shiftAllowance: row.shiftAllowance,
-      totRestPhAmount: row.totRestPhAmount,
-      mobileAllowance: row.mobileAllowance,
-      transportAllowance: row.transportAllowance,
-      annualLeaveEncashment: row.annualLeaveEncashment,
-      serviceCallAllowances: row.serviceCallAllowances,
-      otherAllowance: row.otherAllowance,
-      houseRentalAllowances: row.houseRentalAllowances,
-      loanRepaymentTotal: row.loanRepaymentTotal,
+      totSalary: toNumericStr(row.totSalary),
+      basicSalary: toNumericStr(row.basicSalary),
+      monthlyVariablesComponent: toNumericStr(row.monthlyVariablesComponent),
+      flat: toNumericStr(row.flat),
+      ot10: toNumericStr(row.ot10),
+      ot15: toNumericStr(row.ot15),
+      ot20: toNumericStr(row.ot20),
+      ot30: toNumericStr(row.ot30),
+      shiftAllowance: toNumericStr(row.shiftAllowance),
+      totRestPhAmount: toNumericStr(row.totRestPhAmount),
+      mobileAllowance: toNumericStr(row.mobileAllowance),
+      transportAllowance: toNumericStr(row.transportAllowance),
+      annualLeaveEncashment: toNumericStr(row.annualLeaveEncashment),
+      serviceCallAllowances: toNumericStr(row.serviceCallAllowances),
+      otherAllowance: toNumericStr(row.otherAllowance),
+      houseRentalAllowances: toNumericStr(row.houseRentalAllowances),
+      loanRepaymentTotal: toNumericStr(row.loanRepaymentTotal),
       loanRepaymentDetails: null,
-      noPayDay: row.noPayDay,
-      cc: row.cc,
-      cdac: row.cdac,
-      ecf: row.ecf,
-      mbmf: row.mbmf,
-      sinda: row.sinda,
-      bonus: row.bonus,
-      grossWages: row.grossWages,
-      cpfWages: row.cpfWages,
-      sdf: row.sdf,
-      fwl: row.fwl,
-      employerCpf: row.employerCpf,
-      employeeCpf: row.employeeCpf,
-      totalCpf: row.totalCpf,
-      total: row.total,
-      nett: row.nett,
+      noPayDay: toNumericStr(row.noPayDay),
+      cc: toNumericStr(row.cc),
+      cdac: toNumericStr(row.cdac),
+      ecf: toNumericStr(row.ecf),
+      mbmf: toNumericStr(row.mbmf),
+      sinda: toNumericStr(row.sinda),
+      bonus: toNumericStr(row.bonus),
+      grossWages: toNumericStr(row.grossWages),
+      cpfWages: toNumericStr(row.cpfWages),
+      sdf: toNumericStr(row.sdf),
+      fwl: toNumericStr(row.fwl),
+      employerCpf: toNumericStr(row.employerCpf),
+      employeeCpf: toNumericStr(row.employeeCpf),
+      totalCpf: toNumericStr(row.totalCpf),
+      total: toNumericStr(row.total),
+      nett: toNumericStr(row.nett),
       payMode: row.payMode || null,
       chequeNo: row.chequeNo || null,
       importedBy: 'admin',
@@ -456,8 +459,8 @@ export default function AdminPayrollImportPage() {
     importMutation.mutate(records);
   };
 
-  const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toFixed(2)}`;
+  const formatCurrency = (dollars: number) => {
+    return `$${dollars.toLocaleString("en-SG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const matchedCount = parsedData.filter(r => r.isMatched).length;

@@ -43,6 +43,14 @@ function roundToDollars(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/**
+ * Convert a number to a string for PostgreSQL numeric columns.
+ * Use this when inserting/updating numeric columns which expect string values.
+ */
+function toNumericString(value: number): string {
+  return value.toFixed(2);
+}
+
 // Initialize Resend email client
 const resend = process.env.RESEND_API ? new Resend(process.env.RESEND_API) : null;
 
@@ -3956,7 +3964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Calculate net pay
         const nett = cpfResult.netPay; // After employee CPF deduction
 
-        // Create payroll record
+        // Create payroll record - convert all numeric values to strings for PostgreSQL
         const record = {
           userId: employee.id,
           payPeriod,
@@ -3972,40 +3980,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           catName: null,
           nric: employee.nricFin || null,
           joinDate: employee.joinDate || null,
-          totSalary: basicSalary,
-          basicSalary,
-          monthlyVariablesComponent: 0,
-          flat: 0,
-          ot10: 0,
-          ot15: otAmount, // All OT at 1.5x for now
-          ot20: 0,
-          ot30: 0,
-          shiftAllowance: 0,
-          totRestPhAmount: 0,
-          mobileAllowance: 0,
-          transportAllowance: 0,
-          annualLeaveEncashment: 0,
-          serviceCallAllowances: 0,
-          otherAllowance: 0,
-          houseRentalAllowances: 0,
-          loanRepaymentTotal: 0,
+          totSalary: toNumericString(basicSalary),
+          basicSalary: toNumericString(basicSalary),
+          monthlyVariablesComponent: toNumericString(0),
+          flat: toNumericString(0),
+          ot10: toNumericString(0),
+          ot15: toNumericString(otAmount), // All OT at 1.5x for now
+          ot20: toNumericString(0),
+          ot30: toNumericString(0),
+          shiftAllowance: toNumericString(0),
+          totRestPhAmount: toNumericString(0),
+          mobileAllowance: toNumericString(0),
+          transportAllowance: toNumericString(0),
+          annualLeaveEncashment: toNumericString(0),
+          serviceCallAllowances: toNumericString(0),
+          otherAllowance: toNumericString(0),
+          houseRentalAllowances: toNumericString(0),
+          loanRepaymentTotal: toNumericString(0),
           loanRepaymentDetails: null,
-          noPayDay: 0,
-          cc: 0,
-          cdac: 0,
-          ecf: 0,
-          mbmf: 0,
-          sinda: 0,
-          bonus: 0,
-          grossWages,
-          cpfWages: cpfResult.cpfWages,
-          sdf: 0,
-          fwl: 0,
-          employerCpf: cpfResult.employerCPF,
-          employeeCpf: -cpfResult.employeeCPF, // Stored as negative (deduction)
-          totalCpf: cpfResult.totalCPF,
-          total: grossWages,
-          nett,
+          noPayDay: toNumericString(0),
+          cc: toNumericString(0),
+          cdac: toNumericString(0),
+          ecf: toNumericString(0),
+          mbmf: toNumericString(0),
+          sinda: toNumericString(0),
+          bonus: toNumericString(0),
+          grossWages: toNumericString(grossWages),
+          cpfWages: toNumericString(cpfResult.cpfWages),
+          sdf: toNumericString(0),
+          fwl: toNumericString(0),
+          employerCpf: toNumericString(cpfResult.employerCPF),
+          employeeCpf: toNumericString(-cpfResult.employeeCPF), // Stored as negative (deduction)
+          totalCpf: toNumericString(cpfResult.totalCPF),
+          total: toNumericString(grossWages),
+          nett: toNumericString(nett),
           payMode: 'BANK DISK',
           chequeNo: null,
           importedBy: (req.session as any)?.user?.id || 'system',

@@ -89,8 +89,8 @@ interface PreviewResponse {
   skippedCount: number;
 }
 
-function formatCurrency(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function formatCurrency(dollars: number): string {
+  return `$${dollars.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatHours(hours: number): string {

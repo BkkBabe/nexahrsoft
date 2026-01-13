@@ -15,6 +15,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { PayrollLoanAccount, User } from "@shared/schema";
 
+// Helper to parse numeric values from PostgreSQL (returned as strings)
+function parseAmount(value: string | number | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return isNaN(num) ? 0 : num;
+}
+
 interface LoanFormData {
   employeeCode: string;
   employeeName: string;
@@ -154,12 +161,12 @@ export default function AdminPayrollLoansPage() {
 
   const openRepaymentDialog = (loan: PayrollLoanAccount) => {
     setSelectedLoan(loan);
-    setRepaymentAmount(loan.monthlyRepayment);
+    setRepaymentAmount(parseAmount(loan.monthlyRepayment));
     setShowRepaymentDialog(true);
   };
 
-  const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toLocaleString("en-SG", { minimumFractionDigits: 2 })}`;
+  const formatCurrency = (dollars: number) => {
+    return `$${dollars.toLocaleString("en-SG", { minimumFractionDigits: 2 })}`;
   };
 
   const getStatusBadge = (status: string) => {
@@ -181,8 +188,8 @@ export default function AdminPayrollLoansPage() {
     { value: "other", label: "Other" },
   ];
 
-  const totalOutstanding = loans.filter(l => l.status === "active").reduce((sum, l) => sum + l.outstandingBalance, 0);
-  const totalPrincipal = loans.reduce((sum, l) => sum + l.principalAmount, 0);
+  const totalOutstanding = loans.filter(l => l.status === "active").reduce((sum, l) => sum + parseAmount(l.outstandingBalance), 0);
+  const totalPrincipal = loans.reduce((sum, l) => sum + parseAmount(l.principalAmount), 0);
   const activeLoansCount = loans.filter(l => l.status === "active").length;
 
   return (
@@ -295,9 +302,9 @@ export default function AdminPayrollLoansPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono">{formatCurrency(loan.principalAmount)}</TableCell>
-                      <TableCell className="text-right font-mono">{formatCurrency(loan.outstandingBalance)}</TableCell>
-                      <TableCell className="text-right font-mono">{formatCurrency(loan.monthlyRepayment)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(parseAmount(loan.principalAmount))}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(parseAmount(loan.outstandingBalance))}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(parseAmount(loan.monthlyRepayment))}</TableCell>
                       <TableCell>{getStatusBadge(loan.status)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-1 justify-end">
@@ -312,7 +319,7 @@ export default function AdminPayrollLoansPage() {
                                 <DollarSign className="h-3 w-3 mr-1" />
                                 Repay
                               </Button>
-                              {loan.outstandingBalance <= 0 && (
+                              {parseAmount(loan.outstandingBalance) <= 0 && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -471,7 +478,7 @@ export default function AdminPayrollLoansPage() {
             {selectedLoan && (
               <div className="p-3 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Outstanding Balance</p>
-                <p className="text-lg font-bold">{formatCurrency(selectedLoan.outstandingBalance)}</p>
+                <p className="text-lg font-bold">{formatCurrency(parseAmount(selectedLoan.outstandingBalance))}</p>
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">

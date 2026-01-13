@@ -90,21 +90,21 @@ interface Employee {
   department: string | null;
 }
 
-function formatCurrency(cents: number | null): string {
-  if (cents === null || cents === undefined) return "$0.00";
-  return `$${(cents / 100).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function formatCurrency(dollars: number | null): string {
+  if (dollars === null || dollars === undefined) return "$0.00";
+  return `$${Number(dollars).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function centsToDisplay(cents: number | null): string {
-  if (cents === null || cents === undefined) return "";
-  return (cents / 100).toFixed(2);
+function dollarsToDisplay(dollars: number | null): string {
+  if (dollars === null || dollars === undefined) return "";
+  return Number(dollars).toFixed(2);
 }
 
-function displayToCents(display: string): number | null {
+function displayToDollars(display: string): number | null {
   if (!display || display.trim() === "") return null;
   const value = parseFloat(display);
   if (isNaN(value)) return null;
-  return Math.round(value * 100);
+  return Math.round(value * 100) / 100; // Round to 2 decimal places
 }
 
 function getAdjustmentTypeLabel(type: string): string {
@@ -173,10 +173,10 @@ export default function AdminPayrollAdjustmentsPage() {
         payload.days = parseFloat(days);
       }
       if (typeConfig?.hasRate && rate) {
-        payload.rate = displayToCents(rate);
+        payload.rate = displayToDollars(rate);
       }
       if (typeConfig?.hasAmount && amount) {
-        payload.amount = displayToCents(amount);
+        payload.amount = displayToDollars(amount);
       }
 
       const response = await apiRequest("POST", "/api/admin/payroll/adjustments", payload);
