@@ -27,6 +27,8 @@ Preferred communication style: Simple, everyday language.
 
 ### Database Schema
 
+**Note on Monetary Storage**: All monetary fields are stored as `numeric(12,2)` in dollars (e.g., 1200.00, not 120000 cents). PostgreSQL returns these as strings; use `parseNumeric()` or `parseNumericOrNull()` helper functions when reading from the database for arithmetic operations. The `roundToDollars()` helper ensures consistent 2-decimal precision for calculated totals.
+
 - **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent, mustChangePassword). Supports both password-based and OAuth, with approval-based access control, forced password change on first login, and full HR metadata.
 - **Company Settings Table**: Stores company branding, email settings, and timezone configuration (company_name, company_address, company_uen, logo_url, favicon_url, senderEmail, senderName, appUrl, defaultTimezone, ignoreOrphanedSessions, updated_at). Singleton pattern ensures one record.
 - **Payroll Loan Accounts Table**: Stores employee loans with fields: userId, loanType, description, principalAmount, outstandingBalance, monthlyRepayment, startDate, endDate, status. Supports COMPANY_LOAN, STUDY_LOAN, HOUSING_LOAN types.

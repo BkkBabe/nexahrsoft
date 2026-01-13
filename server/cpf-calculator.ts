@@ -10,30 +10,30 @@ export interface CPFRates {
 }
 
 export interface CPFResult {
-  grossWages: number; // cents
-  cpfWages: number; // cents (wages subject to CPF, capped)
-  employeeCPF: number; // cents (deducted from salary)
-  employerCPF: number; // cents (employer's additional contribution)
-  totalCPF: number; // cents
-  netPay: number; // cents (after employee CPF deduction)
+  grossWages: number; // dollars (e.g., 1200.00)
+  cpfWages: number; // dollars (wages subject to CPF, capped)
+  employeeCPF: number; // dollars (deducted from salary)
+  employerCPF: number; // dollars (employer's additional contribution)
+  totalCPF: number; // dollars
+  netPay: number; // dollars (after employee CPF deduction)
   isEligible: boolean;
   reason?: string;
 }
 
 // Monthly Ordinary Wage Ceiling (from 2026)
-const MONTHLY_OW_CEILING = 800000; // $8,000 in cents
+const MONTHLY_OW_CEILING = 8000; // $8,000
 
 // Annual Wage Ceiling
-const ANNUAL_WAGE_CEILING = 10200000; // $102,000 in cents
+const ANNUAL_WAGE_CEILING = 102000; // $102,000
 
 // Minimum wage for CPF
-const MIN_WAGE_FOR_CPF = 5000; // $50 in cents
+const MIN_WAGE_FOR_CPF = 50; // $50
 
 // Threshold for employee contribution
-const EMPLOYEE_CONTRIB_THRESHOLD = 50000; // $500 in cents
+const EMPLOYEE_CONTRIB_THRESHOLD = 500; // $500
 
 // Phase-in threshold for employee contribution
-const PHASE_IN_THRESHOLD = 75000; // $750 in cents
+const PHASE_IN_THRESHOLD = 750; // $750
 
 // CPF contribution rates by age group (from 1 Jan 2026) for Singapore Citizens
 const SC_CPF_RATES: { maxAge: number; employerRate: number; employeeRate: number }[] = [
@@ -125,6 +125,13 @@ export function getCPFRates(
 }
 
 /**
+ * Round to 2 decimal places for dollar amounts
+ */
+function roundToDollars(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/**
  * Calculate employee CPF contribution with phase-in for low wages
  */
 function calculateEmployeeCPF(wages: number, employeeRate: number): number {
@@ -139,18 +146,18 @@ function calculateEmployeeCPF(wages: number, employeeRate: number): number {
     // Simplified: employee pays reduced rate
     const excessWages = wages - EMPLOYEE_CONTRIB_THRESHOLD;
     const phaseInRate = 0.6; // Approximate phase-in multiplier
-    return Math.round(excessWages * phaseInRate);
+    return roundToDollars(excessWages * phaseInRate);
   }
   
   // Full contribution for wages >= $750
-  return Math.round(wages * employeeRate);
+  return roundToDollars(wages * employeeRate);
 }
 
 /**
  * Calculate CPF contributions for a given monthly wage
  */
 export function calculateCPF(
-  totalWages: number, // cents (total gross wages for the month)
+  totalWages: number, // dollars (total gross wages for the month)
   age: number,
   residencyStatus: ResidencyStatus,
   sprYears?: number,
@@ -195,7 +202,7 @@ export function calculateCPF(
   }
   
   // Calculate employer CPF (always applies for eligible employees)
-  const employerCPF = Math.round(cpfWages * rates.employerRate);
+  const employerCPF = roundToDollars(cpfWages * rates.employerRate);
   
   // Calculate employee CPF with phase-in
   const employeeCPF = calculateEmployeeCPF(cpfWages, rates.employeeRate);
@@ -253,12 +260,12 @@ export function splitHours(
 export function calculatePayFromHours(
   regularHours: number,
   overtimeHours: number,
-  hourlyRate: number, // cents
+  hourlyRate: number, // dollars (e.g., 15.50)
   otMultiplier: number = 1.5
 ): { regularPay: number; overtimePay: number; totalPay: number } {
-  const regularPay = Math.round(regularHours * hourlyRate);
-  const overtimePay = Math.round(overtimeHours * hourlyRate * otMultiplier);
-  const totalPay = regularPay + overtimePay;
+  const regularPay = roundToDollars(regularHours * hourlyRate);
+  const overtimePay = roundToDollars(overtimeHours * hourlyRate * otMultiplier);
+  const totalPay = roundToDollars(regularPay + overtimePay);
   
   return { regularPay, overtimePay, totalPay };
 }
@@ -268,11 +275,11 @@ export function calculatePayFromHours(
  * Daily rate = (Monthly Salary × 12) ÷ (Days per Week × 52)
  */
 export function monthlyToDailyRate(
-  monthlySalary: number, // cents
+  monthlySalary: number, // dollars (e.g., 1200.00)
   regularDaysPerWeek: number = 5
 ): number {
   // MOM formula: Daily rate = (Monthly × 12) / (Days per Week × 52)
-  return Math.round((monthlySalary * 12) / (regularDaysPerWeek * 52));
+  return roundToDollars((monthlySalary * 12) / (regularDaysPerWeek * 52));
 }
 
 /**
@@ -280,22 +287,22 @@ export function monthlyToDailyRate(
  * Hourly rate = Daily rate ÷ Hours per Day
  */
 export function monthlyToHourlyRate(
-  monthlySalary: number, // cents
+  monthlySalary: number, // dollars (e.g., 1200.00)
   regularHoursPerDay: number = 8,
   regularDaysPerWeek: number = 5
 ): number {
   // MOM formula: Daily rate = (Monthly × 12) / (Days per Week × 52)
   // Hourly rate = Daily rate / Hours per Day
   const dailyRate = monthlyToDailyRate(monthlySalary, regularDaysPerWeek);
-  return Math.round(dailyRate / regularHoursPerDay);
+  return roundToDollars(dailyRate / regularHoursPerDay);
 }
 
 /**
  * Convert daily rate to hourly rate
  */
 export function dailyToHourlyRate(
-  dailyRate: number, // cents
+  dailyRate: number, // dollars (e.g., 120.00)
   regularHoursPerDay: number = 8
 ): number {
-  return Math.round(dailyRate / regularHoursPerDay);
+  return roundToDollars(dailyRate / regularHoursPerDay);
 }

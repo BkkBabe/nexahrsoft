@@ -9,6 +9,40 @@ import { registerUserSchema, loginUserSchema } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { Resend } from "resend";
 
+/**
+ * Helper to convert PostgreSQL numeric strings to numbers.
+ * PostgreSQL numeric type returns strings in JavaScript for precision.
+ * Use this for monetary fields that are stored as numeric(12,2) or similar.
+ * 
+ * IMPORTANT: This function returns 0 for null/undefined values.
+ * If you need to preserve null semantics, use parseNumericOrNull instead.
+ */
+function parseNumeric(value: string | number | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Helper to convert PostgreSQL numeric strings to numbers, preserving null.
+ * Use this when null has semantic meaning (e.g., "not set" vs "set to 0").
+ */
+function parseNumericOrNull(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return value;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Rounds a dollar amount to 2 decimal places using banker's rounding.
+ * Use this for all monetary calculations to maintain consistent precision.
+ */
+function roundToDollars(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 // Initialize Resend email client
 const resend = process.env.RESEND_API ? new Resend(process.env.RESEND_API) : null;
 
@@ -1168,7 +1202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dailyRate: user.dailyRate,
         regularHoursPerDay: user.regularHoursPerDay,
         regularDaysPerWeek: user.regularDaysPerWeek,
-        // Default allowances (cents)
+        // Default allowances (dollars)
         defaultMobileAllowance: user.defaultMobileAllowance,
         defaultTransportAllowance: user.defaultTransportAllowance,
         defaultMealAllowance: user.defaultMealAllowance,
@@ -1197,12 +1231,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sprStartDate: z.string().nullable().optional(),
         // Pay configuration
         payType: z.enum(['monthly', 'hourly', 'daily']).nullable().optional(),
-        basicMonthlySalary: z.number().nullable().optional(), // cents
-        hourlyRate: z.number().nullable().optional(), // cents
-        dailyRate: z.number().nullable().optional(), // cents
+        basicMonthlySalary: z.number().nullable().optional(), // dollars
+        hourlyRate: z.number().nullable().optional(), // dollars
+        dailyRate: z.number().nullable().optional(), // dollars
         regularHoursPerDay: z.number().nullable().optional(),
         regularDaysPerWeek: z.number().nullable().optional(),
-        // Default allowances (cents)
+        // Default allowances (dollars)
         defaultMobileAllowance: z.number().nullable().optional(),
         defaultTransportAllowance: z.number().nullable().optional(),
         defaultMealAllowance: z.number().nullable().optional(),
@@ -3827,20 +3861,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Determine hourly rate based on pay type
         // Executive employees (daysPerWeek = 0) don't need hourly rate calculation
         // Auto-detect pay type based on what's configured (priority: monthly > daily > hourly)
-        let hourlyRate = employee.hourlyRate || 0;
+        // Use parseNumericOrNull to properly distinguish between "not set" (null) and "set to 0"
+        const empHourlyRate = parseNumericOrNull(employee.hourlyRate);
+        const empBasicMonthlySalary = parseNumericOrNull(employee.basicMonthlySalary);
+        const empDailyRate = parseNumericOrNull(employee.dailyRate);
+        
+        let hourlyRate = empHourlyRate ?? 0;
         let payType = employee.payType || 'hourly';
         
-        if (employee.basicMonthlySalary && employee.basicMonthlySalary > 0) {
+        // Only override pay type if the value exists and is positive
+        if (empBasicMonthlySalary !== null && empBasicMonthlySalary > 0) {
           payType = 'monthly';
           if (isExecutive) {
             // Executive: use monthly salary directly, no hourly rate needed
             hourlyRate = 0;
           } else {
-            hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, empHoursPerDay, empDaysPerWeek);
+            hourlyRate = monthlyToHourlyRate(empBasicMonthlySalary, empHoursPerDay, empDaysPerWeek);
           }
-        } else if (employee.dailyRate && employee.dailyRate > 0) {
+        } else if (empDailyRate !== null && empDailyRate > 0) {
           payType = 'daily';
-          hourlyRate = dailyToHourlyRate(employee.dailyRate, empHoursPerDay);
+          hourlyRate = dailyToHourlyRate(empDailyRate, empHoursPerDay);
         }
 
         // Skip if no rate configured (except for Executive employees who use monthly salary)
@@ -3853,8 +3893,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           continue;
         }
         
-        // For Executive, ensure they have basic monthly salary configured
-        if (isExecutive && (!employee.basicMonthlySalary || employee.basicMonthlySalary === 0)) {
+        // For Executive, ensure they have basic monthly salary configured (not null and not 0)
+        if (isExecutive && (empBasicMonthlySalary === null || empBasicMonthlySalary <= 0)) {
           skippedEmployees.push({
             employeeCode: employee.employeeCode || 'N/A',
             employeeName: employee.name,
@@ -4069,17 +4109,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const daysWorked = uniqueDays.size;
 
-        let hourlyRate = employee.hourlyRate || 0;
+        // Use parseNumericOrNull to properly distinguish between "not set" (null) and "set to 0"
+        const empHourlyRateRaw = parseNumericOrNull(employee.hourlyRate);
+        const empMonthlySalaryRaw = parseNumericOrNull(employee.basicMonthlySalary);
+        const empDailyRateRaw = parseNumericOrNull(employee.dailyRate);
+        
+        let hourlyRate = empHourlyRateRaw ?? 0;
         let payType = employee.payType || 'hourly';
         
         // Auto-detect pay type based on what's configured
         // Priority: monthly salary > daily rate > hourly rate
-        if (employee.basicMonthlySalary && employee.basicMonthlySalary > 0) {
+        // Only override if the value exists and is positive
+        if (empMonthlySalaryRaw !== null && empMonthlySalaryRaw > 0) {
           payType = 'monthly';
-          hourlyRate = monthlyToHourlyRate(employee.basicMonthlySalary, regularHoursPerDay, employee.regularDaysPerWeek || regularDaysPerWeek);
-        } else if (employee.dailyRate && employee.dailyRate > 0) {
+          hourlyRate = monthlyToHourlyRate(empMonthlySalaryRaw, regularHoursPerDay, employee.regularDaysPerWeek || regularDaysPerWeek);
+        } else if (empDailyRateRaw !== null && empDailyRateRaw > 0) {
           payType = 'daily';
-          hourlyRate = dailyToHourlyRate(employee.dailyRate, regularHoursPerDay);
+          hourlyRate = dailyToHourlyRate(empDailyRateRaw, regularHoursPerDay);
         }
 
         if (!hourlyRate || hourlyRate === 0) {
@@ -4357,18 +4403,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const recalculate = (record: any) => {
-        const totSalary = record.basicSalary + record.monthlyVariablesComponent;
-        const overtimeTotal = record.flat + record.ot10 + record.ot15 + record.ot20 + record.ot30 + 
-          record.shiftAllowance + record.totRestPhAmount;
-        const allowancesWithCpf = record.mobileAllowance + record.transportAllowance + 
-          record.annualLeaveEncashment + record.serviceCallAllowances;
-        const allowancesWithoutCpf = record.otherAllowance + record.houseRentalAllowances;
-        const grossWages = totSalary + overtimeTotal + allowancesWithCpf + allowancesWithoutCpf + record.bonus;
-        const cpfWages = totSalary + overtimeTotal + allowancesWithCpf + record.bonus;
-        const totalCpf = record.employerCpf + Math.abs(record.employeeCpf);
-        const communityDeductions = record.cc + record.cdac + record.ecf + record.mbmf + record.sinda;
-        const totalDeductions = record.loanRepaymentTotal + record.noPayDay + communityDeductions + Math.abs(record.employeeCpf);
-        const nett = grossWages - totalDeductions;
+        // Parse all numeric fields (database returns strings for numeric type)
+        const basicSalary = parseNumeric(record.basicSalary);
+        const monthlyVariablesComponent = parseNumeric(record.monthlyVariablesComponent);
+        const flat = parseNumeric(record.flat);
+        const ot10 = parseNumeric(record.ot10);
+        const ot15 = parseNumeric(record.ot15);
+        const ot20 = parseNumeric(record.ot20);
+        const ot30 = parseNumeric(record.ot30);
+        const shiftAllowance = parseNumeric(record.shiftAllowance);
+        const totRestPhAmount = parseNumeric(record.totRestPhAmount);
+        const mobileAllowance = parseNumeric(record.mobileAllowance);
+        const transportAllowance = parseNumeric(record.transportAllowance);
+        const annualLeaveEncashment = parseNumeric(record.annualLeaveEncashment);
+        const serviceCallAllowances = parseNumeric(record.serviceCallAllowances);
+        const otherAllowance = parseNumeric(record.otherAllowance);
+        const houseRentalAllowances = parseNumeric(record.houseRentalAllowances);
+        const bonus = parseNumeric(record.bonus);
+        const employerCpf = parseNumeric(record.employerCpf);
+        const employeeCpf = parseNumeric(record.employeeCpf);
+        const cc = parseNumeric(record.cc);
+        const cdac = parseNumeric(record.cdac);
+        const ecf = parseNumeric(record.ecf);
+        const mbmf = parseNumeric(record.mbmf);
+        const sinda = parseNumeric(record.sinda);
+        const loanRepaymentTotal = parseNumeric(record.loanRepaymentTotal);
+        const noPayDay = parseNumeric(record.noPayDay);
+        
+        // Apply consistent 2-decimal rounding to all calculated totals
+        const totSalary = roundToDollars(basicSalary + monthlyVariablesComponent);
+        const overtimeTotal = roundToDollars(flat + ot10 + ot15 + ot20 + ot30 + shiftAllowance + totRestPhAmount);
+        const allowancesWithCpf = roundToDollars(mobileAllowance + transportAllowance + annualLeaveEncashment + serviceCallAllowances);
+        const allowancesWithoutCpf = roundToDollars(otherAllowance + houseRentalAllowances);
+        const grossWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + allowancesWithoutCpf + bonus);
+        const cpfWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + bonus);
+        // Note: employeeCpf is stored as negative, use Math.abs for total
+        const totalCpf = roundToDollars(employerCpf + Math.abs(employeeCpf));
+        const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
+        const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(employeeCpf));
+        const nett = roundToDollars(grossWages - totalDeductions);
         return { totSalary, grossWages, cpfWages, totalCpf, total: grossWages, nett };
       };
       
@@ -4632,8 +4705,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: z.string().optional(),
         hours: z.number().positive().optional(), // Must be > 0 if provided
         days: z.number().positive().optional(), // Must be > 0 if provided
-        rate: z.number().positive().optional(), // Must be > 0 if provided (cents per hour/day)
-        amount: z.number().optional(), // cents for fixed amounts (will be stored as absolute value)
+        rate: z.number().positive().optional(), // Must be > 0 if provided (dollars per hour/day)
+        amount: z.number().optional(), // dollars for fixed amounts (will be stored as absolute value)
         notes: z.string().optional(),
       }).refine(
         (data) => {
@@ -4840,7 +4913,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Calculate daily rate from monthly salary using formula: (Basic × 12) / (daysPerWeek × 52)
-      const basicMonthlySalary = user.basicMonthlySalary || 0; // in cents
+      // Use parseNumericOrNull to properly distinguish between "not set" (null) and "set to 0"
+      const basicMonthlySalaryRaw = parseNumericOrNull(user.basicMonthlySalary);
+      const basicMonthlySalary = basicMonthlySalaryRaw ?? 0; // dollars
       const daysPerWeek = user.regularDaysPerWeek || 5;
       const hoursPerDay = user.regularHoursPerDay || 8;
       const isExecutive = daysPerWeek === 0; // Executive employees don't have daily/hourly rates
@@ -4849,11 +4924,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let dailyRate = 0;
       let hourlyRate = 0;
       
-      if (!isExecutive && daysPerWeek > 0) {
+      if (!isExecutive && daysPerWeek > 0 && basicMonthlySalary > 0) {
         const annualSalary = basicMonthlySalary * 12;
         const workDaysPerYear = daysPerWeek * 52;
-        dailyRate = Math.round(annualSalary / workDaysPerYear); // cents
-        hourlyRate = Math.round(dailyRate / hoursPerDay); // cents
+        dailyRate = annualSalary / workDaysPerYear; // dollars
+        hourlyRate = dailyRate / hoursPerDay; // dollars
       }
       
       // Get attendance records for the period
@@ -4899,8 +4974,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Executive gets full monthly salary
         baseEarnings = basicMonthlySalary;
       } else {
-        baseEarnings = Math.round(regularHours * hourlyRate);
-        autoOvertimePay = Math.round(overtimeHours * hourlyRate * otMultiplier);
+        // Use shared rounding utility for consistent precision
+        baseEarnings = roundToDollars(regularHours * hourlyRate);
+        autoOvertimePay = roundToDollars(overtimeHours * hourlyRate * otMultiplier);
       }
       
       // Get adjustments for this period
@@ -4916,27 +4992,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const adj of adjustments) {
         // Calculate the monetary value from amount or hours*rate
-        const rawValue = adj.amount || (adj.hours && adj.rate ? Math.round(adj.hours * adj.rate) : 0);
-        // Always use absolute value to ensure consistent handling
-        const value = Math.abs(rawValue);
+        // Use parseNumericOrNull to distinguish between "not set" (null) and "set to 0"
+        const adjAmountRaw = parseNumericOrNull(adj.amount);
+        const adjRateRaw = parseNumericOrNull(adj.rate);
         
+        // Prefer explicit amount, fallback to hours*rate calculation
+        let value = 0;
+        if (adjAmountRaw !== null) {
+          value = roundToDollars(adjAmountRaw);
+        } else if (adj.hours && adjRateRaw !== null && adjRateRaw > 0) {
+          value = roundToDollars(adj.hours * adjRateRaw);
+        }
+        
+        // Handle each adjustment type - preserve sign where appropriate
+        // Additions are positive, deductions stored as positive but treated as subtractions
         switch (adj.adjustmentType) {
           case 'overtime':
-            totalOvertimeFromAdj += value;
+            totalOvertimeFromAdj += Math.abs(value); // OT is always positive
             break;
           case 'claim':
           case 'other':
-            // Other adjustments can be positive (additions) - use raw value but ensure positive
-            totalClaims += value;
+            // Claims/other can be positive (additions) - use as-is
+            totalClaims += value > 0 ? value : 0;
             break;
           case 'advance':
           case 'deduction':
           case 'late_hours':
-            // Deductions are always subtracted, use absolute value
-            totalDeductions += value;
+            // Deductions stored as positive values, treated as subtractions
+            totalDeductions += Math.abs(value);
             break;
           case 'bonus':
-            totalBonus += value;
+            totalBonus += Math.abs(value); // Bonus is always positive
             break;
           case 'mc_days':
             totalMcDays += Math.abs(adj.days || 0);
@@ -4947,8 +5033,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Calculate leave pay (paid at daily rate)
-      const leavePay = Math.round((totalMcDays + totalAlDays) * dailyRate);
+      // Calculate leave pay (paid at daily rate) - use shared rounding utility
+      const leavePay = roundToDollars((totalMcDays + totalAlDays) * dailyRate);
       
       // Calculate totals
       const totalOvertimePay = autoOvertimePay + totalOvertimeFromAdj;
