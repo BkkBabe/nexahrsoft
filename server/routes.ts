@@ -4726,29 +4726,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         payPeriodYear: z.number().min(2000).max(2100),
         payPeriodMonth: z.number().min(1).max(12),
         adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other']),
-        description: z.string().optional(),
-        hours: z.number().positive().optional(), // Must be > 0 if provided
-        days: z.number().positive().optional(), // Must be > 0 if provided
-        rate: z.number().positive().optional(), // Must be > 0 if provided (dollars per hour/day)
-        amount: z.number().optional(), // dollars for fixed amounts (will be stored as absolute value)
-        notes: z.string().optional(),
-      }).refine(
-        (data) => {
-          // Must have either (hours and rate) OR amount, with at least one being positive
-          const hasHoursRate = (data.hours !== undefined && data.hours > 0) && 
-                               (data.rate !== undefined && data.rate > 0);
-          const hasAmount = data.amount !== undefined && Math.abs(data.amount) > 0;
-          const hasDays = data.days !== undefined && data.days > 0;
-          // For day-based adjustments (mc_days, al_days), days is sufficient
-          if (data.adjustmentType === 'mc_days' || data.adjustmentType === 'al_days') {
-            return hasDays;
-          }
-          return hasHoursRate || hasAmount;
-        },
-        {
-          message: "Must provide either (hours and rate) or a non-zero amount",
-        }
-      );
+        description: z.string().optional().nullable(),
+        hours: z.number().positive().optional().nullable(), // Must be > 0 if provided
+        days: z.number().positive().optional().nullable(), // Must be > 0 if provided
+        rate: z.union([z.number().positive(), z.string()]).optional().nullable(), // Must be > 0 if provided (dollars per hour/day)
+        amount: z.union([z.number(), z.string()]).optional().nullable(), // dollars for fixed amounts
+        notes: z.string().optional().nullable(),
+        status: z.enum(['pending', 'approved']).optional(), // Allow direct approval
+      });
       
       const data = schema.parse(req.body);
       
@@ -4763,19 +4748,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Ensure all amounts are stored as positive values
+      // Parse and ensure all amounts are stored as positive values
+      const parseNum = (val: number | string | null | undefined): number | undefined => {
+        if (val === null || val === undefined) return undefined;
+        const num = typeof val === 'string' ? parseFloat(val) : val;
+        return isNaN(num) ? undefined : Math.abs(num);
+      };
+      
       const adjustedData = {
-        ...data,
-        amount: data.amount !== undefined ? Math.abs(data.amount) : undefined,
-        hours: data.hours !== undefined ? Math.abs(data.hours) : undefined,
-        days: data.days !== undefined ? Math.abs(data.days) : undefined,
-        rate: data.rate !== undefined ? Math.abs(data.rate) : undefined,
+        userId: data.userId,
+        payPeriodYear: data.payPeriodYear,
+        payPeriodMonth: data.payPeriodMonth,
+        adjustmentType: data.adjustmentType,
+        description: data.description || null,
+        notes: data.notes || null,
+        amount: parseNum(data.amount) !== undefined ? toNumericString(parseNum(data.amount)!) : null,
+        hours: parseNum(data.hours) ?? null,
+        days: parseNum(data.days) ?? null,
+        rate: parseNum(data.rate) !== undefined ? toNumericString(parseNum(data.rate)!) : null,
       };
       
       const adjustment = await storage.createPayrollAdjustment({
         ...adjustedData,
         createdBy,
-        status: 'pending',
+        status: data.status || 'pending',
       });
       
       // Create audit log entry
@@ -4784,8 +4780,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: 'created',
         changedBy: createdBy,
         newValue: JSON.stringify(data),
-        notes: data.notes,
+        notes: data.notes || null,
       });
+      
+      // Note: Adjustments are tracked for reporting purposes but don't automatically 
+      // modify payroll totals. Admin should regenerate payroll if needed.
       
       res.json({ adjustment, message: "Adjustment created successfully" });
     } catch (error) {
@@ -4909,12 +4908,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Adjustment not found" });
       }
       
-      // Only allow deleting pending adjustments
-      if (adjustment.status !== 'pending') {
-        return res.status(400).json({ message: "Can only delete pending adjustments" });
-      }
-      
       await storage.deletePayrollAdjustment(id);
+      
+      // Note: Adjustments are tracked for reporting purposes but don't automatically 
+      // modify payroll totals. Admin should regenerate payroll if needed.
       
       res.json({ message: "Adjustment deleted successfully" });
     } catch (error) {

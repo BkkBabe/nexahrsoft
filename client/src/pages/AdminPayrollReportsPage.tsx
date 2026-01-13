@@ -12,6 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
 import PayslipView from "@/components/PayslipView";
 import EditPayslipModal from "@/components/EditPayslipModal";
+import PayrollAdjustmentsDialog from "@/components/PayrollAdjustmentsDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -136,6 +137,10 @@ export default function AdminPayrollReportsPage() {
   const [newUserForm, setNewUserForm] = useState<NewUserForm>(initialFormState);
   const [createdUserInfo, setCreatedUserInfo] = useState<{ username: string; password: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  
+  // Adjustments dialog state
+  const [adjustmentsDialogOpen, setAdjustmentsDialogOpen] = useState(false);
+  const [adjustmentsRecord, setAdjustmentsRecord] = useState<PayrollRecord | null>(null);
 
   const buildQueryUrl = () => {
     let url = `/api/admin/payroll/records?year=${selectedYear}`;
@@ -1007,6 +1012,26 @@ export default function AdminPayrollReportsPage() {
                               variant="outline"
                               onClick={() => {
                                 if (row.userId) {
+                                  setAdjustmentsRecord(row);
+                                  setAdjustmentsDialogOpen(true);
+                                } else {
+                                  toast({
+                                    title: "Cannot Add Adjustments",
+                                    description: "This payroll record is not linked to an employee account.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                              data-testid={`button-adjustments-payslip-${idx}`}
+                            >
+                              <ClipboardEdit className="h-4 w-4 mr-1" />
+                              Adjustments
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (row.userId) {
                                   setLocation(`/admin/payroll/employees?employeeId=${row.userId}`);
                                 } else {
                                   toast({
@@ -1090,6 +1115,13 @@ export default function AdminPayrollReportsPage() {
             exact: false,
           });
         }}
+      />
+
+      {/* Payroll Adjustments Dialog */}
+      <PayrollAdjustmentsDialog
+        open={adjustmentsDialogOpen}
+        onOpenChange={setAdjustmentsDialogOpen}
+        record={adjustmentsRecord}
       />
     </div>
   );
