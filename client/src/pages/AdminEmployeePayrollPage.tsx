@@ -168,10 +168,28 @@ export default function AdminEmployeePayrollPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [urlParamProcessed, setUrlParamProcessed] = useState(false);
 
   const { data: employeeList, isLoading: isLoadingList, error: listError } = useQuery<{ employees: EmployeePayrollSummary[] }>({
     queryKey: ["/api/admin/employees/payroll-list"],
   });
+
+  // Check for employeeId query parameter to auto-open edit dialog
+  useEffect(() => {
+    if (!urlParamProcessed && employeeList?.employees) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const employeeId = urlParams.get('employeeId');
+      if (employeeId) {
+        // Verify the employee exists in the list
+        const employee = employeeList.employees.find(emp => emp.id === employeeId);
+        if (employee) {
+          setSelectedEmployeeId(employeeId);
+          setEditDialogOpen(true);
+        }
+        setUrlParamProcessed(true);
+      }
+    }
+  }, [employeeList, urlParamProcessed]);
 
   const filteredEmployees = employeeList?.employees?.filter(emp => {
     const search = searchTerm.toLowerCase();

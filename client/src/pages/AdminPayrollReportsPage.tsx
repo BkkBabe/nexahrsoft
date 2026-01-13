@@ -314,25 +314,25 @@ export default function AdminPayrollReportsPage() {
         escapeCsvField(r.employeeName),
         escapeCsvField(r.deptName || ""),
         escapeCsvField(r.secName || ""),
-        (r.basicSalary / 100).toFixed(2),
-        (r.totSalary / 100).toFixed(2),
-        (r.ot10 / 100).toFixed(2),
-        (r.ot15 / 100).toFixed(2),
-        (r.ot20 / 100).toFixed(2),
-        (r.ot30 / 100).toFixed(2),
-        (r.shiftAllowance / 100).toFixed(2),
-        (r.mobileAllowance / 100).toFixed(2),
-        (r.transportAllowance / 100).toFixed(2),
-        (r.annualLeaveEncashment / 100).toFixed(2),
-        (r.otherAllowance / 100).toFixed(2),
-        (r.bonus / 100).toFixed(2),
-        (r.grossWages / 100).toFixed(2),
-        (r.cpfWages / 100).toFixed(2),
-        (r.employerCpf / 100).toFixed(2),
-        (r.employeeCpf / 100).toFixed(2),
-        (r.noPayDay / 100).toFixed(2),
-        (r.loanRepaymentTotal / 100).toFixed(2),
-        (r.nett / 100).toFixed(2),
+        parseAmount(r.basicSalary).toFixed(2),
+        parseAmount(r.totSalary).toFixed(2),
+        parseAmount(r.ot10).toFixed(2),
+        parseAmount(r.ot15).toFixed(2),
+        parseAmount(r.ot20).toFixed(2),
+        parseAmount(r.ot30).toFixed(2),
+        parseAmount(r.shiftAllowance).toFixed(2),
+        parseAmount(r.mobileAllowance).toFixed(2),
+        parseAmount(r.transportAllowance).toFixed(2),
+        parseAmount(r.annualLeaveEncashment).toFixed(2),
+        parseAmount(r.otherAllowance).toFixed(2),
+        parseAmount(r.bonus).toFixed(2),
+        parseAmount(r.grossWages).toFixed(2),
+        parseAmount(r.cpfWages).toFixed(2),
+        parseAmount(r.employerCpf).toFixed(2),
+        parseAmount(r.employeeCpf).toFixed(2),
+        parseAmount(r.noPayDay).toFixed(2),
+        parseAmount(r.loanRepaymentTotal).toFixed(2),
+        parseAmount(r.nett).toFixed(2),
         escapeCsvField(r.payMode || ""),
       ];
       csvRows.push(row.join(","));
@@ -942,10 +942,10 @@ export default function AdminPayrollReportsPage() {
                         <td className="p-2 text-right font-mono" data-testid={`cell-gross-${idx}`}>{formatCurrency(row.grossWages)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-cpf-${idx}`}>{formatCurrency(row.employeeCpf)}</td>
                         <td className="p-2 text-right font-mono text-green-600 dark:text-green-400" data-testid={`cell-encash-${idx}`}>
-                          {row.annualLeaveEncashment > 0 ? formatCurrency(row.annualLeaveEncashment) : '-'}
+                          {parseAmount(row.annualLeaveEncashment) > 0 ? formatCurrency(row.annualLeaveEncashment) : '-'}
                         </td>
                         <td className="p-2 text-right font-mono text-red-600 dark:text-red-400" data-testid={`cell-nopay-${idx}`}>
-                          {row.noPayDay > 0 ? formatCurrency(row.noPayDay) : '-'}
+                          {parseAmount(row.noPayDay) > 0 ? formatCurrency(row.noPayDay) : '-'}
                         </td>
                         <td className="p-2 text-right font-mono font-medium" data-testid={`cell-nett-${idx}`}>{formatCurrency(row.nett)}</td>
                         <td className="p-2 text-center">
@@ -966,13 +966,20 @@ export default function AdminPayrollReportsPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setEditRecord(row);
-                                setEditModalOpen(true);
+                                if (row.userId) {
+                                  setLocation(`/admin/payroll/employees?employeeId=${row.userId}`);
+                                } else {
+                                  toast({
+                                    title: "Cannot Edit",
+                                    description: "This payroll record is not linked to an employee account.",
+                                    variant: "destructive",
+                                  });
+                                }
                               }}
                               data-testid={`button-edit-payslip-${idx}`}
                             >
-                              <Pencil className="h-4 w-4 mr-1" />
-                              Edit
+                              <Settings className="h-4 w-4 mr-1" />
+                              Settings
                             </Button>
                           </div>
                         </td>
