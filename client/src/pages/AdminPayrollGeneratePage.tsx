@@ -28,28 +28,33 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const MONTHS = [
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
-];
+const MONTH_NAMES: Record<number, string> = {
+  1: "January", 2: "February", 3: "March", 4: "April",
+  5: "May", 6: "June", 7: "July", 8: "August",
+  9: "September", 10: "October", 11: "November", 12: "December"
+};
 
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 
-const YEARS = Array.from({ length: 5 }, (_, i) => ({
-  value: String(currentYear - i),
-  label: String(currentYear - i),
-}));
+const generatePeriodOptions = () => {
+  const options: { value: string; label: string }[] = [];
+  
+  for (let yearOffset = 0; yearOffset < 3; yearOffset++) {
+    const year = currentYear - yearOffset;
+    const startMonth = yearOffset === 0 ? currentMonth : 12;
+    for (let month = startMonth; month >= 1; month--) {
+      options.push({ 
+        value: `${year}-${month}`, 
+        label: `${MONTH_NAMES[month]} ${year}` 
+      });
+    }
+  }
+  
+  return options;
+};
+
+const PERIOD_OPTIONS = generatePeriodOptions();
 
 interface PreviewEmployee {
   employeeCode: string;
@@ -100,16 +105,22 @@ function formatHours(hours: number): string {
 export default function AdminPayrollGeneratePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
-  const [selectedMonth, setSelectedMonth] = useState<string>(String(currentMonth));
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(`${currentYear}-${currentMonth}`);
   const [previewData, setPreviewData] = useState<PreviewResponse | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  
+  const parsePeriod = (period: string) => {
+    const [year, month] = period.split('-');
+    return { year: parseInt(year), month: parseInt(month) };
+  };
+  
+  const { year: selectedYear, month: selectedMonth } = parsePeriod(selectedPeriod);
 
   const previewMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/admin/payroll/generate/preview", {
-        year: parseInt(selectedYear),
-        month: parseInt(selectedMonth),
+        year: selectedYear,
+        month: selectedMonth,
       });
       return response.json();
     },
@@ -135,8 +146,8 @@ export default function AdminPayrollGeneratePage() {
   const generateMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/admin/payroll/generate", {
-        year: parseInt(selectedYear),
-        month: parseInt(selectedMonth),
+        year: selectedYear,
+        month: selectedMonth,
       });
       return response.json();
     },
@@ -207,30 +218,15 @@ export default function AdminPayrollGeneratePage() {
         <CardContent>
           <div className="flex flex-wrap gap-4 items-end">
             <div className="space-y-2">
-              <Label>Year</Label>
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger className="w-32" data-testid="select-year">
-                  <SelectValue placeholder="Year" />
+              <Label>Pay Period</Label>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-48" data-testid="select-period">
+                  <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
-                  {YEARS.map((year) => (
-                    <SelectItem key={year.value} value={year.value}>
-                      {year.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Month</Label>
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-40" data-testid="select-month">
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map((month) => (
-                    <SelectItem key={month.value} value={month.value}>
-                      {month.label}
+                  {PERIOD_OPTIONS.map((period) => (
+                    <SelectItem key={period.value} value={period.value}>
+                      {period.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
