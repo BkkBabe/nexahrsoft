@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { FaviconUpdater } from "@/components/FaviconUpdater";
+import { InactivityWrapper } from "@/components/InactivityWrapper";
 import Dashboard from "@/pages/Dashboard";
 import AttendancePage from "@/pages/AttendancePage";
 import LeavePage from "@/pages/LeavePage";
@@ -268,7 +269,9 @@ export default function App() {
       <TooltipProvider>
         <ThemeProvider>
           <FaviconUpdater />
-          <Router />
+          <InactivityWrapper>
+            <Router />
+          </InactivityWrapper>
           <Toaster />
         </ThemeProvider>
       </TooltipProvider>
