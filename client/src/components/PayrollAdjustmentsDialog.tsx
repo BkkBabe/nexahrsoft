@@ -306,10 +306,15 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                         <div className="space-y-2">
                           <Label>Hours</Label>
                           <Input
-                            type="number"
-                            step="0.5"
+                            type="text"
+                            inputMode="decimal"
                             value={newAdjustment.hours}
-                            onChange={(e) => setNewAdjustment(prev => ({ ...prev, hours: e.target.value }))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setNewAdjustment(prev => ({ ...prev, hours: value }));
+                              }
+                            }}
                             placeholder="0.0"
                             data-testid="input-adjustment-hours"
                           />
@@ -320,10 +325,15 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                         <div className="space-y-2">
                           <Label>Days</Label>
                           <Input
-                            type="number"
-                            step="0.5"
+                            type="text"
+                            inputMode="decimal"
                             value={newAdjustment.days}
-                            onChange={(e) => setNewAdjustment(prev => ({ ...prev, days: e.target.value }))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setNewAdjustment(prev => ({ ...prev, days: value }));
+                              }
+                            }}
                             placeholder="0.0"
                             data-testid="input-adjustment-days"
                           />
@@ -334,10 +344,15 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                         <div className="space-y-2">
                           <Label>Rate ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             value={newAdjustment.rate}
-                            onChange={(e) => setNewAdjustment(prev => ({ ...prev, rate: e.target.value }))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setNewAdjustment(prev => ({ ...prev, rate: value }));
+                              }
+                            }}
                             placeholder="0.00"
                             data-testid="input-adjustment-rate"
                           />
@@ -348,10 +363,15 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                         <div className="space-y-2">
                           <Label>Amount ($)</Label>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             value={newAdjustment.amount}
-                            onChange={(e) => setNewAdjustment(prev => ({ ...prev, amount: e.target.value }))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setNewAdjustment(prev => ({ ...prev, amount: value }));
+                              }
+                            }}
                             placeholder="0.00"
                             data-testid="input-adjustment-amount"
                           />
