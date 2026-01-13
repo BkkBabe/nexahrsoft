@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, integer, real, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer, real, unique, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -32,20 +32,20 @@ export const users = pgTable("users", {
   birthDate: text("birth_date"), // YYYY-MM-DD format for age-based CPF calculations
   residencyStatus: text("residency_status"), // 'SC' (Singapore Citizen), 'SPR' (Permanent Resident), 'FOREIGNER'
   sprStartDate: text("spr_start_date"), // YYYY-MM-DD when SPR status started (for graduated rates)
-  basicMonthlySalary: integer("basic_monthly_salary"), // cents - for monthly-paid employees
-  hourlyRate: integer("hourly_rate"), // cents - for hourly-paid employees
-  dailyRate: integer("daily_rate"), // cents - for daily-paid employees
+  basicMonthlySalary: numeric("basic_monthly_salary", { precision: 12, scale: 2 }), // dollars (e.g., 1200.00)
+  hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }), // dollars (e.g., 15.50)
+  dailyRate: numeric("daily_rate", { precision: 10, scale: 2 }), // dollars (e.g., 120.00)
   payType: text("pay_type"), // 'monthly', 'hourly', 'daily'
   regularHoursPerDay: real("regular_hours_per_day").default(8), // Standard work hours before OT kicks in
-  // Default allowances (cents) - used as defaults when generating payroll
-  defaultMobileAllowance: integer("default_mobile_allowance").default(0),
-  defaultTransportAllowance: integer("default_transport_allowance").default(0),
-  defaultMealAllowance: integer("default_meal_allowance").default(0),
-  defaultShiftAllowance: integer("default_shift_allowance").default(0),
-  defaultOtherAllowance: integer("default_other_allowance").default(0),
-  defaultHouseRentalAllowance: integer("default_house_rental_allowance").default(0),
-  // Salary adjustment (cents) - recurring adjustment added to basic salary
-  salaryAdjustment: integer("salary_adjustment").default(0),
+  // Default allowances (dollars) - used as defaults when generating payroll
+  defaultMobileAllowance: numeric("default_mobile_allowance", { precision: 10, scale: 2 }).default("0"),
+  defaultTransportAllowance: numeric("default_transport_allowance", { precision: 10, scale: 2 }).default("0"),
+  defaultMealAllowance: numeric("default_meal_allowance", { precision: 10, scale: 2 }).default("0"),
+  defaultShiftAllowance: numeric("default_shift_allowance", { precision: 10, scale: 2 }).default("0"),
+  defaultOtherAllowance: numeric("default_other_allowance", { precision: 10, scale: 2 }).default("0"),
+  defaultHouseRentalAllowance: numeric("default_house_rental_allowance", { precision: 10, scale: 2 }).default("0"),
+  // Salary adjustment (dollars) - recurring adjustment added to basic salary
+  salaryAdjustment: numeric("salary_adjustment", { precision: 10, scale: 2 }).default("0"),
   salaryAdjustmentReason: text("salary_adjustment_reason"),
   // Work schedule - for salary calculations
   regularDaysPerWeek: real("regular_days_per_week").default(5), // 5 or 5.5 days per week
@@ -296,7 +296,7 @@ export const leaveHistory = pgTable("leave_history", {
   dayOfWeek: text("day_of_week"), // Monday, Tuesday, etc.
   remarks: text("remarks"),
   daysOrHours: text("days_or_hours").notNull().default("1.00 day"), // "1.00 day" or "4.00 hr"
-  mlClaimAmount: integer("ml_claim_amount").default(0), // cents for medical leave claims
+  mlClaimAmount: numeric("ml_claim_amount", { precision: 10, scale: 2 }).default("0"), // dollars for medical leave claims
   year: integer("year").notNull(), // Year of the leave
   importedAt: timestamp("imported_at").notNull().defaultNow(),
 });
@@ -375,65 +375,65 @@ export const payrollRecords = pgTable("payroll_records", {
   nric: text("nric"),
   joinDate: text("join_date"),
   
-  // Salary Components (stored as cents to avoid floating point issues)
-  totSalary: integer("tot_salary").notNull().default(0), // cents
-  basicSalary: integer("basic_salary").notNull().default(0), // cents
-  monthlyVariablesComponent: integer("monthly_variables_component").notNull().default(0), // cents
+  // Salary Components (stored as dollars, e.g., 1200.00)
+  totSalary: numeric("tot_salary", { precision: 12, scale: 2 }).notNull().default("0"),
+  basicSalary: numeric("basic_salary", { precision: 12, scale: 2 }).notNull().default("0"),
+  monthlyVariablesComponent: numeric("monthly_variables_component", { precision: 12, scale: 2 }).notNull().default("0"),
   
   // Overtime
-  flat: integer("flat").notNull().default(0), // cents
-  ot10: integer("ot10").notNull().default(0), // cents - OT 1.0x
-  ot15: integer("ot15").notNull().default(0), // cents - OT 1.5x
-  ot20: integer("ot20").notNull().default(0), // cents - OT 2.0x
-  ot30: integer("ot30").notNull().default(0), // cents - OT 3.0x
-  shiftAllowance: integer("shift_allowance").notNull().default(0), // cents
-  totRestPhAmount: integer("tot_rest_ph_amount").notNull().default(0), // cents - Rest/PH Amount
+  flat: numeric("flat", { precision: 12, scale: 2 }).notNull().default("0"),
+  ot10: numeric("ot10", { precision: 12, scale: 2 }).notNull().default("0"), // OT 1.0x
+  ot15: numeric("ot15", { precision: 12, scale: 2 }).notNull().default("0"), // OT 1.5x
+  ot20: numeric("ot20", { precision: 12, scale: 2 }).notNull().default("0"), // OT 2.0x
+  ot30: numeric("ot30", { precision: 12, scale: 2 }).notNull().default("0"), // OT 3.0x
+  shiftAllowance: numeric("shift_allowance", { precision: 12, scale: 2 }).notNull().default("0"),
+  totRestPhAmount: numeric("tot_rest_ph_amount", { precision: 12, scale: 2 }).notNull().default("0"), // Rest/PH Amount
   
   // Allowances with CPF (Ordinary)
-  mobileAllowance: integer("mobile_allowance").notNull().default(0), // cents
-  transportAllowance: integer("transport_allowance").notNull().default(0), // cents
+  mobileAllowance: numeric("mobile_allowance", { precision: 12, scale: 2 }).notNull().default("0"),
+  transportAllowance: numeric("transport_allowance", { precision: 12, scale: 2 }).notNull().default("0"),
   
   // Allowances with CPF (Additional)
-  annualLeaveEncashment: integer("annual_leave_encashment").notNull().default(0), // cents
-  serviceCallAllowances: integer("service_call_allowances").notNull().default(0), // cents
+  annualLeaveEncashment: numeric("annual_leave_encashment", { precision: 12, scale: 2 }).notNull().default("0"),
+  serviceCallAllowances: numeric("service_call_allowances", { precision: 12, scale: 2 }).notNull().default("0"),
   
   // Allowances without CPF
-  otherAllowance: integer("other_allowance").notNull().default(0), // cents
-  houseRentalAllowances: integer("house_rental_allowances").notNull().default(0), // cents
+  otherAllowance: numeric("other_allowance", { precision: 12, scale: 2 }).notNull().default("0"),
+  houseRentalAllowances: numeric("house_rental_allowances", { precision: 12, scale: 2 }).notNull().default("0"),
   
   // Deductions - Loan Repayments (combined into single field as JSON or total)
-  loanRepaymentTotal: integer("loan_repayment_total").notNull().default(0), // cents - total of all loans
+  loanRepaymentTotal: numeric("loan_repayment_total", { precision: 12, scale: 2 }).notNull().default("0"), // total of all loans
   loanRepaymentDetails: text("loan_repayment_details"), // JSON string with breakdown if needed
   
   // Deductions without CPF
-  noPayDay: integer("no_pay_day").notNull().default(0), // cents - deduction for unpaid leave
+  noPayDay: numeric("no_pay_day", { precision: 12, scale: 2 }).notNull().default("0"), // deduction for unpaid leave
   
   // Community Contributions
-  cc: integer("cc").notNull().default(0), // cents - Chinese Development Assistance Council
-  cdac: integer("cdac").notNull().default(0), // cents
-  ecf: integer("ecf").notNull().default(0), // cents - Eurasian Community Fund
-  mbmf: integer("mbmf").notNull().default(0), // cents - Mosque Building & Mendaki Fund
-  sinda: integer("sinda").notNull().default(0), // cents - Singapore Indian Development Association
+  cc: numeric("cc", { precision: 12, scale: 2 }).notNull().default("0"), // Chinese Development Assistance Council
+  cdac: numeric("cdac", { precision: 12, scale: 2 }).notNull().default("0"),
+  ecf: numeric("ecf", { precision: 12, scale: 2 }).notNull().default("0"), // Eurasian Community Fund
+  mbmf: numeric("mbmf", { precision: 12, scale: 2 }).notNull().default("0"), // Mosque Building & Mendaki Fund
+  sinda: numeric("sinda", { precision: 12, scale: 2 }).notNull().default("0"), // Singapore Indian Development Association
   
   // Bonus
-  bonus: integer("bonus").notNull().default(0), // cents
+  bonus: numeric("bonus", { precision: 12, scale: 2 }).notNull().default("0"),
   
   // Totals
-  grossWages: integer("gross_wages").notNull().default(0), // cents
-  cpfWages: integer("cpf_wages").notNull().default(0), // cents
+  grossWages: numeric("gross_wages", { precision: 12, scale: 2 }).notNull().default("0"),
+  cpfWages: numeric("cpf_wages", { precision: 12, scale: 2 }).notNull().default("0"),
   
   // Levies
-  sdf: integer("sdf").notNull().default(0), // cents - Skills Development Fund
-  fwl: integer("fwl").notNull().default(0), // cents - Foreign Worker Levy
+  sdf: numeric("sdf", { precision: 12, scale: 2 }).notNull().default("0"), // Skills Development Fund
+  fwl: numeric("fwl", { precision: 12, scale: 2 }).notNull().default("0"), // Foreign Worker Levy
   
   // CPF Contributions
-  employerCpf: integer("employer_cpf").notNull().default(0), // cents
-  employeeCpf: integer("employee_cpf").notNull().default(0), // cents (stored as negative)
-  totalCpf: integer("total_cpf").notNull().default(0), // cents - total CPF contribution
+  employerCpf: numeric("employer_cpf", { precision: 12, scale: 2 }).notNull().default("0"),
+  employeeCpf: numeric("employee_cpf", { precision: 12, scale: 2 }).notNull().default("0"), // stored as negative
+  totalCpf: numeric("total_cpf", { precision: 12, scale: 2 }).notNull().default("0"), // total CPF contribution
   
   // Final Amounts
-  total: integer("total").notNull().default(0), // cents - total before deductions
-  nett: integer("nett").notNull().default(0), // cents - final take-home pay
+  total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"), // total before deductions
+  nett: numeric("nett", { precision: 12, scale: 2 }).notNull().default("0"), // final take-home pay
   
   // Payment Info
   payMode: text("pay_mode"), // 'BANK DISK', 'CASH', 'CHEQUE'
@@ -506,10 +506,10 @@ export const payrollLoanAccounts = pgTable("payroll_loan_accounts", {
   employeeName: text("employee_name").notNull(),
   loanType: text("loan_type").notNull(), // 'salary_advance', 'company_loan', 'personal_loan', etc.
   loanDescription: text("loan_description"),
-  principalAmount: integer("principal_amount").notNull(), // cents - original loan amount
-  outstandingBalance: integer("outstanding_balance").notNull(), // cents - remaining balance
-  monthlyRepayment: integer("monthly_repayment").notNull().default(0), // cents - monthly deduction amount
-  interestRate: integer("interest_rate").notNull().default(0), // basis points (100 = 1%)
+  principalAmount: numeric("principal_amount", { precision: 12, scale: 2 }).notNull(), // dollars - original loan amount
+  outstandingBalance: numeric("outstanding_balance", { precision: 12, scale: 2 }).notNull(), // dollars - remaining balance
+  monthlyRepayment: numeric("monthly_repayment", { precision: 12, scale: 2 }).notNull().default("0"), // dollars - monthly deduction amount
+  interestRate: numeric("interest_rate", { precision: 6, scale: 4 }).notNull().default("0"), // percentage (e.g., 1.5 = 1.5%)
   startDate: text("start_date").notNull(), // YYYY-MM-DD
   endDate: text("end_date"), // YYYY-MM-DD expected payoff date
   status: text("status").notNull().default("active"), // 'active', 'paid_off', 'written_off', 'suspended'
@@ -533,7 +533,7 @@ export const payrollLoanRepayments = pgTable("payroll_loan_repayments", {
   loanAccountId: varchar("loan_account_id").notNull().references(() => payrollLoanAccounts.id),
   payPeriodYear: integer("pay_period_year").notNull(),
   payPeriodMonth: integer("pay_period_month").notNull(),
-  repaymentAmount: integer("repayment_amount").notNull(), // cents
+  repaymentAmount: numeric("repayment_amount", { precision: 12, scale: 2 }).notNull(), // dollars
   repaymentType: text("repayment_type").notNull().default("payroll_deduction"), // 'payroll_deduction', 'manual_payment', 'adjustment'
   notes: text("notes"),
   processedAt: timestamp("processed_at").notNull().defaultNow(),
@@ -581,8 +581,8 @@ export const payrollAdjustments = pgTable("payroll_adjustments", {
   // Amounts
   hours: real("hours"), // For OT, late hours
   days: real("days"), // For MC, AL days
-  amount: integer("amount"), // cents - for claims, advances, fixed amounts
-  rate: integer("rate"), // cents - custom rate (e.g., OT hourly rate override)
+  amount: numeric("amount", { precision: 12, scale: 2 }), // dollars - for claims, advances, fixed amounts
+  rate: numeric("rate", { precision: 10, scale: 2 }), // dollars - custom rate (e.g., OT hourly rate override)
   rateMultiplier: real("rate_multiplier"), // e.g., 1.5 for OT, null to use employee's calculated rate
   
   // Descriptions
@@ -634,7 +634,7 @@ export const employeeSalaryAdjustments = pgTable("employee_salary_adjustments", 
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   adjustmentType: text("adjustment_type").notNull(), // 'addition' or 'deduction'
-  amount: integer("amount").notNull(), // cents
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(), // dollars (e.g., 50.00)
   description: text("description").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: text("created_by").notNull(),
