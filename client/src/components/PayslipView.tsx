@@ -1,12 +1,41 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Printer } from "lucide-react";
+import { Eye, EyeOff, Printer, Settings2 } from "lucide-react";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
+import PayrollAdjustmentsDialog from "./PayrollAdjustmentsDialog";
+
+interface PayrollAdjustment {
+  id: string;
+  userId: string;
+  payPeriodYear: number;
+  payPeriodMonth: number;
+  adjustmentType: string;
+  description: string | null;
+  hours: number | null;
+  days: number | null;
+  rate: string | null;
+  amount: string | null;
+  notes: string | null;
+  status: string;
+}
+
+const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
+  overtime: "Overtime",
+  mc_days: "MC Days",
+  al_days: "Annual Leave Days",
+  late_hours: "Late Hours Deduction",
+  advance: "Salary Advance",
+  claim: "Expense Claim",
+  deduction: "Other Deduction",
+  bonus: "Bonus",
+  other: "Other Adjustment",
+};
 
 interface PayslipViewProps {
   record: PayrollRecord;
@@ -136,7 +165,29 @@ export default function PayslipView({
   onPrint,
 }: PayslipViewProps) {
   const [viewMode, setViewMode] = useState<"employee" | "employer">(defaultMode);
+  const [adjustmentsDialogOpen, setAdjustmentsDialogOpen] = useState(false);
   const isEmployerView = viewMode === "employer";
+
+  const { data: adjustmentsData } = useQuery<{ adjustments: PayrollAdjustment[] }>({
+    queryKey: ['/api/admin/payroll/adjustments', record?.userId, record?.payPeriodYear, record?.payPeriodMonth],
+    queryFn: async () => {
+      if (!record?.userId) return { adjustments: [] };
+      const res = await fetch(
+        `/api/admin/payroll/adjustments?userId=${record.userId}&year=${record.payPeriodYear}&month=${record.payPeriodMonth}`,
+        { credentials: 'include' }
+      );
+      if (!res.ok) return { adjustments: [] };
+      return res.json();
+    },
+    enabled: !!record?.userId,
+  });
+
+  const adjustments = adjustmentsData?.adjustments || [];
+  const totalAdjustments = adjustments.reduce((sum, adj) => {
+    const amount = parseAmount(adj.amount);
+    const isDeduction = ['late_hours', 'advance', 'deduction'].includes(adj.adjustmentType);
+    return sum + (isDeduction ? -amount : amount);
+  }, 0);
 
   const totalOvertimeAllowances =
     parseAmount(record.flat) +
@@ -356,9 +407,41 @@ export default function PayslipView({
         )}
 
         {/* Section D: Adjustments */}
-        <Section title="Adjustments" sectionLetter="D">
-          <div className="text-sm text-muted-foreground print:text-xs">
-            No adjustments for this period
+        <Section 
+          title="Adjustments" 
+          sectionLetter="D"
+          subtotal={adjustments.length > 0 ? { label: "Total Adjustments", value: totalAdjustments } : undefined}
+        >
+          {adjustments.length > 0 ? (
+            <>
+              {adjustments.map((adj) => {
+                const isDeduction = ['late_hours', 'advance', 'deduction'].includes(adj.adjustmentType);
+                const label = adj.description || ADJUSTMENT_TYPE_LABELS[adj.adjustmentType] || adj.adjustmentType;
+                return (
+                  <LineItem
+                    key={adj.id}
+                    label={label}
+                    value={adj.amount}
+                    isNegative={isDeduction}
+                  />
+                );
+              })}
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground print:text-xs">
+              No adjustments for this period
+            </div>
+          )}
+          <div className="print:hidden mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAdjustmentsDialogOpen(true)}
+              data-testid="button-adjustments"
+            >
+              <Settings2 className="h-4 w-4 mr-2" />
+              Adjustments
+            </Button>
           </div>
         </Section>
 
@@ -438,6 +521,12 @@ export default function PayslipView({
           </div>
         )}
       </CardContent>
+
+      <PayrollAdjustmentsDialog
+        open={adjustmentsDialogOpen}
+        onOpenChange={setAdjustmentsDialogOpen}
+        record={record}
+      />
     </Card>
   );
 }
