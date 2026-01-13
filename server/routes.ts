@@ -1432,9 +1432,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const allUsers = await storage.getAllUsers();
       
-      // Filter to only regular employees (not admins)
+      // Filter to employees eligible for payroll
+      // Include admin users if they have payroll settings configured (salary, etc.)
       const employees = allUsers
-        .filter(u => u.role !== 'admin' && u.role !== 'viewonly_admin' && u.role !== 'attendance_view_admin' && !u.isArchived)
+        .filter(u => {
+          if (u.isArchived) return false;
+          
+          // For admin/viewonly_admin users, include if they have payroll settings configured
+          if (u.role === 'admin' || u.role === 'viewonly_admin' || u.role === 'attendance_view_admin') {
+            const hasPayrollSettings = 
+              (u.basicMonthlySalary && parseFloat(u.basicMonthlySalary) > 0) ||
+              (u.hourlyRate && parseFloat(u.hourlyRate) > 0) ||
+              (u.dailyRate && parseFloat(u.dailyRate) > 0);
+            return hasPayrollSettings;
+          }
+          
+          return true;
+        })
         .map(u => ({
           id: u.id,
           name: u.name,
