@@ -1039,23 +1039,10 @@ export default function AdminPayrollReportsPage() {
           {selectedPayslip && (
             <>
               <DialogHeader className="print:hidden">
-                <div className="flex items-center justify-between gap-4">
-                  <DialogTitle className="flex items-center gap-2" data-testid="text-payslip-title">
-                    <FileText className="h-5 w-5" />
-                    Payslip Report
-                  </DialogTitle>
-                  <DialogClose asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      data-testid="button-close-payslip-header"
-                      autoFocus
-                    >
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Close</span>
-                    </Button>
-                  </DialogClose>
-                </div>
+                <DialogTitle className="flex items-center gap-2" data-testid="text-payslip-title">
+                  <FileText className="h-5 w-5" />
+                  Payslip Report
+                </DialogTitle>
               </DialogHeader>
               
               <PayslipView
