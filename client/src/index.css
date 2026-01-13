@@ -289,7 +289,7 @@
 
 /* Print styles for payslip and reports */
 @media print {
-  /* Hide non-printable elements */
+  /* Hide everything except the dialog */
   .print\:hidden,
   [data-radix-dialog-overlay],
   header,
@@ -298,6 +298,16 @@
   .sidebar,
   button:not(.print-show) {
     display: none !important;
+  }
+  
+  /* Hide the main page content when dialog is open */
+  body > div:first-child > *:not([data-radix-portal]) {
+    display: none !important;
+  }
+  
+  /* Show only the portal content */
+  [data-radix-portal] {
+    position: static !important;
   }
   
   /* Dialog content should take full page width */
@@ -313,6 +323,13 @@
     border: none !important;
     padding: 0.25rem !important;
     margin: 0 !important;
+    background: white !important;
+  }
+  
+  /* Hide dialog close button and scrollable wrapper */
+  [data-radix-dialog-content] > button[type="button"],
+  [data-radix-scroll-area-viewport] {
+    display: contents !important;
   }
   
   /* Reset body and html for print */
