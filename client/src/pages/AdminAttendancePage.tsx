@@ -461,6 +461,7 @@ export default function AdminAttendancePage() {
     totalHours: number;
     recordCount: number;
     hasOpenSession: boolean; // true if any record is missing clock-out
+    openSessionRecordId: string | null; // record ID for the open session (for quick end clock-in)
     employeeName: string | null;
     employeeCode: string | null;
   };
@@ -479,6 +480,7 @@ export default function AdminAttendancePage() {
           totalHours: 0,
           recordCount: 0,
           hasOpenSession: false,
+          openSessionRecordId: null,
           employeeName: null,
           employeeCode: null,
         };
@@ -491,9 +493,10 @@ export default function AdminAttendancePage() {
       map[record.userId][dateKey].totalHours += hours;
       map[record.userId][dateKey].recordCount += 1;
       
-      // Check for open sessions (no clock-out)
+      // Check for open sessions (no clock-out) and store the record ID
       if (!record.clockOutTime) {
         map[record.userId][dateKey].hasOpenSession = true;
+        map[record.userId][dateKey].openSessionRecordId = record.id;
       }
     });
     return map;
@@ -528,6 +531,7 @@ export default function AdminAttendancePage() {
         totalHours: summary.totalHoursWorked || 0,
         recordCount: summary.totalClockIns,
         hasOpenSession: summary.status === 'partial',
+        openSessionRecordId: null, // Not available in summaries - use week view for quick end
         employeeName: summary.employeeName,
         employeeCode: summary.employeeCode,
       };
@@ -2421,10 +2425,33 @@ export default function AdminAttendancePage() {
                                               {recordCount} clock-in entries
                                             </div>
                                           )}
-                                          <div className="border-t pt-1">
+                                          <div className="border-t pt-1 space-y-1">
                                             <div>Total Hours: {hours.toFixed(1)} hrs</div>
                                             {hasOpenSession && (
-                                              <div className="text-blue-500 font-medium">Has active session</div>
+                                              <>
+                                                <div className="text-blue-500 font-medium">Has active session</div>
+                                                {isNexaAdmin && aggData.openSessionRecordId && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="w-full h-7 mt-1 text-xs"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      // Find the record and open the end clock-in dialog
+                                                      const record = heatmapRawRecords.find(r => r.id === aggData.openSessionRecordId);
+                                                      if (record) {
+                                                        setSelectedRecord(record);
+                                                        setEndClockOutTime("18:00");
+                                                        setShowEndClockInDialog(true);
+                                                      }
+                                                    }}
+                                                    data-testid={`button-end-clockin-heatmap-${user.id}-${dateKey}`}
+                                                  >
+                                                    <Clock className="h-3 w-3 mr-1" />
+                                                    End Clock-in
+                                                  </Button>
+                                                )}
+                                              </>
                                             )}
                                           </div>
                                         </div>
