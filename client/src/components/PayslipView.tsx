@@ -69,6 +69,31 @@ function LineItem({ label, value, isNegative, isBold, showZero = false }: LineIt
   );
 }
 
+// Format hours display (e.g., "45.50 hrs")
+function formatHours(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined) return "0.00";
+  return hours.toFixed(2);
+}
+
+interface HoursItemProps {
+  label: string;
+  hours: number | null | undefined;
+}
+
+function HoursItem({ label, hours }: HoursItemProps) {
+  const numHours = hours ?? 0;
+  if (numHours === 0) return null;
+  
+  return (
+    <div className="flex justify-between items-center py-0.5 print:py-0">
+      <span className="text-sm print:text-xs text-muted-foreground">{label}</span>
+      <span className="font-mono text-sm print:text-xs text-muted-foreground">
+        {formatHours(numHours)} hrs
+      </span>
+    </div>
+  );
+}
+
 interface SectionProps {
   title: string;
   sectionLetter: string;
@@ -266,6 +291,12 @@ export default function PayslipView({
         >
           <LineItem label="Basic Salary" value={record.basicSalary} showZero />
           <LineItem label="Monthly Variables" value={record.monthlyVariablesComponent} />
+          {isEmployerView && (
+            <>
+              <HoursItem label="Basic Hours Worked" hours={record.basicHoursWorked} />
+              <HoursItem label="OT Hours Worked" hours={record.otHoursWorked} />
+            </>
+          )}
         </Section>
 
         <Section

@@ -375,6 +375,10 @@ export const payrollRecords = pgTable("payroll_records", {
   nric: text("nric"),
   joinDate: text("join_date"),
   
+  // Hours Worked (for employer view only)
+  basicHoursWorked: real("basic_hours_worked").default(0), // Regular hours worked
+  otHoursWorked: real("ot_hours_worked").default(0), // Overtime hours worked
+  
   // Salary Components (stored as dollars, e.g., 1200.00)
   totSalary: numeric("tot_salary", { precision: 12, scale: 2 }).notNull().default("0"),
   basicSalary: numeric("basic_salary", { precision: 12, scale: 2 }).notNull().default("0"),

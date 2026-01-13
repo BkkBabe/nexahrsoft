@@ -3989,6 +3989,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           catName: null,
           nric: employee.nricFin || null,
           joinDate: employee.joinDate || null,
+          // Hours worked (for employer view only)
+          basicHoursWorked: regularHours,
+          otHoursWorked: overtimeHours,
           totSalary: toNumericString(basicSalary),
           basicSalary: toNumericString(basicSalary),
           monthlyVariablesComponent: toNumericString(0),
