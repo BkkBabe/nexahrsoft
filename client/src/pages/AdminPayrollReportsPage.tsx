@@ -907,6 +907,46 @@ export default function AdminPayrollReportsPage() {
                     }
                   </CardDescription>
                 </div>
+                {records.length > 0 && selectedMonth && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 border-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                        data-testid="button-delete-current-period"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete All Records
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
+                          Delete Payroll Records
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete all {records.length} payroll records for {MONTH_NAMES[parseInt(selectedMonth)]} {selectedYear}? 
+                          This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel data-testid="button-cancel-delete-current">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-red-600 hover:bg-red-700"
+                          onClick={() => deleteMutation.mutate({ year: parseInt(selectedYear), month: parseInt(selectedMonth) })}
+                          data-testid="button-confirm-delete-current"
+                        >
+                          {deleteMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
+                          Delete Records
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
             </CardHeader>
             <CardContent>
