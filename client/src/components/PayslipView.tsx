@@ -471,6 +471,16 @@ export default function PayslipView({
                 -${formatCurrency(totalDeductionsEmployee)}
               </span>
             </div>
+            {totalAdjustments !== 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm print:text-xs">
+                  {totalAdjustments > 0 ? 'Add: Adjustments' : 'Less: Adjustments'}
+                </span>
+                <span className={`font-mono print:text-xs ${totalAdjustments < 0 ? 'text-destructive' : 'text-green-600'}`}>
+                  {totalAdjustments < 0 ? '-' : '+'}${formatCurrency(Math.abs(totalAdjustments))}
+                </span>
+              </div>
+            )}
             <Separator className="print:my-0.5" />
             <div className="flex justify-between items-center pt-1 print:pt-0.5">
               <span className="text-lg font-bold print:text-sm">Net Pay</span>
@@ -478,7 +488,7 @@ export default function PayslipView({
                 className="font-mono text-2xl font-bold text-primary print:text-base"
                 data-testid="text-net-pay"
               >
-                ${formatCurrency(record.nett)}
+                ${formatCurrency(parseAmount(record.nett) + totalAdjustments)}
               </span>
             </div>
 
@@ -492,11 +502,11 @@ export default function PayslipView({
                     className="font-mono text-lg font-semibold print:text-sm"
                     data-testid="text-total-cost"
                   >
-                    ${formatCurrency(parseAmount(record.grossWages) + totalEmployerContributions)}
+                    ${formatCurrency(parseAmount(record.grossWages) + totalEmployerContributions + totalAdjustments)}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 print:text-[10px] print:mt-0.5">
-                  (Gross Wages + Employer CPF + Levies)
+                  (Gross Wages + Employer CPF + Levies + Adjustments)
                 </p>
               </div>
             )}
