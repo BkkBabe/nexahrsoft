@@ -115,7 +115,7 @@ const initialFormState: NewUserForm = {
 export default function AdminPayrollReportsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(`${currentYear}-all`);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(`${currentYear}-1`);
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
   
   const parsePeriod = (period: string) => {
