@@ -179,19 +179,19 @@ export default function AdminPayrollGeneratePage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setLocation("/admin/dashboard")}
-          data-testid="button-back"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Generate Payroll from Attendance</h1>
           <p className="text-muted-foreground">Calculate payroll based on clock-in/clock-out data with CPF contributions</p>
         </div>
+        <Button
+          variant="outline"
+          onClick={() => setLocation("/admin/payroll")}
+          data-testid="button-back-payroll"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Payroll Management
+        </Button>
       </div>
 
       <Card>
