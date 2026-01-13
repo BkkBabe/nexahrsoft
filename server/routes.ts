@@ -3810,12 +3810,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const employeeIds = req.body.employeeIds as string[] | undefined;
       
       // Get all approved employees (or specific ones if specified)
+      // Include admin users if they have payroll settings configured (salary, etc.)
       const allUsers = await storage.getAllUsers();
       const employees = allUsers.filter(u => {
-        if (u.role === 'admin' || u.role === 'viewonly_admin') return false;
         if (u.isArchived) return false;
         if (!u.isApproved) return false;
         if (employeeIds && !employeeIds.includes(u.id)) return false;
+        
+        // For admin/viewonly_admin users, only include if they have payroll settings configured
+        if (u.role === 'admin' || u.role === 'viewonly_admin') {
+          const hasPayrollSettings = 
+            (u.basicMonthlySalary && parseFloat(u.basicMonthlySalary) > 0) ||
+            (u.hourlyRate && parseFloat(u.hourlyRate) > 0) ||
+            (u.dailyRate && parseFloat(u.dailyRate) > 0);
+          return hasPayrollSettings;
+        }
+        
         return true;
       });
 
