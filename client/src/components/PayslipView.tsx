@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Printer, Download } from "lucide-react";
+import { Eye, EyeOff, Printer } from "lucide-react";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
 
 interface PayslipViewProps {
@@ -16,7 +16,6 @@ interface PayslipViewProps {
   onPrint?: () => void;
 }
 
-// Helper to safely parse numeric values (API returns strings from PostgreSQL numeric type)
 function parseAmount(value: string | number | null | undefined): number {
   if (value === null || value === undefined) return 0;
   if (typeof value === 'number') return value;
@@ -24,7 +23,6 @@ function parseAmount(value: string | number | null | undefined): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
-// Format currency from dollars (values are now stored as dollars, not cents)
 function formatCurrency(dollars: number | string | null | undefined): string {
   const amount = parseAmount(dollars);
   return amount.toLocaleString("en-SG", {
@@ -41,7 +39,6 @@ function formatNegativeCurrency(dollars: number | string | null | undefined): st
   })}`;
 }
 
-// Type for monetary values (can be string from API or number)
 type MonetaryValue = number | string | null | undefined;
 
 interface LineItemProps {
@@ -69,7 +66,6 @@ function LineItem({ label, value, isNegative, isBold, showZero = false }: LineIt
   );
 }
 
-// Format hours display (e.g., "45.50 hrs")
 function formatHours(hours: number | null | undefined): string {
   if (hours === null || hours === undefined) return "0.00";
   return hours.toFixed(2);
@@ -151,14 +147,13 @@ export default function PayslipView({
     parseAmount(record.shiftAllowance) +
     parseAmount(record.totRestPhAmount);
 
-  const totalAllowancesWithCpf =
+  const totalAllowances =
     parseAmount(record.mobileAllowance) +
     parseAmount(record.transportAllowance) +
     parseAmount(record.annualLeaveEncashment) +
-    parseAmount(record.serviceCallAllowances);
-
-  const totalAllowancesWithoutCpf =
-    parseAmount(record.otherAllowance) + parseAmount(record.houseRentalAllowances);
+    parseAmount(record.serviceCallAllowances) +
+    parseAmount(record.otherAllowance) +
+    parseAmount(record.houseRentalAllowances);
 
   const totalCommunityFund =
     parseAmount(record.cc) + parseAmount(record.cdac) + parseAmount(record.ecf) + parseAmount(record.mbmf) + parseAmount(record.sinda);
@@ -171,6 +166,12 @@ export default function PayslipView({
 
   const totalEmployerContributions =
     parseAmount(record.employerCpf) + parseAmount(record.sdf) + parseAmount(record.fwl);
+
+  const totalEarnings =
+    parseAmount(record.totSalary) +
+    totalOvertimeAllowances +
+    totalAllowances +
+    parseAmount(record.bonus);
 
   return (
     <Card className="print:shadow-none print:border-none" data-testid="payslip-view">
@@ -249,6 +250,7 @@ export default function PayslipView({
       </CardHeader>
 
       <CardContent className="space-y-4 print:space-y-2">
+        {/* Section A: Employee Information */}
         <Section title="Employee Information" sectionLetter="A">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm print:text-xs print:gap-1">
             <div>
@@ -284,10 +286,11 @@ export default function PayslipView({
 
         <Separator className="print:my-1" />
 
+        {/* Section B: Earnings */}
         <Section
-          title="Basic Earnings"
+          title="Earnings"
           sectionLetter="B"
-          subtotal={{ label: "Total Basic Earnings", value: record.totSalary }}
+          subtotal={{ label: "Total Earnings", value: totalEarnings }}
         >
           <LineItem label="Basic Salary" value={record.basicSalary} showZero />
           <LineItem label="Monthly Variables" value={record.monthlyVariablesComponent} />
@@ -297,85 +300,44 @@ export default function PayslipView({
               <HoursItem label="OT Hours Worked" hours={record.otHoursWorked} />
             </>
           )}
+          {totalOvertimeAllowances > 0 && (
+            <>
+              <div className="text-xs text-muted-foreground mt-1 mb-0.5 print:text-[10px]">Overtime & Shift:</div>
+              <LineItem label="Flat Rate Overtime" value={record.flat} />
+              <LineItem label="OT 1.0x" value={record.ot10} />
+              <LineItem label="OT 1.5x" value={record.ot15} />
+              <LineItem label="OT 2.0x" value={record.ot20} />
+              <LineItem label="OT 3.0x" value={record.ot30} />
+              <LineItem label="Shift Allowance" value={record.shiftAllowance} />
+              <LineItem label="Rest/PH Amount" value={record.totRestPhAmount} />
+            </>
+          )}
+          {totalAllowances > 0 && (
+            <>
+              <div className="text-xs text-muted-foreground mt-1 mb-0.5 print:text-[10px]">Allowances:</div>
+              <LineItem label="Mobile Allowance" value={record.mobileAllowance} />
+              <LineItem label="Transport Allowance" value={record.transportAllowance} />
+              <LineItem label="Annual Leave Encashment" value={record.annualLeaveEncashment} />
+              <LineItem label="Service Call Allowances" value={record.serviceCallAllowances} />
+              <LineItem label="Other Allowance" value={record.otherAllowance} />
+              <LineItem label="House Rental Allowances" value={record.houseRentalAllowances} />
+            </>
+          )}
+          <LineItem label="Bonus" value={record.bonus} />
         </Section>
 
-        <Section
-          title="Overtime & Shift Allowances"
-          sectionLetter="C"
-          subtotal={{ label: "Total Overtime", value: totalOvertimeAllowances }}
-          hideIfZero
-        >
-          <LineItem label="Flat Rate Overtime" value={record.flat} />
-          <LineItem label="OT 1.0x" value={record.ot10} />
-          <LineItem label="OT 1.5x" value={record.ot15} />
-          <LineItem label="OT 2.0x" value={record.ot20} />
-          <LineItem label="OT 3.0x" value={record.ot30} />
-          <LineItem label="Shift Allowance" value={record.shiftAllowance} />
-          <LineItem label="Rest/PH Amount" value={record.totRestPhAmount} />
-        </Section>
-
-        <Section
-          title="Allowances (With CPF)"
-          sectionLetter="D"
-          subtotal={{ label: "Total Allowances (CPF)", value: totalAllowancesWithCpf }}
-          hideIfZero
-        >
-          <LineItem label="Mobile Allowance" value={record.mobileAllowance} />
-          <LineItem label="Transport Allowance" value={record.transportAllowance} />
-          <LineItem label="Annual Leave Encashment" value={record.annualLeaveEncashment} />
-          <LineItem label="Service Call Allowances" value={record.serviceCallAllowances} />
-        </Section>
-
-        <Section
-          title="Allowances (Without CPF)"
-          sectionLetter="E"
-          subtotal={{ label: "Total Allowances (Non-CPF)", value: totalAllowancesWithoutCpf }}
-          hideIfZero
-        >
-          <LineItem label="Other Allowance" value={record.otherAllowance} />
-          <LineItem label="House Rental Allowances" value={record.houseRentalAllowances} />
-        </Section>
-
-        {parseAmount(record.bonus) > 0 && (
-          <Section title="Bonus & Additional Payments" sectionLetter="F">
-            <LineItem label="Bonus" value={record.bonus} />
-          </Section>
-        )}
-
-        <div className="bg-muted/30 rounded-lg p-3 space-y-1 print:p-2 print:space-y-0">
-          <div className="flex justify-between items-center font-semibold">
-            <span className="print:text-sm">Gross Wages</span>
-            <span className="font-mono text-lg print:text-sm" data-testid="text-gross-wages">
-              ${formatCurrency(record.grossWages)}
-            </span>
-          </div>
-          <div className="flex justify-between items-center text-sm text-muted-foreground print:text-xs">
-            <span>CPF Wages (Ordinary + Additional)</span>
-            <span className="font-mono">${formatCurrency(record.cpfWages)}</span>
-          </div>
-        </div>
-
-        <Separator className="print:my-1" />
-
-        <Section
-          title="Employee CPF Contribution"
-          sectionLetter="G"
-          subtotal={{ label: "Total Employee CPF", value: Math.abs(parseAmount(record.employeeCpf)) }}
-          hideIfZero
-        >
-          <LineItem
-            label="Employee CPF (20%)"
-            value={Math.abs(parseAmount(record.employeeCpf))}
-            isNegative
-          />
-        </Section>
-
+        {/* Section C: Deductions */}
         {totalDeductionsEmployee > 0 && (
           <Section
             title="Deductions"
-            sectionLetter="H"
+            sectionLetter="C"
             subtotal={{ label: "Total Deductions", value: totalDeductionsEmployee }}
           >
+            <LineItem
+              label="Employee CPF (20%)"
+              value={Math.abs(parseAmount(record.employeeCpf))}
+              isNegative
+            />
             <LineItem label="Loan Repayments" value={record.loanRepaymentTotal} isNegative />
             <LineItem label="No Pay Day Deduction" value={record.noPayDay} isNegative />
             {totalCommunityFund > 0 && (
@@ -393,33 +355,43 @@ export default function PayslipView({
           </Section>
         )}
 
+        {/* Section D: Adjustments */}
+        <Section title="Adjustments" sectionLetter="D">
+          <div className="text-sm text-muted-foreground print:text-xs">
+            No adjustments for this period
+          </div>
+        </Section>
+
+        {/* Employer Contributions (shown only in employer view) */}
         {isEmployerView && totalEmployerContributions > 0 && (
           <>
             <Separator className="print:my-1" />
-            <Section
-              title="Employer Contributions (Not Shown to Employee)"
-              sectionLetter="I"
-              subtotal={{ label: "Total Employer Cost", value: totalEmployerContributions }}
-            >
-              <div className="bg-primary/5 -mx-2 px-2 py-1 rounded-md border border-dashed border-primary/20 print:py-0.5">
-                <LineItem
-                  label="Employer CPF (17%)"
-                  value={record.employerCpf}
-                />
-                <LineItem label="Skills Development Fund (SDF)" value={record.sdf} />
-                <LineItem label="Foreign Worker Levy (FWL)" value={record.fwl} />
+            <div className="bg-primary/5 rounded-lg p-3 space-y-1 print:p-2 print:space-y-0">
+              <div className="text-xs text-muted-foreground mb-1 print:text-[10px]">
+                Employer Contributions (Not Shown to Employee):
               </div>
-            </Section>
+              <LineItem label="Employer CPF (17%)" value={record.employerCpf} />
+              <LineItem label="Skills Development Fund (SDF)" value={record.sdf} />
+              <LineItem label="Foreign Worker Levy (FWL)" value={record.fwl} />
+              <Separator className="my-1 print:my-0.5" />
+              <div className="flex justify-between items-center font-semibold">
+                <span className="text-sm print:text-xs">Total Employer Cost</span>
+                <span className="font-mono text-sm print:text-xs">${formatCurrency(totalEmployerContributions)}</span>
+              </div>
+            </div>
           </>
         )}
 
         <Separator className="print:my-1" />
 
-        <Section title="Payment Summary" sectionLetter="J">
+        {/* Section E: Payment Summary */}
+        <Section title="Payment Summary" sectionLetter="E">
           <div className="space-y-2 print:space-y-1">
             <div className="flex justify-between items-center">
-              <span className="text-sm print:text-xs">Total Earnings</span>
-              <span className="font-mono print:text-xs">${formatCurrency(record.total)}</span>
+              <span className="text-sm print:text-xs">Gross Wages</span>
+              <span className="font-mono print:text-xs" data-testid="text-gross-wages">
+                ${formatCurrency(record.grossWages)}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm print:text-xs">Less: Deductions</span>
@@ -448,7 +420,7 @@ export default function PayslipView({
                     className="font-mono text-lg font-semibold print:text-sm"
                     data-testid="text-total-cost"
                   >
-                    ${formatCurrency(record.grossWages + totalEmployerContributions)}
+                    ${formatCurrency(parseAmount(record.grossWages) + totalEmployerContributions)}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 print:text-[10px] print:mt-0.5">
