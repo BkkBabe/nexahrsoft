@@ -80,17 +80,28 @@ const SECTIONS: Record<string, string> = {
   community: "Community Contributions",
 };
 
-function formatCurrency(cents: number): string {
-  return (cents / 100).toLocaleString("en-SG", {
+// Helper to safely parse numeric values (API returns strings from PostgreSQL numeric type)
+function parseAmount(value: string | number | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+// Format currency from dollars (values are now stored as dollars, not cents)
+function formatCurrency(dollars: number | string | null | undefined): string {
+  const amount = parseAmount(dollars);
+  return amount.toLocaleString("en-SG", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
+// Parse currency string to dollars (no multiplication needed now)
 function parseCurrency(value: string): number {
   const cleaned = value.replace(/[^0-9.-]/g, "");
   const float = parseFloat(cleaned);
-  return isNaN(float) ? 0 : Math.round(float * 100);
+  return isNaN(float) ? 0 : Math.round(float * 100) / 100; // Round to 2 decimal places
 }
 
 export default function EditPayslipModal({

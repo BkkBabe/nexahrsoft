@@ -16,40 +16,54 @@ interface PayslipViewProps {
   onPrint?: () => void;
 }
 
-function formatCurrency(cents: number): string {
-  return (cents / 100).toLocaleString("en-SG", {
+// Helper to safely parse numeric values (API returns strings from PostgreSQL numeric type)
+function parseAmount(value: string | number | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+// Format currency from dollars (values are now stored as dollars, not cents)
+function formatCurrency(dollars: number | string | null | undefined): string {
+  const amount = parseAmount(dollars);
+  return amount.toLocaleString("en-SG", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-function formatNegativeCurrency(cents: number): string {
-  const value = Math.abs(cents) / 100;
+function formatNegativeCurrency(dollars: number | string | null | undefined): string {
+  const value = Math.abs(parseAmount(dollars));
   return `-${value.toLocaleString("en-SG", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
+// Type for monetary values (can be string from API or number)
+type MonetaryValue = number | string | null | undefined;
+
 interface LineItemProps {
   label: string;
-  value: number;
+  value: MonetaryValue;
   isNegative?: boolean;
   isBold?: boolean;
   showZero?: boolean;
 }
 
 function LineItem({ label, value, isNegative, isBold, showZero = false }: LineItemProps) {
-  if (value === 0 && !showZero) return null;
+  const numValue = parseAmount(value);
+  if (numValue === 0 && !showZero) return null;
   
   const fontWeight = isBold ? "font-semibold" : "";
-  const textColor = isNegative && value !== 0 ? "text-destructive" : "";
+  const textColor = isNegative && numValue !== 0 ? "text-destructive" : "";
   
   return (
     <div className={`flex justify-between items-center py-0.5 print:py-0 ${fontWeight}`}>
       <span className="text-sm print:text-xs">{label}</span>
       <span className={`font-mono text-sm print:text-xs ${textColor}`}>
-        ${isNegative && value !== 0 ? formatNegativeCurrency(value) : formatCurrency(value)}
+        ${isNegative && numValue !== 0 ? formatNegativeCurrency(value) : formatCurrency(value)}
       </span>
     </div>
   );
@@ -59,12 +73,13 @@ interface SectionProps {
   title: string;
   sectionLetter: string;
   children: React.ReactNode;
-  subtotal?: { label: string; value: number };
+  subtotal?: { label: string; value: MonetaryValue };
   hideIfZero?: boolean;
 }
 
 function Section({ title, sectionLetter, children, subtotal, hideIfZero = false }: SectionProps) {
-  if (hideIfZero && subtotal && subtotal.value === 0) return null;
+  const subtotalValue = parseAmount(subtotal?.value);
+  if (hideIfZero && subtotal && subtotalValue === 0) return null;
   
   return (
     <div className="space-y-1 print:space-y-0">
@@ -78,7 +93,7 @@ function Section({ title, sectionLetter, children, subtotal, hideIfZero = false 
       </div>
       <div className="pl-2 border-l-2 border-muted print:border-l print:pl-1">
         {children}
-        {subtotal && subtotal.value > 0 && (
+        {subtotal && subtotalValue > 0 && (
           <>
             <Separator className="my-1 print:my-0.5" />
             <div className="flex justify-between items-center font-semibold">
@@ -103,34 +118,34 @@ export default function PayslipView({
   const isEmployerView = viewMode === "employer";
 
   const totalOvertimeAllowances =
-    record.flat +
-    record.ot10 +
-    record.ot15 +
-    record.ot20 +
-    record.ot30 +
-    record.shiftAllowance +
-    record.totRestPhAmount;
+    parseAmount(record.flat) +
+    parseAmount(record.ot10) +
+    parseAmount(record.ot15) +
+    parseAmount(record.ot20) +
+    parseAmount(record.ot30) +
+    parseAmount(record.shiftAllowance) +
+    parseAmount(record.totRestPhAmount);
 
   const totalAllowancesWithCpf =
-    record.mobileAllowance +
-    record.transportAllowance +
-    record.annualLeaveEncashment +
-    record.serviceCallAllowances;
+    parseAmount(record.mobileAllowance) +
+    parseAmount(record.transportAllowance) +
+    parseAmount(record.annualLeaveEncashment) +
+    parseAmount(record.serviceCallAllowances);
 
   const totalAllowancesWithoutCpf =
-    record.otherAllowance + record.houseRentalAllowances;
+    parseAmount(record.otherAllowance) + parseAmount(record.houseRentalAllowances);
 
   const totalCommunityFund =
-    record.cc + record.cdac + record.ecf + record.mbmf + record.sinda;
+    parseAmount(record.cc) + parseAmount(record.cdac) + parseAmount(record.ecf) + parseAmount(record.mbmf) + parseAmount(record.sinda);
 
   const totalDeductionsEmployee =
-    record.loanRepaymentTotal +
-    record.noPayDay +
+    parseAmount(record.loanRepaymentTotal) +
+    parseAmount(record.noPayDay) +
     totalCommunityFund +
-    Math.abs(record.employeeCpf);
+    Math.abs(parseAmount(record.employeeCpf));
 
   const totalEmployerContributions =
-    record.employerCpf + record.sdf + record.fwl;
+    parseAmount(record.employerCpf) + parseAmount(record.sdf) + parseAmount(record.fwl);
 
   return (
     <Card className="print:shadow-none print:border-none" data-testid="payslip-view">
@@ -290,7 +305,7 @@ export default function PayslipView({
           <LineItem label="House Rental Allowances" value={record.houseRentalAllowances} />
         </Section>
 
-        {record.bonus > 0 && (
+        {parseAmount(record.bonus) > 0 && (
           <Section title="Bonus & Additional Payments" sectionLetter="F">
             <LineItem label="Bonus" value={record.bonus} />
           </Section>
@@ -314,12 +329,12 @@ export default function PayslipView({
         <Section
           title="Employee CPF Contribution"
           sectionLetter="G"
-          subtotal={{ label: "Total Employee CPF", value: Math.abs(record.employeeCpf) }}
+          subtotal={{ label: "Total Employee CPF", value: Math.abs(parseAmount(record.employeeCpf)) }}
           hideIfZero
         >
           <LineItem
             label="Employee CPF (20%)"
-            value={Math.abs(record.employeeCpf)}
+            value={Math.abs(parseAmount(record.employeeCpf))}
             isNegative
           />
         </Section>
