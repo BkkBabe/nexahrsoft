@@ -362,55 +362,56 @@
     border: none !important;
   }
   
-  /* Reduce margins for print - fit on 1 page */
+  /* A5 page size for compact payslip printing */
   @page {
-    margin: 0.15in;
-    size: A4 portrait;
+    margin: 0.1in;
+    size: A5 portrait;
   }
   
-  /* Compact text for print - smaller base font */
+  /* Compact text for print - smaller base font for A5 */
   * {
-    line-height: 1.2 !important;
+    line-height: 1.15 !important;
   }
   
-  /* Payslip-specific compact styles */
+  /* Payslip-specific compact styles for A5 */
   [data-testid="payslip-view"] {
-    font-size: 9px !important;
+    font-size: 7px !important;
+    max-width: 100% !important;
   }
   
   [data-testid="payslip-view"] .text-sm,
   [data-testid="payslip-view"] .text-xs {
-    font-size: 8px !important;
+    font-size: 6px !important;
   }
   
   [data-testid="payslip-view"] .text-lg {
-    font-size: 11px !important;
-  }
-  
-  [data-testid="payslip-view"] .text-2xl {
-    font-size: 13px !important;
-  }
-  
-  [data-testid="payslip-view"] h3 {
     font-size: 9px !important;
   }
   
-  /* Reduce spacing in payslip */
+  [data-testid="payslip-view"] .text-2xl {
+    font-size: 10px !important;
+  }
+  
+  [data-testid="payslip-view"] h3 {
+    font-size: 7px !important;
+  }
+  
+  /* Tighter spacing for A5 */
   [data-testid="payslip-view"] .space-y-4 {
-    gap: 0.25rem !important;
+    gap: 0.15rem !important;
   }
   
   [data-testid="payslip-view"] .space-y-2,
   [data-testid="payslip-view"] .space-y-1 {
-    gap: 0.1rem !important;
+    gap: 0.05rem !important;
   }
   
   [data-testid="payslip-view"] .gap-4 {
-    gap: 0.25rem !important;
+    gap: 0.15rem !important;
   }
   
   [data-testid="payslip-view"] .gap-2 {
-    gap: 0.1rem !important;
+    gap: 0.05rem !important;
   }
   
   [data-testid="payslip-view"] .py-0\.5 {
@@ -419,22 +420,22 @@
   }
   
   [data-testid="payslip-view"] .p-6 {
-    padding: 0.25rem !important;
+    padding: 0.15rem !important;
   }
   
   [data-testid="payslip-view"] .pl-2 {
-    padding-left: 0.25rem !important;
+    padding-left: 0.15rem !important;
   }
   
   [data-testid="payslip-view"] .my-1 {
-    margin-top: 0.1rem !important;
-    margin-bottom: 0.1rem !important;
+    margin-top: 0.05rem !important;
+    margin-bottom: 0.05rem !important;
   }
   
-  /* Company logo smaller */
+  /* Smaller company logo for A5 */
   [data-testid="payslip-view"] img {
-    height: 32px !important;
-    width: 32px !important;
+    height: 24px !important;
+    width: 24px !important;
   }
   
   /* Ensure colors print correctly */
