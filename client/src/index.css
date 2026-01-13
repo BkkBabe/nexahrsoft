@@ -311,7 +311,7 @@
     transform: none !important;
     box-shadow: none !important;
     border: none !important;
-    padding: 0.5rem !important;
+    padding: 0.25rem !important;
     margin: 0 !important;
   }
   
@@ -322,6 +322,7 @@
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
+    font-size: 9px !important;
   }
   
   /* Prevent page breaks inside sections */
@@ -344,16 +345,79 @@
     border: none !important;
   }
   
-  /* Reduce margins for print */
+  /* Reduce margins for print - fit on 1 page */
   @page {
-    margin: 0.25in;
-    size: landscape;
+    margin: 0.15in;
+    size: A4 portrait;
   }
   
-  /* Compact text for print */
+  /* Compact text for print - smaller base font */
   * {
-    font-size: inherit;
-    line-height: 1.3;
+    line-height: 1.2 !important;
+  }
+  
+  /* Payslip-specific compact styles */
+  [data-testid="payslip-view"] {
+    font-size: 9px !important;
+  }
+  
+  [data-testid="payslip-view"] .text-sm,
+  [data-testid="payslip-view"] .text-xs {
+    font-size: 8px !important;
+  }
+  
+  [data-testid="payslip-view"] .text-lg {
+    font-size: 11px !important;
+  }
+  
+  [data-testid="payslip-view"] .text-2xl {
+    font-size: 13px !important;
+  }
+  
+  [data-testid="payslip-view"] h3 {
+    font-size: 9px !important;
+  }
+  
+  /* Reduce spacing in payslip */
+  [data-testid="payslip-view"] .space-y-4 {
+    gap: 0.25rem !important;
+  }
+  
+  [data-testid="payslip-view"] .space-y-2,
+  [data-testid="payslip-view"] .space-y-1 {
+    gap: 0.1rem !important;
+  }
+  
+  [data-testid="payslip-view"] .gap-4 {
+    gap: 0.25rem !important;
+  }
+  
+  [data-testid="payslip-view"] .gap-2 {
+    gap: 0.1rem !important;
+  }
+  
+  [data-testid="payslip-view"] .py-0\.5 {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  
+  [data-testid="payslip-view"] .p-6 {
+    padding: 0.25rem !important;
+  }
+  
+  [data-testid="payslip-view"] .pl-2 {
+    padding-left: 0.25rem !important;
+  }
+  
+  [data-testid="payslip-view"] .my-1 {
+    margin-top: 0.1rem !important;
+    margin-bottom: 0.1rem !important;
+  }
+  
+  /* Company logo smaller */
+  [data-testid="payslip-view"] img {
+    height: 32px !important;
+    width: 32px !important;
   }
   
   /* Ensure colors print correctly */
