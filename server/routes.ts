@@ -3931,11 +3931,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Monthly employees: hourlyRate is already calculated from MOM formula
         // Daily rate = (Monthly × 12) / (Days per Week × 52)
         // Hourly rate = Daily rate / Hours per Day
-        const basicSalary = regularPay;
+        const calculatedBasicPay = regularPay;
         const otAmount = overtimePay;
+        
+        // Store the configured monthly salary as "Basic Salary" (for display purposes)
+        // This shows the employee's contracted salary rate in settings
+        const configuredMonthlySalary = empBasicMonthlySalary ?? 0;
 
-        // Calculate gross wages (basic + OT for now, can be extended with allowances)
-        const grossWages = basicSalary + otAmount;
+        // Calculate gross wages (calculated earnings + OT)
+        const grossWages = calculatedBasicPay + otAmount;
         
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
         const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
@@ -3992,8 +3996,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Hours worked (for employer view only)
           basicHoursWorked: regularHours,
           otHoursWorked: overtimeHours,
-          totSalary: toNumericString(basicSalary),
-          basicSalary: toNumericString(basicSalary),
+          totSalary: toNumericString(calculatedBasicPay),
+          basicSalary: toNumericString(configuredMonthlySalary),
           monthlyVariablesComponent: toNumericString(0),
           flat: toNumericString(0),
           ot10: toNumericString(0),
