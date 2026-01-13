@@ -25,17 +25,6 @@ interface PayrollAdjustment {
   status: string;
 }
 
-const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
-  overtime: "Overtime",
-  mc_days: "MC Days",
-  al_days: "Annual Leave Days",
-  late_hours: "Late Hours Deduction",
-  advance: "Salary Advance",
-  claim: "Expense Claim",
-  deduction: "Other Deduction",
-  bonus: "Bonus",
-  other: "Other Adjustment",
-};
 
 interface PayslipViewProps {
   record: PayrollRecord;
@@ -185,7 +174,7 @@ export default function PayslipView({
   const adjustments = adjustmentsData?.adjustments || [];
   const totalAdjustments = adjustments.reduce((sum, adj) => {
     const amount = parseAmount(adj.amount);
-    const isDeduction = ['late_hours', 'advance', 'deduction'].includes(adj.adjustmentType);
+    const isDeduction = adj.adjustmentType === 'deduction';
     return sum + (isDeduction ? -amount : amount);
   }, 0);
 
@@ -415,8 +404,8 @@ export default function PayslipView({
           {adjustments.length > 0 ? (
             <>
               {adjustments.map((adj) => {
-                const isDeduction = ['late_hours', 'advance', 'deduction'].includes(adj.adjustmentType);
-                const label = adj.description || ADJUSTMENT_TYPE_LABELS[adj.adjustmentType] || adj.adjustmentType;
+                const isDeduction = adj.adjustmentType === 'deduction';
+                const label = adj.notes || adj.description || (isDeduction ? 'Deduction' : 'Addition');
                 return (
                   <LineItem
                     key={adj.id}

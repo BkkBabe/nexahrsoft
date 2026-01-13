@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plus, Trash2, DollarSign, Clock, Calendar } from "lucide-react";
+import { Loader2, Plus, Trash2, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -15,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -25,23 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { PayrollRecord } from "@shared/schema";
 
-const ADJUSTMENT_TYPES = [
-  { value: "overtime", label: "Overtime", hasHours: true, hasRate: true },
-  { value: "mc_days", label: "MC Days", hasDays: true },
-  { value: "al_days", label: "Annual Leave Days", hasDays: true },
-  { value: "late_hours", label: "Late Hours Deduction", hasHours: true, hasRate: true, isDeduction: true },
-  { value: "advance", label: "Salary Advance", hasAmount: true, isDeduction: true },
-  { value: "claim", label: "Expense Claim", hasAmount: true },
-  { value: "deduction", label: "Other Deduction", hasAmount: true, isDeduction: true },
-  { value: "bonus", label: "Bonus", hasAmount: true },
-  { value: "other", label: "Other Adjustment", hasAmount: true },
-];
-
-interface PayrollAdjustment {
+export interface PayrollAdjustment {
   id: string;
   userId: string;
   payPeriodYear: number;
@@ -64,19 +50,15 @@ interface PayrollAdjustmentsDialogProps {
   record: PayrollRecord | null;
 }
 
+export const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
+  addition: "Addition",
+  deduction: "Deduction",
+};
+
 function formatCurrency(dollars: number | string | null): string {
   if (dollars === null || dollars === undefined) return "$0.00";
   const num = typeof dollars === 'string' ? parseFloat(dollars) : dollars;
   return `$${num.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function getAdjustmentTypeInfo(type: string) {
-  return ADJUSTMENT_TYPES.find(t => t.value === type);
-}
-
-function getAdjustmentTypeLabel(type: string): string {
-  const found = ADJUSTMENT_TYPES.find(t => t.value === type);
-  return found ? found.label : type;
 }
 
 export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }: PayrollAdjustmentsDialogProps) {
@@ -84,12 +66,8 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
   const [showAddForm, setShowAddForm] = useState(false);
   const [newAdjustment, setNewAdjustment] = useState({
     adjustmentType: "",
-    description: "",
-    hours: "",
-    days: "",
-    rate: "",
-    amount: "",
     notes: "",
+    amount: "",
   });
 
   const { data: adjustmentsData, isLoading } = useQuery<{ adjustments: PayrollAdjustment[] }>({
@@ -111,7 +89,7 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
       return apiRequest("POST", "/api/admin/payroll/adjustments", data);
     },
     onSuccess: () => {
-      toast({ title: "Adjustment Added", description: "The adjustment has been added and applied to the payslip." });
+      toast({ title: "Adjustment Added", description: "The adjustment has been saved." });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/records'] });
       setShowAddForm(false);
@@ -127,7 +105,7 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
       return apiRequest("DELETE", `/api/admin/payroll/adjustments/${adjustmentId}`);
     },
     onSuccess: () => {
-      toast({ title: "Adjustment Deleted", description: "The adjustment has been removed from the payslip." });
+      toast({ title: "Adjustment Deleted", description: "The adjustment has been removed." });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/records'] });
     },
@@ -139,33 +117,32 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
   const resetForm = () => {
     setNewAdjustment({
       adjustmentType: "",
-      description: "",
-      hours: "",
-      days: "",
-      rate: "",
-      amount: "",
       notes: "",
+      amount: "",
     });
   };
 
   const handleAddAdjustment = () => {
     if (!record?.userId || !newAdjustment.adjustmentType) {
-      toast({ title: "Error", description: "Please select an adjustment type", variant: "destructive" });
+      toast({ title: "Error", description: "Please select Addition or Deduction", variant: "destructive" });
       return;
     }
 
-    const typeInfo = getAdjustmentTypeInfo(newAdjustment.adjustmentType);
-    
+    if (!newAdjustment.amount || parseFloat(newAdjustment.amount) <= 0) {
+      toast({ title: "Error", description: "Please enter a valid amount", variant: "destructive" });
+      return;
+    }
+
     const payload = {
       userId: record.userId,
       payPeriodYear: record.payPeriodYear,
       payPeriodMonth: record.payPeriodMonth,
       adjustmentType: newAdjustment.adjustmentType,
-      description: newAdjustment.description || null,
-      hours: newAdjustment.hours ? parseFloat(newAdjustment.hours) : null,
-      days: newAdjustment.days ? parseFloat(newAdjustment.days) : null,
-      rate: newAdjustment.rate ? newAdjustment.rate : null,
-      amount: newAdjustment.amount ? newAdjustment.amount : null,
+      description: newAdjustment.notes || null,
+      hours: null,
+      days: null,
+      rate: null,
+      amount: newAdjustment.amount,
       notes: newAdjustment.notes || null,
       status: "approved",
     };
@@ -174,11 +151,10 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
   };
 
   const adjustments = adjustmentsData?.adjustments || [];
-  const selectedType = getAdjustmentTypeInfo(newAdjustment.adjustmentType);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" data-testid="dialog-adjustments">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-adjustments">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5" />
@@ -202,30 +178,25 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                     <TableHeader>
                       <TableRow>
                         <TableHead>Type</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="text-right">Hours/Days</TableHead>
+                        <TableHead>Notes</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                         <TableHead className="text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {adjustments.map((adj) => {
-                        const typeInfo = getAdjustmentTypeInfo(adj.adjustmentType);
-                        const isDeduction = typeInfo?.isDeduction;
+                        const isDeduction = adj.adjustmentType === 'deduction';
                         const amount = adj.amount ? parseFloat(adj.amount) : 0;
                         
                         return (
                           <TableRow key={adj.id}>
                             <TableCell>
                               <Badge variant={isDeduction ? "destructive" : "default"}>
-                                {getAdjustmentTypeLabel(adj.adjustmentType)}
+                                {isDeduction ? "Deduction" : "Addition"}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground">
-                              {adj.description || "-"}
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                              {adj.hours ? `${adj.hours} hrs` : adj.days ? `${adj.days} days` : "-"}
+                              {adj.notes || adj.description || "-"}
                             </TableCell>
                             <TableCell className={`text-right font-mono ${isDeduction ? 'text-red-600' : 'text-green-600'}`}>
                               {isDeduction ? '-' : ''}{formatCurrency(amount)}
@@ -269,9 +240,9 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                 <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
                   <h4 className="font-medium">New Adjustment</h4>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Adjustment Type *</Label>
+                      <Label>Deductions / Additions *</Label>
                       <Select
                         value={newAdjustment.adjustmentType}
                         onValueChange={(value) => setNewAdjustment(prev => ({ ...prev, adjustmentType: value }))}
@@ -280,115 +251,39 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
-                          {ADJUSTMENT_TYPES.map((type) => (
-                            <SelectItem key={type.value} value={type.value}>
-                              {type.label}
-                            </SelectItem>
-                          ))}
+                          <SelectItem value="addition">Addition</SelectItem>
+                          <SelectItem value="deduction">Deduction</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Description</Label>
-                      <Input
-                        value={newAdjustment.description}
-                        onChange={(e) => setNewAdjustment(prev => ({ ...prev, description: e.target.value }))}
-                        placeholder="Brief description"
-                        data-testid="input-adjustment-description"
+                      <Label>Notes</Label>
+                      <Textarea
+                        value={newAdjustment.notes}
+                        onChange={(e) => setNewAdjustment(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Description or notes for this adjustment"
+                        rows={2}
+                        data-testid="input-adjustment-notes"
                       />
                     </div>
-                  </div>
 
-                  {selectedType && (
-                    <div className="grid grid-cols-3 gap-4">
-                      {selectedType.hasHours && (
-                        <div className="space-y-2">
-                          <Label>Hours</Label>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={newAdjustment.hours}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                setNewAdjustment(prev => ({ ...prev, hours: value }));
-                              }
-                            }}
-                            placeholder="0.0"
-                            data-testid="input-adjustment-hours"
-                          />
-                        </div>
-                      )}
-
-                      {selectedType.hasDays && (
-                        <div className="space-y-2">
-                          <Label>Days</Label>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={newAdjustment.days}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                setNewAdjustment(prev => ({ ...prev, days: value }));
-                              }
-                            }}
-                            placeholder="0.0"
-                            data-testid="input-adjustment-days"
-                          />
-                        </div>
-                      )}
-
-                      {selectedType.hasRate && (
-                        <div className="space-y-2">
-                          <Label>Rate ($)</Label>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={newAdjustment.rate}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                setNewAdjustment(prev => ({ ...prev, rate: value }));
-                              }
-                            }}
-                            placeholder="0.00"
-                            data-testid="input-adjustment-rate"
-                          />
-                        </div>
-                      )}
-
-                      {selectedType.hasAmount && (
-                        <div className="space-y-2">
-                          <Label>Amount ($)</Label>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={newAdjustment.amount}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                setNewAdjustment(prev => ({ ...prev, amount: value }));
-                              }
-                            }}
-                            placeholder="0.00"
-                            data-testid="input-adjustment-amount"
-                          />
-                        </div>
-                      )}
+                    <div className="space-y-2">
+                      <Label>Amount ($) *</Label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={newAdjustment.amount}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                            setNewAdjustment(prev => ({ ...prev, amount: value }));
+                          }
+                        }}
+                        placeholder="0.00"
+                        data-testid="input-adjustment-amount"
+                      />
                     </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label>Notes (optional)</Label>
-                    <Textarea
-                      value={newAdjustment.notes}
-                      onChange={(e) => setNewAdjustment(prev => ({ ...prev, notes: e.target.value }))}
-                      placeholder="Additional notes for audit trail"
-                      rows={2}
-                      data-testid="input-adjustment-notes"
-                    />
                   </div>
 
                   <div className="flex gap-2 justify-end">
@@ -404,7 +299,7 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                     </Button>
                     <Button
                       onClick={handleAddAdjustment}
-                      disabled={addMutation.isPending || !newAdjustment.adjustmentType}
+                      disabled={addMutation.isPending || !newAdjustment.adjustmentType || !newAdjustment.amount}
                       data-testid="button-save-adjustment"
                     >
                       {addMutation.isPending ? (
@@ -413,10 +308,7 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                           Saving...
                         </>
                       ) : (
-                        <>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add & Apply
-                        </>
+                        "Save Adjustment"
                       )}
                     </Button>
                   </div>
@@ -425,12 +317,6 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
             </>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-close-adjustments">
-            Close
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
