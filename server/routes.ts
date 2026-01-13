@@ -3923,20 +3923,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Split into regular and overtime hours
         const { regularHours, overtimeHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
 
-        // Calculate pay
+        // Calculate pay differently based on pay type
         const otMultiplier = settings?.otMultiplier15 || 1.5;
-        const { regularPay, overtimePay, totalPay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
-
-        // For all pay types (monthly/daily/hourly), calculate basic pay based on hours worked
-        // Monthly employees: hourlyRate is already calculated from MOM formula
-        // Daily rate = (Monthly × 12) / (Days per Week × 52)
-        // Hourly rate = Daily rate / Hours per Day
-        const calculatedBasicPay = regularPay;
-        const otAmount = overtimePay;
         
-        // Store the configured monthly salary as "Basic Salary" (for display purposes)
-        // This shows the employee's contracted salary rate in settings
+        let calculatedBasicPay: number;
+        let otAmount: number;
         const configuredMonthlySalary = empBasicMonthlySalary ?? 0;
+        
+        if (payType === 'monthly' || isExecutive) {
+          // MONTHLY EMPLOYEES: Get full monthly salary, OT calculated separately
+          // Monthly salary is NOT prorated by hours worked - employees get full salary
+          // OT hours are calculated based on hours worked beyond regular hours
+          calculatedBasicPay = configuredMonthlySalary;
+          
+          // Calculate OT pay using hourly rate derived from monthly salary
+          if (!isExecutive && overtimeHours > 0 && hourlyRate > 0) {
+            otAmount = roundToDollars(overtimeHours * hourlyRate * otMultiplier);
+          } else {
+            otAmount = 0; // Executives typically don't get OT
+          }
+        } else {
+          // HOURLY/DAILY EMPLOYEES: Calculate pay based on hours worked
+          const { regularPay, overtimePay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
+          calculatedBasicPay = regularPay;
+          otAmount = overtimePay;
+        }
 
         // Calculate gross wages (calculated earnings + OT)
         const grossWages = calculatedBasicPay + otAmount;
@@ -4163,12 +4174,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const { regularHours, overtimeHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
         const otMultiplier = settings?.otMultiplier15 || 1.5;
-        const { regularPay, overtimePay, totalPay } = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
-
-        // For monthly employees, calculate basic pay based on days worked using MOM daily wage formula
-        // Daily rate = (Monthly × 12) / (Days per Week × 52)
-        // Basic pay = Days Worked × Daily Rate
-        const basicPay = regularPay; // Always use regularPay calculated from hours worked
+        
+        // Calculate pay differently based on pay type
+        let basicPay: number;
+        let overtimePay: number;
+        const configuredMonthlySalary = empMonthlySalaryRaw ?? 0;
+        
+        if (payType === 'monthly') {
+          // MONTHLY EMPLOYEES: Get full monthly salary, OT calculated separately
+          basicPay = configuredMonthlySalary;
+          overtimePay = overtimeHours > 0 && hourlyRate > 0 
+            ? roundToDollars(overtimeHours * hourlyRate * otMultiplier) 
+            : 0;
+        } else {
+          // HOURLY/DAILY EMPLOYEES: Calculate pay based on hours worked
+          const result = calculatePayFromHours(regularHours, overtimeHours, hourlyRate, otMultiplier);
+          basicPay = result.regularPay;
+          overtimePay = result.overtimePay;
+        }
+        
         const grossWages = basicPay + overtimePay;
 
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
