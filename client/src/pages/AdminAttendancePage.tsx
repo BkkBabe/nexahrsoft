@@ -1458,6 +1458,17 @@ export default function AdminAttendancePage() {
     // Add print-heatmap class to body for A4 landscape styling
     document.body.classList.add('print-heatmap');
     
+    // Dynamically inject @page rule for A4 landscape (cross-browser compatible)
+    const printStyle = document.createElement('style');
+    printStyle.id = 'heatmap-print-style';
+    printStyle.textContent = `
+      @page {
+        size: A4 landscape;
+        margin: 0.25in;
+      }
+    `;
+    document.head.appendChild(printStyle);
+    
     // Change document title to month/year for print
     const originalTitle = document.title;
     const firstDay = heatmapDays[0];
@@ -1477,9 +1488,13 @@ export default function AdminAttendancePage() {
     
     setTimeout(() => {
       window.print();
-      // Restore original title and remove print class after print dialog closes
+      // Restore original title, remove print class, and remove injected style
       document.title = originalTitle;
       document.body.classList.remove('print-heatmap');
+      const injectedStyle = document.getElementById('heatmap-print-style');
+      if (injectedStyle) {
+        injectedStyle.remove();
+      }
       setIsPrinting(false);
     }, 100);
   };
