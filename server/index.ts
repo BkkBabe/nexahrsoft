@@ -5,6 +5,45 @@ import { Pool } from "@neondatabase/serverless";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+// Startup migration helper - ensures critical tables exist
+async function ensureSchemaMigrations(pool: Pool) {
+  try {
+    // Create attendance_adjustments table if it doesn't exist
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS attendance_adjustments (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id varchar NOT NULL REFERENCES users(id),
+        date text NOT NULL,
+        adjustment_type text NOT NULL,
+        leave_type text,
+        regular_hours real,
+        ot_hours real,
+        notes text,
+        created_by varchar NOT NULL REFERENCES users(id),
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+    
+    // Create unique index on user_id + date
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS attendance_adjustments_user_date_unique
+      ON attendance_adjustments (user_id, date)
+    `);
+    
+    // Also ensure the daily_attendance_summary unique index exists
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS daily_attendance_summary_user_date_unique
+      ON daily_attendance_summary (user_id, date)
+    `);
+    
+    log("Schema migrations verified successfully");
+  } catch (error) {
+    console.error("Schema migration error:", error);
+    // Don't throw - let the app continue, table might already exist
+  }
+}
+
 const app = express();
 
 // Session configuration - dynamically set secure based on request
@@ -101,6 +140,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run schema migrations before starting the app
+  await ensureSchemaMigrations(sessionPool);
+  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
