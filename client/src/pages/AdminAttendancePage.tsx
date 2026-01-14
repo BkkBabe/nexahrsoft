@@ -2223,23 +2223,23 @@ export default function AdminAttendancePage() {
                 </div>
                 <span className="text-muted-foreground ml-2">Leave:</span>
                 <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded bg-blue-500 dark:bg-blue-400 flex items-center justify-center text-[8px] text-white font-bold">AL</div>
+                  <div className="w-4 h-4 rounded bg-indigo-500 dark:bg-indigo-400 flex items-center justify-center text-[8px] text-white font-bold">AL</div>
                   <span>Annual</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded bg-red-500 dark:bg-red-400 flex items-center justify-center text-[8px] text-white font-bold">MC</div>
+                  <div className="w-4 h-4 rounded bg-rose-500 dark:bg-rose-400 flex items-center justify-center text-[8px] text-white font-bold">MC</div>
                   <span>Medical</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded bg-pink-500 dark:bg-pink-400 flex items-center justify-center text-[8px] text-white font-bold">ML</div>
+                  <div className="w-4 h-4 rounded bg-fuchsia-500 dark:bg-fuchsia-400 flex items-center justify-center text-[8px] text-white font-bold">ML</div>
                   <span>Maternity</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded bg-amber-500 dark:bg-amber-400 flex items-center justify-center text-[8px] text-white font-bold">CL</div>
+                  <div className="w-4 h-4 rounded bg-violet-500 dark:bg-violet-400 flex items-center justify-center text-[8px] text-white font-bold">CL</div>
                   <span>Compassionate</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded bg-teal-500 dark:bg-teal-400 flex items-center justify-center text-[8px] text-white font-bold">OIL</div>
+                  <div className="w-4 h-4 rounded bg-cyan-600 dark:bg-cyan-500 flex items-center justify-center text-[8px] text-white font-bold">OIL</div>
                   <span>Off-in-Lieu</span>
                 </div>
               </div>
@@ -2443,13 +2443,14 @@ export default function AdminAttendancePage() {
                                 );
                                 
                                 // Determine cell background color based on leave type
+                                // Using colors that don't clash with heatmap: green/yellow/orange/blue/gray
                                 const getLeaveColor = (type: string | undefined) => {
                                   switch (type) {
-                                    case 'AL': return 'bg-blue-500 dark:bg-blue-400'; // Annual Leave - Blue
-                                    case 'MC': return 'bg-red-500 dark:bg-red-400'; // Medical Certificate - Red
-                                    case 'ML': return 'bg-pink-500 dark:bg-pink-400'; // Maternity Leave - Pink
-                                    case 'CL': return 'bg-amber-500 dark:bg-amber-400'; // Compassionate Leave - Amber
-                                    case 'OIL': return 'bg-teal-500 dark:bg-teal-400'; // Off-in-Lieu - Teal
+                                    case 'AL': return 'bg-indigo-500 dark:bg-indigo-400'; // Annual Leave - Indigo
+                                    case 'MC': return 'bg-rose-500 dark:bg-rose-400'; // Medical Certificate - Rose
+                                    case 'ML': return 'bg-fuchsia-500 dark:bg-fuchsia-400'; // Maternity Leave - Fuchsia
+                                    case 'CL': return 'bg-violet-500 dark:bg-violet-400'; // Compassionate Leave - Violet
+                                    case 'OIL': return 'bg-cyan-600 dark:bg-cyan-500'; // Off-in-Lieu - Cyan
                                     default: return 'bg-purple-500 dark:bg-purple-400'; // Default purple
                                   }
                                 };
