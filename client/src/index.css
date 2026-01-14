@@ -465,3 +465,81 @@
     display: none !important;
   }
 }
+
+/* Heatmap-specific print styles - A4 Landscape */
+@media print {
+  /* When body has print-heatmap class, use A4 landscape */
+  body.print-heatmap {
+    font-size: 8px !important;
+  }
+  
+  /* Override page size for heatmap */
+  body.print-heatmap ~ * {
+    font-size: 8px !important;
+  }
+}
+
+/* A4 Landscape page for heatmap printing */
+@page heatmap {
+  size: A4 landscape;
+  margin: 0.3in;
+}
+
+/* Apply heatmap page when body has print-heatmap class */
+@media print {
+  body.print-heatmap {
+    page: heatmap;
+  }
+  
+  body.print-heatmap [data-testid="heatmap-container"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    font-size: 7px !important;
+  }
+  
+  body.print-heatmap [data-testid="heatmap-container"] * {
+    font-size: 7px !important;
+  }
+  
+  /* Show main content instead of dialog for heatmap */
+  body.print-heatmap > div:first-child > * {
+    display: block !important;
+  }
+  
+  /* Hide non-heatmap elements */
+  body.print-heatmap header,
+  body.print-heatmap nav,
+  body.print-heatmap aside,
+  body.print-heatmap .sidebar,
+  body.print-heatmap [data-testid="sidebar"],
+  body.print-heatmap button {
+    display: none !important;
+  }
+  
+  /* Show only heatmap container */
+  body.print-heatmap [data-testid="heatmap-container"] {
+    display: block !important;
+  }
+  
+  /* Compact cells for heatmap print */
+  body.print-heatmap [data-testid^="cell-"] {
+    min-height: 20px !important;
+    padding: 1px !important;
+  }
+  
+  /* Compact rows */
+  body.print-heatmap [data-testid^="heatmap-row-"] {
+    min-height: 24px !important;
+  }
+  
+  /* Header title for print */
+  body.print-heatmap .heatmap-print-title {
+    display: block !important;
+    font-size: 12px !important;
+    font-weight: bold !important;
+    margin-bottom: 8px !important;
+    text-align: center !important;
+  }
+}
