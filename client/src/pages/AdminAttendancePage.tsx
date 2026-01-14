@@ -2221,6 +2221,27 @@ export default function AdminAttendancePage() {
                   <div className="w-4 h-4 rounded bg-muted border"></div>
                   <span>Absent</span>
                 </div>
+                <span className="text-muted-foreground ml-2">Leave:</span>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-blue-500 dark:bg-blue-400 flex items-center justify-center text-[8px] text-white font-bold">AL</div>
+                  <span>Annual</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-red-500 dark:bg-red-400 flex items-center justify-center text-[8px] text-white font-bold">MC</div>
+                  <span>Medical</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-pink-500 dark:bg-pink-400 flex items-center justify-center text-[8px] text-white font-bold">ML</div>
+                  <span>Maternity</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-amber-500 dark:bg-amber-400 flex items-center justify-center text-[8px] text-white font-bold">CL</div>
+                  <span>Compassionate</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-teal-500 dark:bg-teal-400 flex items-center justify-center text-[8px] text-white font-bold">OIL</div>
+                  <span>Off-in-Lieu</span>
+                </div>
               </div>
               
               {/* Action Buttons Row */}
@@ -2421,10 +2442,21 @@ export default function AdminAttendancePage() {
                                   </>
                                 );
                                 
-                                // Determine cell background color
+                                // Determine cell background color based on leave type
+                                const getLeaveColor = (type: string | undefined) => {
+                                  switch (type) {
+                                    case 'AL': return 'bg-blue-500 dark:bg-blue-400'; // Annual Leave - Blue
+                                    case 'MC': return 'bg-red-500 dark:bg-red-400'; // Medical Certificate - Red
+                                    case 'ML': return 'bg-pink-500 dark:bg-pink-400'; // Maternity Leave - Pink
+                                    case 'CL': return 'bg-amber-500 dark:bg-amber-400'; // Compassionate Leave - Amber
+                                    case 'OIL': return 'bg-teal-500 dark:bg-teal-400'; // Off-in-Lieu - Teal
+                                    default: return 'bg-purple-500 dark:bg-purple-400'; // Default purple
+                                  }
+                                };
+                                
                                 const getCellColor = () => {
                                   if (isFuture) return 'bg-muted/30';
-                                  if (hasAdjustment && isLeaveAdjustment) return 'bg-purple-500 dark:bg-purple-400'; // Purple for leave
+                                  if (hasAdjustment && isLeaveAdjustment) return getLeaveColor(leaveCode);
                                   if (hasAdjustment && !isLeaveAdjustment) {
                                     const adjTotal = (adjustment?.regularHours || 0) + (adjustment?.otHours || 0);
                                     return getHeatmapColor(adjTotal, false);
