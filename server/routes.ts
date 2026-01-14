@@ -3984,6 +3984,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get attendance records for the period
       const attendanceData = await storage.getAllUsersAttendanceByDateRange(periodStart, periodEnd);
+      
+      // Get attendance adjustments for the period (leave/OT overrides)
+      const adjustmentsData = await storage.getAttendanceAdjustmentsByDateRange(periodStart, periodEnd);
+      
+      // Build a map of adjustments by `${userId}-${date}` for quick lookup
+      const adjustmentsMap = new Map<string, typeof adjustmentsData[0]>();
+      for (const adj of adjustmentsData) {
+        adjustmentsMap.set(`${adj.userId}-${adj.date}`, adj);
+      }
 
       const generatedRecords: any[] = [];
       const skippedEmployees: { employeeCode: string; employeeName: string; reason: string }[] = [];
@@ -3992,21 +4001,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get this employee's attendance for the month
         const empAttendance = attendanceData.filter(a => a.userId === employee.id);
 
-        // Calculate total hours worked from attendance
+        // Calculate total hours worked from attendance, respecting adjustments
+        // Adjustments override actual clock-in data for payroll calculations
         let totalHoursWorked = 0;
+        let totalOtHoursFromAdjustments = 0; // Track explicit OT from adjustments
         let daysWorked = 0;
         const uniqueDays = new Set<string>();
+        const processedDates = new Set<string>(); // Track dates with attendance/adjustments
         
         for (const record of empAttendance) {
-          if (record.clockInTime && record.clockOutTime) {
-            const clockIn = new Date(record.clockInTime);
-            const clockOut = new Date(record.clockOutTime);
-            const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
-            // Round to nearest 0.25 hour
-            totalHoursWorked += Math.round(hoursWorked * 4) / 4;
-            uniqueDays.add(record.date);
+          const dateKey = record.date;
+          const adjustmentKey = `${employee.id}-${dateKey}`;
+          const adjustment = adjustmentsMap.get(adjustmentKey);
+          
+          // If there's an adjustment for this date, use it instead of actual hours
+          if (adjustment) {
+            // Mark this date as processed
+            if (!processedDates.has(dateKey)) {
+              processedDates.add(dateKey);
+              uniqueDays.add(dateKey);
+              
+              if (adjustment.adjustmentType === 'leave') {
+                // Leave counts as 9 regular hours (full day)
+                totalHoursWorked += 9;
+              } else if (adjustment.adjustmentType === 'hours') {
+                // Hours override: use specified regular and OT hours
+                const adjRegular = adjustment.regularHours ?? 0;
+                const adjOt = adjustment.otHours ?? 0;
+                totalHoursWorked += adjRegular;
+                totalOtHoursFromAdjustments += adjOt;
+              }
+            }
+          } else {
+            // No adjustment: use actual clock-in/out data
+            if (record.clockInTime && record.clockOutTime) {
+              const clockIn = new Date(record.clockInTime);
+              const clockOut = new Date(record.clockOutTime);
+              const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+              // Round to nearest 0.25 hour
+              totalHoursWorked += Math.round(hoursWorked * 4) / 4;
+              uniqueDays.add(record.date);
+            }
           }
         }
+        
+        // Also process adjustments for dates with no attendance records (pure leave days)
+        for (const adj of adjustmentsData) {
+          if (adj.userId !== employee.id) continue;
+          if (processedDates.has(adj.date)) continue; // Already processed via attendance
+          
+          processedDates.add(adj.date);
+          uniqueDays.add(adj.date);
+          
+          if (adj.adjustmentType === 'leave') {
+            totalHoursWorked += 9;
+          } else if (adj.adjustmentType === 'hours') {
+            const adjRegular = adj.regularHours ?? 0;
+            const adjOt = adj.otHours ?? 0;
+            totalHoursWorked += adjRegular;
+            totalOtHoursFromAdjustments += adjOt;
+          }
+        }
+        
         daysWorked = uniqueDays.size;
 
         // Use employee-specific settings if available, otherwise fall back to company settings
@@ -4062,7 +4118,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Split into regular and overtime hours
-        const { regularHours, overtimeHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
+        const { regularHours, overtimeHours: calculatedOtHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
+        
+        // Add explicit OT hours from adjustments to calculated OT
+        const overtimeHours = calculatedOtHours + totalOtHoursFromAdjustments;
 
         // Calculate pay differently based on pay type
         const otMultiplier = settings?.otMultiplier15 || 1.5;
@@ -4245,6 +4304,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const payPeriod = `${new Date(year, month - 1).toLocaleString('default', { month: 'short' }).toUpperCase()} ${year}`;
 
       const attendanceData = await storage.getAllUsersAttendanceByDateRange(periodStart, periodEnd);
+      
+      // Get attendance adjustments for the period (leave/OT overrides)
+      const adjustmentsData = await storage.getAttendanceAdjustmentsByDateRange(periodStart, periodEnd);
+      
+      // Build a map of adjustments by `${userId}-${date}` for quick lookup
+      const adjustmentsMap = new Map<string, typeof adjustmentsData[0]>();
+      for (const adj of adjustmentsData) {
+        adjustmentsMap.set(`${adj.userId}-${adj.date}`, adj);
+      }
 
       const preview: {
         employeeCode: string;
@@ -4271,18 +4339,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const employee of employees) {
         const empAttendance = attendanceData.filter(a => a.userId === employee.id);
 
+        // Calculate total hours worked from attendance, respecting adjustments
         let totalHoursWorked = 0;
+        let totalOtHoursFromAdjustments = 0;
         const uniqueDays = new Set<string>();
+        const processedDates = new Set<string>();
         
         for (const record of empAttendance) {
-          if (record.clockInTime && record.clockOutTime) {
-            const clockIn = new Date(record.clockInTime);
-            const clockOut = new Date(record.clockOutTime);
-            const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
-            totalHoursWorked += Math.round(hoursWorked * 4) / 4;
-            uniqueDays.add(record.date);
+          const dateKey = record.date;
+          const adjustmentKey = `${employee.id}-${dateKey}`;
+          const adjustment = adjustmentsMap.get(adjustmentKey);
+          
+          if (adjustment) {
+            if (!processedDates.has(dateKey)) {
+              processedDates.add(dateKey);
+              uniqueDays.add(dateKey);
+              
+              if (adjustment.adjustmentType === 'leave') {
+                totalHoursWorked += 9;
+              } else if (adjustment.adjustmentType === 'hours') {
+                const adjRegular = adjustment.regularHours ?? 0;
+                const adjOt = adjustment.otHours ?? 0;
+                totalHoursWorked += adjRegular;
+                totalOtHoursFromAdjustments += adjOt;
+              }
+            }
+          } else {
+            if (record.clockInTime && record.clockOutTime) {
+              const clockIn = new Date(record.clockInTime);
+              const clockOut = new Date(record.clockOutTime);
+              const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+              totalHoursWorked += Math.round(hoursWorked * 4) / 4;
+              uniqueDays.add(record.date);
+            }
           }
         }
+        
+        // Also process adjustments for dates with no attendance records (pure leave days)
+        for (const adj of adjustmentsData) {
+          if (adj.userId !== employee.id) continue;
+          if (processedDates.has(adj.date)) continue;
+          
+          processedDates.add(adj.date);
+          uniqueDays.add(adj.date);
+          
+          if (adj.adjustmentType === 'leave') {
+            totalHoursWorked += 9;
+          } else if (adj.adjustmentType === 'hours') {
+            const adjRegular = adj.regularHours ?? 0;
+            const adjOt = adj.otHours ?? 0;
+            totalHoursWorked += adjRegular;
+            totalOtHoursFromAdjustments += adjOt;
+          }
+        }
+        
         const daysWorked = uniqueDays.size;
 
         // Use parseNumericOrNull to properly distinguish between "not set" (null) and "set to 0"
@@ -4314,7 +4424,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           continue;
         }
 
-        const { regularHours, overtimeHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
+        const { regularHours, overtimeHours: calculatedOtHours } = splitHours(totalHoursWorked, regularHoursPerDay, daysWorked);
+        
+        // Add explicit OT hours from adjustments to calculated OT
+        const overtimeHours = calculatedOtHours + totalOtHoursFromAdjustments;
+        
         const otMultiplier = settings?.otMultiplier15 || 1.5;
         
         // Calculate pay differently based on pay type

@@ -2,7 +2,7 @@
 
 ## Overview
 
-NexaHR is a cloud-native, all-in-one Human Resource Management System (HRMS) designed for enterprise use. It provides comprehensive HR functionality including time & attendance tracking, leave management, claims processing, payroll, and employee self-service. The MVP focuses on core HR functions with mobile attendance tracking, web-based administration, and role-based access control. The platform aims for an enterprise dashboard approach with Material Design inspiration, prioritizing data clarity, efficient workflows, and professional aesthetics for HR administrators, managers, and employees.
+NexaHR is a cloud-native, all-in-one Human Resource Management System (HRMS) for enterprises. It provides core HR functionalities like time & attendance, leave management, claims processing, payroll, and employee self-service. The platform prioritizes data clarity, efficient workflows, and a professional aesthetic, drawing inspiration from Material Design for its enterprise dashboard approach. The MVP focuses on mobile attendance tracking, web-based administration, and robust role-based access control.
 
 ## User Preferences
 
@@ -12,161 +12,57 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 
-- **Framework & Tooling**: React 18+ with TypeScript, Vite, Wouter for routing, TanStack Query for server state.
-- **UI Component System**: shadcn/ui built on Radix UI, Tailwind CSS for styling, CSS variables for theming, responsive design with a mobile-first approach.
-- **State Management**: Session-based authentication, React Query for async server state, React Context for theme.
-- **Design System**: Inter/Roboto typography, Tailwind spacing, 12-column grid, custom HSL-based color system.
+- **Framework**: React 18+ with TypeScript, Vite, Wouter for routing, and TanStack Query for server state.
+- **UI/UX**: shadcn/ui built on Radix UI, Tailwind CSS for styling, CSS variables for theming, responsive design with a mobile-first approach. Uses Inter/Roboto typography, Tailwind spacing, and a 12-column grid with a custom HSL-based color system.
+- **State Management**: Session-based authentication, React Query for asynchronous server state, and React Context for theme management.
 
 ### Backend Architecture
 
-- **Server Framework**: Express.js with TypeScript, express-session for session management, RESTful API design.
-- **Authentication & Authorization**: Dual admin system (master admin hardcoded + database users with role='admin' or role='viewonly_admin'), user bcrypt-hashed passwords, session-based with secure HTTP-only cookies, role-based access control (admin/viewonly_admin vs. user), security model ensures sessions only for approved users, user approval workflow for new registrations, forced password change on first login via mustChangePassword flag. Admin users have exclusive admin-only access (cannot log in via employee login), and regular users cannot log in via admin login. View-only admins can view all data but cannot edit, delete, or send emails (enforced by requireWriteAccess middleware and UI disabling).
-- **Super Admin Role**: Special privilege level for sensitive operations. Super admins are: 1) Master admin (nexaadmin), 2) Users with email "rebekah.sr@3si.com.sg". Only super admins can archive/unarchive employees. API endpoint GET /api/admin/is-super-admin returns super admin status.
-- **Data Layer**: Drizzle ORM for type-safe queries, Zod validation, PostgreSQL-backed storage (PgStorage) via Neon serverless database.
-- **API Structure**: `/api/admin/*`, `/api/auth/*` following RESTful conventions with Zod schema validation.
+- **Server**: Express.js with TypeScript, using `express-session` for session management and a RESTful API design.
+- **Authentication & Authorization**: Dual admin system (master admin + database users with 'admin'/'viewonly_admin' roles). Session-based authentication with secure HTTP-only cookies, bcrypt-hashed passwords, and role-based access control. Features include user approval workflow, forced password change on first login, and distinct login paths for admins and employees. Super admin roles have specific privileges (e.g., archiving employees).
+- **Data Layer**: Drizzle ORM for type-safe queries and Zod for validation, backed by PostgreSQL (Neon serverless database). Monetary fields are stored as `numeric(12,2)` and processed with helper functions for precision.
+- **API Structure**: RESTful conventions with Zod schema validation for `/api/admin/*` and `/api/auth/*` endpoints.
 
 ### Database Schema
 
-**Note on Monetary Storage**: All monetary fields are stored as `numeric(12,2)` in dollars (e.g., 1200.00, not 120000 cents). PostgreSQL returns these as strings; use `parseNumeric()` or `parseNumericOrNull()` helper functions when reading from the database for arithmetic operations. The `roundToDollars()` helper ensures consistent 2-decimal precision for calculated totals.
+- **Core Tables**: `Users` (employee info, auth, HR metadata), `Company Settings` (singleton for branding, email, timezone), `Payroll Loan Accounts`, `Payroll Loan Repayments`, `Attendance Records`, `Daily Attendance Summary` (pre-calculated for performance), `Attendance Adjustments` (for overrides).
+- **Extensibility**: Designed to easily accommodate future HR modules.
 
-- **Users Table**: Stores all user information (id, email, username, name, password_hash, mobile_number, auth_id, role, is_approved, created_at, employeeCode, department, designation, section, joinDate, supervisorId, isOnProbation, hasEmailSent, mustChangePassword). Supports both password-based and OAuth, with approval-based access control, forced password change on first login, and full HR metadata.
-- **Company Settings Table**: Stores company branding, email settings, and timezone configuration (company_name, company_address, company_uen, logo_url, favicon_url, senderEmail, senderName, appUrl, defaultTimezone, ignoreOrphanedSessions, updated_at). Singleton pattern ensures one record.
-- **Payroll Loan Accounts Table**: Stores employee loans with fields: userId, loanType, description, principalAmount, outstandingBalance, monthlyRepayment, startDate, endDate, status. Supports COMPANY_LOAN, STUDY_LOAN, HOUSING_LOAN types.
-- **Payroll Loan Repayments Table**: Tracks individual repayments with payrollPeriod, amount, notes, and recordedBy references.
-- **Attendance Records Table**: Stores clock-in/out times, user ID, date, calculated hours, location data, and photo metadata.
-- **Daily Attendance Summary Table**: Pre-calculated daily attendance summaries for improved heatmap performance with fields: date, userId, employeeCode, employeeName, department, totalClockIns, totalHoursWorked, firstClockIn, lastClockOut, status (present/absent/partial). Uses unique constraint on (user_id, date) with atomic upserts to prevent duplicates.
-- **Extensibility**: Designed to easily accommodate future tables for leave, claims, payroll, etc.
+### Key Features
 
-### Admin Features (MVP)
+- **Admin Attendance**: Comprehensive view of clock-ins/outs, location data, orphaned session management, heatmap view (week/month with export/print), department/employee filtering, and strict clock-in/out cycle enforcement. Supports archiving/unarchiving employees (super admin only). **Attendance Adjustments**: Admin can add leave types (AL, MC, ML, CL, OIL) or hours overrides to any date via heatmap cell tooltip. Leave counts as 9 regular hours for payroll; explicit OT hours are added to calculated OT. Adjustments supersede actual clock-in data for payroll calculations.
+- **Admin Reports**: Generation and export of attendance and employee reports with date filtering and summary statistics.
+- **Admin Email Onboarding**: Batch and individual welcome email sending with password generation and QR codes for app access.
+- **Admin Settings**: Configuration for company branding, email sender, timezone, orphaned session toggle, and admin user management (including master admin password changes).
+- **Admin Payroll Management**:
+    - **Employee Payroll Settings**: Configuration of individual employee profiles including residency status, DOB, salary, and recurring salary adjustments with full CRUD and audit trails.
+    - **Payroll Generation**: Automatic payroll generation from attendance records, supporting CPF calculations (Singapore-specific), overtime, and various pay types. Features idempotency checks and handles special cases for CPF.
+    - **Payroll Import**: CSV-based payroll data import with field mapping.
+    - **Payroll Reports**: Viewing and exporting payroll records by period, with search functionality.
+    - **Editable Payslips**: Admins can edit any payslip component with full audit logging.
+    - **Loan Management**: Creation and tracking of employee loans and repayments.
+    - **Payroll Adjustments**: Admin-controlled adjustments for various payroll components (OT, leave, deductions, bonuses) with workflow and audit logging.
+    - **Running Payroll Summary**: Real-time earnings calculation integrating attendance data with manual adjustments.
+    - **Payslip View**: Structured 10-section payslip displaying employee earnings, deductions, and contributions compliant with Singapore CPF regulations, with employee/employer view toggle.
+    - **Payroll Audit Logs**: Detailed logs for all payslip edits.
 
-- **Admin Attendance Page**: Comprehensive attendance tracking with:
-  - Clock-ins view with date picker for viewing any date (not just today)
-  - Clock-in/out location display with Google Maps links in tooltips
-  - **Orphaned Sessions view**: Identifies clock-ins older than 24 hours without clock-out, with individual and bulk close functionality to allow affected employees to clock in again
-  - Heatmap view with week/month toggle (default: week view)
-    - **Week view**: Uses raw attendance records for reliable, real-time data
-      - Supports custom date range selection (1-7 days) via date pickers
-      - Navigation arrows move by the selected range length
-    - **Month view**: Uses pre-calculated summaries only (prevents query timeouts on large datasets)
-    - **Refresh Data button**: Regenerates summaries from raw records for the current month (visible in month view only)
-    - **Employee Selection**: Checkbox column for selecting individual or all employees
-    - **Serial Numbers**: S/N column for easy reference in printed reports
-    - **Archive/Unarchive**: Hide inactive employees from views without deletion; restore via unarchive modal (super admin only)
-    - **Export Features**: Export heatmap data to CSV or Excel format with employee details and hours worked
-    - **Print Functionality**: Print-friendly heatmap layout (checkboxes hidden, serial numbers visible)
-  - Attendance details view with audit logging
-  - Department and employee filtering
-  - **Strict attendance cycle enforcement**: Employees must clock out before clocking in again (prevents duplicate sessions)
-  
-- **Admin Reports Page**: Generate and export attendance and employee reports with:
-  - Date range filtering for attendance data
-  - Print functionality for physical records
-  - CSV export for spreadsheet analysis
-  - Summary statistics (total employees, attendance records, hours worked)
-  
-- **Admin Email Onboarding System**: Send welcome emails to employees with:
-  - Batch email sending to multiple selected employees
-  - Individual resend capability with password regeneration
-  - QR code linking to app URL (https://app.nexahrms.com/)
-  - Username and initial password distribution
-  - Email settings configuration (sender email, sender name, app URL)
-  
-- **Admin Settings**: Configure system-wide settings including:
-  - Company branding (logo, favicon, name, address, UEN)
-  - Email sender configuration for welcome messages
-  - Timezone settings for attendance calculations (default: Asia/Singapore)
-  - **Orphaned Sessions Setting**: Toggle to ignore orphaned sessions (clock-ins older than 24 hours without clock-out). When enabled, employees can clock in without closing orphaned sessions, and the Orphaned button is hidden from the Attendance page.
-  - QR code preview for verification
-  - Admin Users Management: Promote employees to admin role, view/remove admin users
-  - Admin users can log in via Admin Login page using their username/password
-  - **Master Admin Password Management**: The master admin (nexaadmin) can change passwords for other admin users. Changed users will be required to update their password on next login.
+### Architectural Patterns
 
-- **Admin Payroll Management**: Comprehensive payroll functionality including:
-  - **Employee Payroll Settings**: Configure individual employee payroll profiles with:
-    - Residency status (SC/SPR/Foreigner) for CPF calculations
-    - Date of birth and SPR start date for age-based CPF rates
-    - Monthly salary (simplified from previous Pay Type/Rate configuration)
-    - **Recurring Salary Adjustments**: Multiple additions/deductions per employee stored in employee_salary_adjustments table
-      - Each adjustment has type (addition/deduction), amount, description, and active status
-      - Full CRUD operations via /api/admin/employees/:id/salary-adjustments
-    - Full audit trail of all changes with admin identity and timestamps
-    - View-only admins can view but cannot modify settings
-  - **Payroll Generation from Attendance**: Automatically generate payroll from clock-in/out records with:
-    - Month/year selection for pay period
-    - Preview calculations before generating (hours, pay, CPF)
-    - Singapore CPF contributions calculated based on age, residency status (SC/SPR/Foreigner)
-    - Overtime calculation using company settings (regularHoursPerDay, regularDaysPerWeek, otMultiplier)
-    - Support for hourly, daily, and monthly pay types
-    - Idempotency check prevents duplicate payroll generation for same period
-    - Employees without residency status or FOREIGNER get $0 CPF (no incorrect deductions)
-    - Monthly OW ceiling ($8,000) and phase-in rates for low wages ($500-$750)
-  - **Payroll Import**: Import payroll data from CSV files with comprehensive field mapping
-  - **Payroll Reports**: View and export payroll records by year/month with search by employee name/code
-  - **Editable Payslips**: Admin can edit any payslip component with full audit trail (field changes tracked with old/new values and reasons)
-  - **Loan Management**: Create and manage employee loans (Company, Study, Housing types) with repayment tracking
-  - **Payroll Adjustments**: Admin-controlled adjustments for running payroll entries:
-    - Adjustment types: Overtime, MC Days, AL Days, Late Hours Deduction, Salary Advance, Expense Claims, Other Deductions, Bonus
-    - Each adjustment tracks: hours/days, rate, amount, description, notes for audit trail
-    - Status workflow: pending → approved → processed (or rejected)
-    - Full audit logging with timestamp, admin identity, and change details
-  - **Running Payroll Summary**: Real-time earnings calculation from attendance using formula-based rate derivation:
-    - Daily rate = (Basic Monthly × 12) ÷ (Days per Week × 52)
-    - Hourly rate = Daily rate ÷ Hours per Day
-    - Supports 5-day and 5.5-day work schedules per employee (regularDaysPerWeek field)
-    - Automatic overtime calculation when hours exceed regular threshold
-    - Integrates manual adjustments (OT, claims, bonuses, deductions) with attendance-based earnings
-  - **Payslip View**: Structured 10-section payslip display (A-J) following Singapore CPF regulations with:
-    - Company logo and branding from settings
-    - Zero-value fields automatically hidden for cleaner display
-    - Employee/Employer view toggle: Employee view hides employer contributions; Employer view shows full cost to company
-    - Section A: Employee Information
-    - Section B: Basic Earnings (Basic Salary, Monthly Variables)
-    - Section C: Overtime & Shift Allowances
-    - Section D: Allowances with CPF (Mobile, Transport, Leave Encashment, Service Call)
-    - Section E: Allowances without CPF (Other, House Rental)
-    - Section F: Bonus & Additional Payments
-    - Section G: Employee CPF Contribution
-    - Section H: Deductions (Loans, No Pay Day, Community Contributions - CDAC, MBMF, SINDA, ECF, CC)
-    - Section I: Employer Contributions (Employer CPF, SDF, FWL) - visible only in Employer view
-    - Section J: Payment Summary with Net Pay and Total Cost to Company
-  - **Payroll Audit Logs Table**: Tracks all payslip edits (recordId, fieldName, oldValue, newValue, changedBy, reason, timestamp)
-
-### Key Architectural Patterns
-
-- **Separation of Concerns**: `client/`, `server/`, `shared/` directories with clear boundaries and typed API contracts.
-- **Type Safety**: End-to-end TypeScript, shared schema definitions, Zod for runtime validation, Drizzle for type-safe DB operations.
-- **Development Workflow**: Vite for HMR, separate build processes, path aliases.
-- **Security Considerations**: HTTP-only session cookies, CSRF protection readiness, environment-based configuration, secure cookie settings in production.
+- **Separation of Concerns**: Clear `client/`, `server/`, `shared/` directories.
+- **Type Safety**: End-to-end TypeScript, shared schemas, Zod for runtime validation, Drizzle for DB operations.
+- **Security**: HTTP-only session cookies, environment-based configuration, and secure cookie settings.
 
 ## External Dependencies
 
-### Core Framework Dependencies
-- **@neondatabase/serverless**: PostgreSQL client for Neon.
-- **drizzle-orm** & **drizzle-kit**: ORM and migration tooling.
-- **express** & **express-session**: Server framework and session management.
-- **connect-pg-simple**: PostgreSQL session store.
-- **ws**: WebSocket support for Neon.
-
-### Frontend UI Libraries
-- **@radix-ui/react-***: Accessible UI primitives.
-- **@tanstack/react-query**: Async state management.
-- **wouter**: Lightweight routing.
-- **tailwindcss**: Utility-first CSS.
-- **class-variance-authority** & **clsx**: Class name utilities.
-- **lucide-react**: Icon library.
-- **date-fns**: Date manipulation.
-
-### Development Tools
-- **Vite**: Build tool.
-- **TypeScript**: Type system.
-- **@replit/vite-plugin-***: Replit-specific tooling.
-
-### Form & Validation
-- **react-hook-form**: Form state management.
-- **@hookform/resolvers**: Validation resolver.
-- **zod**: Schema validation.
-- **drizzle-zod**: Zod schema generation from Drizzle.
-
-### Database
-- **PostgreSQL** (via Neon): Primary serverless database with connection pooling.
-- **OpenStreetMap Nominatim API**: Used for reverse geocoding in attendance features.
+- **Database**: PostgreSQL (via Neon)
+- **ORM**: Drizzle ORM, Drizzle-kit
+- **Server Framework**: Express.js, express-session, connect-pg-simple
+- **Real-time Communication**: ws
+- **Frontend UI**: @radix-ui/react-*, shadcn/ui, Tailwind CSS, class-variance-authority, clsx, lucide-react
+- **Data Fetching**: @tanstack/react-query
+- **Routing**: wouter
+- **Date Utilities**: date-fns
+- **Form Management**: react-hook-form, @hookform/resolvers
+- **Validation**: zod, drizzle-zod
+- **Build Tool**: Vite
+- **Mapping/Geocoding**: OpenStreetMap Nominatim API
