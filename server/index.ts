@@ -9,26 +9,45 @@ import { setupVite, serveStatic, log } from "./vite";
 async function ensureSchemaMigrations(pool: Pool) {
   console.log("Running schema migrations...");
   try {
-    // Create attendance_adjustments table if it doesn't exist
-    console.log("Creating attendance_adjustments table if not exists...");
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS attendance_adjustments (
-        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id varchar NOT NULL REFERENCES users(id),
-        date text NOT NULL,
-        adjustment_type text NOT NULL,
-        leave_type text,
-        regular_hours real,
-        ot_hours real,
-        notes text,
-        created_by varchar NOT NULL REFERENCES users(id),
-        created_at timestamp NOT NULL DEFAULT now(),
-        updated_at timestamp NOT NULL DEFAULT now()
+    // Ensure pgcrypto extension is available for gen_random_uuid()
+    console.log("Ensuring pgcrypto extension...");
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+    console.log("pgcrypto extension ready");
+    
+    // Check if attendance_adjustments table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'attendance_adjustments'
       )
     `);
-    console.log("attendance_adjustments table ready");
     
-    // Create unique index on user_id + date
+    const tableExists = tableCheck.rows[0]?.exists;
+    console.log("attendance_adjustments table exists:", tableExists);
+    
+    if (!tableExists) {
+      // Create attendance_adjustments table
+      console.log("Creating attendance_adjustments table...");
+      await pool.query(`
+        CREATE TABLE attendance_adjustments (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id varchar NOT NULL REFERENCES users(id),
+          date text NOT NULL,
+          adjustment_type text NOT NULL,
+          leave_type text,
+          regular_hours real,
+          ot_hours real,
+          notes text,
+          created_by varchar NOT NULL REFERENCES users(id),
+          created_at timestamp NOT NULL DEFAULT now(),
+          updated_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+      console.log("attendance_adjustments table created");
+    }
+    
+    // Create unique index on user_id + date (IF NOT EXISTS handles idempotency)
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS attendance_adjustments_user_date_unique
       ON attendance_adjustments (user_id, date)
@@ -44,9 +63,14 @@ async function ensureSchemaMigrations(pool: Pool) {
     
     log("Schema migrations verified successfully");
   } catch (error: any) {
-    console.error("Schema migration error:", error.message || error);
-    console.error("Full error:", JSON.stringify(error, null, 2));
-    // Don't throw - let the app continue, table might already exist
+    // Log detailed error for debugging - this is critical for production
+    console.error("=== SCHEMA MIGRATION FAILED ===");
+    console.error("Error message:", error.message);
+    console.error("Error code:", error.code);
+    console.error("Error detail:", error.detail);
+    console.error("Full error:", error);
+    // Rethrow to make the failure visible
+    throw error;
   }
 }
 
