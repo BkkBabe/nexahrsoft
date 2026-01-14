@@ -2566,10 +2566,20 @@ export default function AdminAttendancePage() {
                                 
                                 const cellClassName = `${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 ${getCellColor()} ${(hours > 0 || hasOpenSession || hasAdjustment) ? 'text-white' : ''}`;
                                 
-                                // Don't apply inline style for leave adjustments - let Tailwind class handle the color
-                                const cellStyle = (hasAdjustment && isLeaveAdjustment) 
-                                  ? { color: '#fff' } 
-                                  : getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord);
+                                // Apply inline style for proper color - use adjusted hours for override, original hours otherwise
+                                const getCellStyle = (): React.CSSProperties => {
+                                  if (hasAdjustment && isLeaveAdjustment) {
+                                    // Leave adjustments - use distinct leave colors (handled by Tailwind class)
+                                    return { color: '#fff' };
+                                  }
+                                  if (hasAdjustment && !isLeaveAdjustment) {
+                                    // Hours override - use adjusted total for normal clock-in color scheme
+                                    const adjTotal = (adjustment?.regularHours || 0) + (adjustment?.otHours || 0);
+                                    return getHeatmapInlineStyle(adjTotal, false, isWeekend, isFuture, true);
+                                  }
+                                  return getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord);
+                                };
+                                const cellStyle = getCellStyle();
                                 
                                 // When printing, render simple div without Tooltip wrapper
                                 if (isPrinting) {
