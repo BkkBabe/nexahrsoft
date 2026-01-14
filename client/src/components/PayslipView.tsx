@@ -198,10 +198,13 @@ export default function PayslipView({
   const totalCommunityFund =
     parseAmount(record.cc) + parseAmount(record.cdac) + parseAmount(record.ecf) + parseAmount(record.mbmf) + parseAmount(record.sinda);
 
-  const totalDeductionsEmployee =
+  const totalOtherDeductions =
     parseAmount(record.loanRepaymentTotal) +
     parseAmount(record.noPayDay) +
-    totalCommunityFund +
+    totalCommunityFund;
+  
+  const totalDeductionsEmployee =
+    totalOtherDeductions +
     Math.abs(parseAmount(record.employeeCpf));
 
   const totalEmployerContributions =
@@ -366,18 +369,63 @@ export default function PayslipView({
           <LineItem label="Bonus" value={record.bonus} />
         </Section>
 
-        {/* Section C: Deductions */}
-        {totalDeductionsEmployee > 0 && (
+        {/* Section C: CPF Contribution */}
+        {(parseAmount(record.employeeCpf) !== 0 || parseAmount(record.employerCpf) !== 0) && (
           <Section
-            title="Deductions"
+            title="CPF Contribution"
             sectionLetter="C"
-            subtotal={{ label: "Total Deductions", value: totalDeductionsEmployee }}
           >
-            <LineItem
-              label="Employee CPF (20%)"
-              value={Math.abs(parseAmount(record.employeeCpf))}
-              isNegative
-            />
+            {(() => {
+              const cpfWages = parseAmount(record.cpfWages);
+              const employeeCpf = Math.abs(parseAmount(record.employeeCpf));
+              const employerCpf = parseAmount(record.employerCpf);
+              const employeeRate = cpfWages > 0 ? ((employeeCpf / cpfWages) * 100).toFixed(1) : "0";
+              const employerRate = cpfWages > 0 ? ((employerCpf / cpfWages) * 100).toFixed(1) : "0";
+              const totalCpf = employeeCpf + employerCpf;
+              const totalRate = cpfWages > 0 ? ((totalCpf / cpfWages) * 100).toFixed(1) : "0";
+              
+              return (
+                <>
+                  <div className="flex justify-between items-center py-0.5 print:py-0">
+                    <span className="text-sm print:text-xs">CPF Wages (capped at $8,000)</span>
+                    <span className="font-mono text-sm print:text-xs">${formatCurrency(cpfWages)}</span>
+                  </div>
+                  <Separator className="my-1 print:my-0.5" />
+                  <div className="flex justify-between items-center py-0.5 print:py-0">
+                    <span className="text-sm print:text-xs">Employee CPF ({employeeRate}%)</span>
+                    <span className="font-mono text-sm print:text-xs text-destructive">-${formatCurrency(employeeCpf)}</span>
+                  </div>
+                  {isEmployerView && (
+                    <div className="flex justify-between items-center py-0.5 print:py-0">
+                      <span className="text-sm print:text-xs">Employer CPF ({employerRate}%)</span>
+                      <span className="font-mono text-sm print:text-xs">${formatCurrency(employerCpf)}</span>
+                    </div>
+                  )}
+                  <Separator className="my-1 print:my-0.5" />
+                  <div className="flex justify-between items-center font-semibold py-0.5 print:py-0">
+                    <span className="text-sm print:text-xs">
+                      {isEmployerView ? `Total CPF (${totalRate}%)` : "Employee CPF Deduction"}
+                    </span>
+                    <span className="font-mono text-sm print:text-xs">
+                      {isEmployerView ? `$${formatCurrency(totalCpf)}` : `-$${formatCurrency(employeeCpf)}`}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 print:text-[10px]">
+                    CPF rates based on age group (2026 rates)
+                  </div>
+                </>
+              );
+            })()}
+          </Section>
+        )}
+
+        {/* Section D: Other Deductions */}
+        {(parseAmount(record.loanRepaymentTotal) > 0 || parseAmount(record.noPayDay) > 0 || totalCommunityFund > 0) && (
+          <Section
+            title="Other Deductions"
+            sectionLetter="D"
+            subtotal={{ label: "Total Other Deductions", value: parseAmount(record.loanRepaymentTotal) + parseAmount(record.noPayDay) + totalCommunityFund }}
+          >
             <LineItem label="Loan Repayments" value={record.loanRepaymentTotal} isNegative />
             <LineItem label="No Pay Day Deduction" value={record.noPayDay} isNegative />
             {totalCommunityFund > 0 && (
@@ -395,10 +443,10 @@ export default function PayslipView({
           </Section>
         )}
 
-        {/* Section D: Adjustments */}
+        {/* Section E: Adjustments */}
         <Section 
           title="Adjustments" 
-          sectionLetter="D"
+          sectionLetter="E"
           subtotal={adjustments.length > 0 ? { label: "Total Adjustments", value: totalAdjustments } : undefined}
         >
           {adjustments.length > 0 ? (
@@ -456,8 +504,8 @@ export default function PayslipView({
 
         <Separator className="print:my-1" />
 
-        {/* Section E: Payment Summary */}
-        <Section title="Payment Summary" sectionLetter="E">
+        {/* Section F: Payment Summary */}
+        <Section title="Payment Summary" sectionLetter="F">
           <div className="space-y-2 print:space-y-1">
             <div className="flex justify-between items-center">
               <span className="text-sm print:text-xs">Gross Wages</span>
