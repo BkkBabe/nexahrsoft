@@ -52,6 +52,16 @@ function formatDate(date: Date | string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Helper function to convert name to Title Case
+function toTitleCase(str: string | null | undefined): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 // Helper to get date range for period (using local dates, not UTC)
 function getDateRange(period: 'daily' | 'weekly' | 'monthly'): { startDate: string; endDate: string } {
   const now = new Date();
@@ -1229,7 +1239,7 @@ export default function AdminAttendancePage() {
       
       return [
         idx + 1,
-        user.name || '',
+        toTitleCase(user.name),
         user.employeeCode || '',
         user.department || '',
         ...heatmapDays.map(day => {
@@ -1374,7 +1384,7 @@ export default function AdminAttendancePage() {
       
       const rowData: (string | number)[] = [
         idx + 1,
-        user.name || '',
+        toTitleCase(user.name),
         user.employeeCode || '',
         user.department || ''
       ];
@@ -2468,8 +2478,8 @@ export default function AdminAttendancePage() {
                               {userIndex + 1}
                             </div>
                             <div className="w-48 flex-shrink-0 p-2 border-r">
-                              <div className="text-sm font-medium truncate" title={user.name || ''}>
-                                {user.name}
+                              <div className="text-sm font-medium truncate" title={toTitleCase(user.name)}>
+                                {toTitleCase(user.name)}
                               </div>
                               <div className="text-xs text-muted-foreground truncate">
                                 {user.department || 'No dept'}
@@ -2571,7 +2581,7 @@ export default function AdminAttendancePage() {
                                       </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs max-w-xs">
-                                      <div className="font-medium">{user.name}</div>
+                                      <div className="font-medium">{toTitleCase(user.name)}</div>
                                       <div className="text-muted-foreground">{formatDate(day)}</div>
                                       
                                       {/* Show adjustment details if present */}
@@ -2650,7 +2660,7 @@ export default function AdminAttendancePage() {
                                             e.stopPropagation();
                                             setEditModalData({
                                               userId: user.id,
-                                              userName: user.name || 'Unknown',
+                                              userName: toTitleCase(user.name) || 'Unknown',
                                               date: dateKey,
                                               actualHours: hours,
                                             });
@@ -2706,7 +2716,7 @@ export default function AdminAttendancePage() {
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="left" className="text-xs">
-                                    <div className="font-medium">{user.name}</div>
+                                    <div className="font-medium">{toTitleCase(user.name)}</div>
                                     <div>Total hours this {heatmapViewType === 'week' ? 'week' : 'month'}: {userTotalHours.toFixed(1)} hrs</div>
                                   </TooltipContent>
                                 </Tooltip>
@@ -3229,7 +3239,7 @@ export default function AdminAttendancePage() {
                     data-testid={`checkbox-archived-${user.id}`}
                   />
                   <div className="flex-1">
-                    <div className="text-sm font-medium">{user.name || 'Unknown'}</div>
+                    <div className="text-sm font-medium">{toTitleCase(user.name) || 'Unknown'}</div>
                     <div className="text-xs text-muted-foreground">
                       {user.employeeCode || 'No code'} | {user.department || 'No dept'}
                     </div>
