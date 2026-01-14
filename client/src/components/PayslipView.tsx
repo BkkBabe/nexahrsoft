@@ -554,7 +554,7 @@ export default function PayslipView({
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 print:text-[10px] print:mt-0.5">
-                  (Gross Wages + Employer CPF + Levies + Adjustments)
+                  (Gross Wages + Employer CPF)
                 </p>
               </div>
             )}
