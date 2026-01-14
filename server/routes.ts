@@ -2058,10 +2058,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Leave type is required for leave adjustments" });
       }
       
-      // Get admin user ID
-      const adminUserId = req.session?.userId;
-      if (!adminUserId) {
+      // Get admin user ID - handle master admin case
+      let creatorId = req.session?.userId;
+      if (!creatorId) {
         return res.status(401).json({ message: "Admin user not identified" });
+      }
+      
+      // If master admin (userId = "admin"), find a real admin user to use as creator
+      // or use the target user as creator (self-adjustment by system)
+      if (creatorId === "admin") {
+        // Try to find any admin user in the database
+        const adminUsers = await storage.getAdminUsers();
+        if (adminUsers.length > 0) {
+          creatorId = adminUsers[0].id;
+        } else {
+          // Fall back to using the target user as the "creator" for FK compliance
+          creatorId = userId;
+        }
       }
       
       // Check if adjustment already exists for this user/date
@@ -2075,7 +2088,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           regularHours: adjustmentType === "leave" ? 9 : (regularHours || null),
           otHours: adjustmentType === "hours" ? (otHours || null) : null,
           notes: notes || null,
-          createdBy: adminUserId,
+          createdBy: creatorId,
         });
         res.json({ adjustment: updated, message: "Attendance adjustment updated" });
       } else {
@@ -2088,13 +2101,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           regularHours: adjustmentType === "leave" ? 9 : (regularHours || null),
           otHours: adjustmentType === "hours" ? (otHours || null) : null,
           notes: notes || null,
-          createdBy: adminUserId,
+          createdBy: creatorId,
         });
         res.json({ adjustment: newAdjustment, message: "Attendance adjustment created" });
       }
     } catch (error: any) {
-      console.error("Create/update attendance adjustment error:", error);
-      res.status(500).json({ message: "Failed to save attendance adjustment" });
+      console.error("=== ATTENDANCE ADJUSTMENT ERROR ===");
+      console.error("Error message:", error.message);
+      console.error("Error code:", error.code);
+      console.error("Error detail:", error.detail);
+      console.error("Error constraint:", error.constraint);
+      console.error("Full error:", error);
+      res.status(500).json({ 
+        message: "Failed to save attendance adjustment",
+        debug: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   });
 

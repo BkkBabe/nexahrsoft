@@ -84,6 +84,7 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   bulkCreateUsers(usersData: Partial<User>[]): Promise<User[]>;
   getUserByEmployeeCode(employeeCode: string): Promise<User | undefined>;
+  getAdminUsers(): Promise<User[]>;
   
   // Email log methods
   createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
@@ -550,6 +551,10 @@ export class MemStorage implements IStorage {
 
   async getUserByEmployeeCode(employeeCode: string): Promise<User | undefined> {
     throw new Error("MemStorage getUserByEmployeeCode not implemented");
+  }
+
+  async getAdminUsers(): Promise<User[]> {
+    throw new Error("MemStorage getAdminUsers not implemented");
   }
 
   // Email log methods - stub implementations
@@ -1411,6 +1416,18 @@ export class PgStorage implements IStorage {
       .where(eq(users.employeeCode, employeeCode))
       .limit(1);
     return user;
+  }
+
+  async getAdminUsers(): Promise<User[]> {
+    return await db.select()
+      .from(users)
+      .where(
+        or(
+          eq(users.role, "admin"),
+          eq(users.role, "viewonly_admin")
+        )
+      )
+      .limit(10);
   }
 
   // Email log methods
