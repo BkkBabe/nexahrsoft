@@ -2418,10 +2418,10 @@ export default function AdminAttendancePage() {
                         </div>
                       )}
                       {/* Serial number column */}
-                      <div className="w-12 flex-shrink-0 p-2 font-medium text-sm border-r text-center">
-                        S/N
+                      <div className="w-6 flex-shrink-0 p-1 font-medium text-xs border-r text-center">
+                        #
                       </div>
-                      <div className="w-48 flex-shrink-0 p-2 font-medium text-sm border-r">
+                      <div className="w-40 flex-shrink-0 p-2 font-medium text-sm border-r">
                         Employee
                       </div>
                       <div className={`flex ${heatmapViewType === 'week' ? 'flex-1' : ''}`}>
@@ -2448,7 +2448,7 @@ export default function AdminAttendancePage() {
                         <div className="text-muted-foreground text-[10px]">Hours</div>
                       </div>
                       {/* Remark column header */}
-                      <div className="w-32 flex-shrink-0 p-1 text-center text-xs border-l bg-muted/50">
+                      <div className="w-44 flex-shrink-0 p-1 text-center text-xs border-l bg-muted/50">
                         <div className="font-bold">Remark</div>
                         <div className="text-muted-foreground text-[10px]">Monthly</div>
                       </div>
@@ -2474,10 +2474,10 @@ export default function AdminAttendancePage() {
                               </div>
                             )}
                             {/* Serial number column */}
-                            <div className="w-12 flex-shrink-0 p-2 text-sm text-center text-muted-foreground border-r">
+                            <div className="w-6 flex-shrink-0 p-1 text-xs text-center text-muted-foreground border-r">
                               {userIndex + 1}
                             </div>
-                            <div className="w-48 flex-shrink-0 p-2 border-r">
+                            <div className="w-40 flex-shrink-0 p-2 border-r">
                               <div className="text-sm font-medium truncate" title={toTitleCase(user.name)}>
                                 {toTitleCase(user.name)}
                               </div>
@@ -2730,7 +2730,7 @@ export default function AdminAttendancePage() {
                               // Editable remark cell
                               if (isEditing) {
                                 return (
-                                  <div className="w-32 flex-shrink-0 min-h-[36px] flex items-center p-1 border-l bg-muted/30">
+                                  <div className="w-44 flex-shrink-0 min-h-[36px] flex items-center p-1 border-l bg-muted/30">
                                     <Input
                                       value={editingRemarkValue}
                                       onChange={(e) => setEditingRemarkValue(e.target.value)}
@@ -2767,7 +2767,7 @@ export default function AdminAttendancePage() {
                               if (isPrinting) {
                                 return (
                                   <div 
-                                    className="w-32 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30"
+                                    className="w-44 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30"
                                     data-testid={`remark-${user.id}`}
                                   >
                                     <span className="truncate">{userRemark || '-'}</span>
@@ -2777,7 +2777,7 @@ export default function AdminAttendancePage() {
                               
                               return (
                                 <div 
-                                  className="w-32 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30 cursor-pointer hover:bg-muted/50"
+                                  className="w-44 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30 cursor-pointer hover:bg-muted/50"
                                   onClick={() => {
                                     if (!cannotEdit) {
                                       setEditingRemarkUserId(user.id);
