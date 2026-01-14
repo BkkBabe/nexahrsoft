@@ -2443,14 +2443,12 @@ export default function AdminAttendancePage() {
                         })}
                       </div>
                       {/* Total column header */}
-                      <div className="w-20 flex-shrink-0 p-1 text-center text-xs border-l bg-primary/10">
+                      <div className="w-12 flex-shrink-0 p-1 text-center text-xs border-l bg-primary/10">
                         <div className="font-bold">Total</div>
-                        <div className="text-muted-foreground text-[10px]">Hours</div>
                       </div>
                       {/* Remark column header */}
-                      <div className="w-44 flex-shrink-0 p-1 text-center text-xs border-l bg-muted/50">
+                      <div className="w-52 flex-shrink-0 p-1 text-center text-xs border-l bg-muted/50">
                         <div className="font-bold">Remark</div>
-                        <div className="text-muted-foreground text-[10px]">Monthly</div>
                       </div>
                     </div>
 
@@ -2689,7 +2687,7 @@ export default function AdminAttendancePage() {
                               }, 0);
                               
                               const totalCellContent = userTotalHours > 0 ? userTotalHours.toFixed(1) : '-';
-                              const totalCellClassName = "w-20 flex-shrink-0 min-h-[36px] flex items-center justify-center text-sm font-bold border-l";
+                              const totalCellClassName = "w-12 flex-shrink-0 min-h-[36px] flex items-center justify-center text-xs font-bold border-l";
                               const totalCellStyle: React.CSSProperties = { backgroundColor: '#e0f2fe' }; // Light blue for print
                               
                               // When printing, render simple div without Tooltip
@@ -2730,7 +2728,7 @@ export default function AdminAttendancePage() {
                               // Editable remark cell
                               if (isEditing) {
                                 return (
-                                  <div className="w-44 flex-shrink-0 min-h-[36px] flex items-center p-1 border-l bg-muted/30">
+                                  <div className="w-52 flex-shrink-0 min-h-[36px] flex items-center p-1 border-l bg-muted/30">
                                     <Input
                                       value={editingRemarkValue}
                                       onChange={(e) => setEditingRemarkValue(e.target.value)}
@@ -2767,7 +2765,7 @@ export default function AdminAttendancePage() {
                               if (isPrinting) {
                                 return (
                                   <div 
-                                    className="w-44 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30"
+                                    className="w-52 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30"
                                     data-testid={`remark-${user.id}`}
                                   >
                                     <span className="truncate">{userRemark || '-'}</span>
@@ -2777,7 +2775,7 @@ export default function AdminAttendancePage() {
                               
                               return (
                                 <div 
-                                  className="w-44 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30 cursor-pointer hover:bg-muted/50"
+                                  className="w-52 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30 cursor-pointer hover:bg-muted/50"
                                   onClick={() => {
                                     if (!cannotEdit) {
                                       setEditingRemarkUserId(user.id);
