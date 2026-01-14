@@ -3927,6 +3927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Skip if no rate configured (except for Executive employees who use monthly salary)
         if (!isExecutive && (!hourlyRate || hourlyRate === 0)) {
           skippedEmployees.push({
+            id: employee.id,
             employeeCode: employee.employeeCode || 'N/A',
             employeeName: employee.name,
             reason: 'No pay rate configured (hourly/daily/monthly salary)',
@@ -3937,6 +3938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For Executive, ensure they have basic monthly salary configured (not null and not 0)
         if (isExecutive && (empBasicMonthlySalary === null || empBasicMonthlySalary <= 0)) {
           skippedEmployees.push({
+            id: employee.id,
             employeeCode: employee.employeeCode || 'N/A',
             employeeName: employee.name,
             reason: 'Executive employee has no basic monthly salary configured',
@@ -4189,6 +4191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!hourlyRate || hourlyRate === 0) {
           skipped.push({
+            id: employee.id,
             employeeCode: employee.employeeCode || 'N/A',
             employeeName: employee.name,
             reason: 'No pay rate configured',

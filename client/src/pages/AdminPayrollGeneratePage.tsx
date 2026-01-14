@@ -88,6 +88,7 @@ interface PreviewEmployee {
 }
 
 interface SkippedEmployee {
+  id: string;
   employeeCode: string;
   employeeName: string;
   reason: string;
@@ -342,15 +343,22 @@ export default function AdminPayrollGeneratePage() {
                   Skipped Employees ({previewData.skipped.length})
                 </CardTitle>
                 <CardDescription className="text-yellow-600 dark:text-yellow-500">
-                  These employees were skipped because they don't have pay rates configured
+                  These employees were skipped because they don't have pay rates configured. Click to configure settings.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {previewData.skipped.map((emp, idx) => (
-                    <Badge key={idx} variant="outline" className="border-yellow-300">
+                    <Button
+                      key={idx}
+                      variant="outline"
+                      size="sm"
+                      className="border-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
+                      onClick={() => setLocation(`/admin/payroll/employee-settings?employeeId=${emp.id}&returnTo=generate&period=${selectedPeriod}`)}
+                      data-testid={`button-skipped-employee-${emp.id}`}
+                    >
                       {emp.employeeCode}: {emp.employeeName}
-                    </Badge>
+                    </Button>
                   ))}
                 </div>
               </CardContent>

@@ -171,6 +171,7 @@ export default function AdminEmployeePayrollPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [urlParamProcessed, setUrlParamProcessed] = useState(false);
+  const [returnToGenerate, setReturnToGenerate] = useState<string | null>(null);
 
   const { data: employeeList, isLoading: isLoadingList, error: listError } = useQuery<{ employees: EmployeePayrollSummary[] }>({
     queryKey: ["/api/admin/employees/payroll-list"],
@@ -181,17 +182,35 @@ export default function AdminEmployeePayrollPage() {
     if (!urlParamProcessed && employeeList?.employees) {
       const urlParams = new URLSearchParams(window.location.search);
       const employeeId = urlParams.get('employeeId');
+      const returnTo = urlParams.get('returnTo');
+      const period = urlParams.get('period');
+      
       if (employeeId) {
         // Verify the employee exists in the list
         const employee = employeeList.employees.find(emp => emp.id === employeeId);
         if (employee) {
           setSelectedEmployeeId(employeeId);
           setEditDialogOpen(true);
+          
+          // Store return info if coming from generate page
+          if (returnTo === 'generate' && period) {
+            setReturnToGenerate(period);
+          }
         }
         setUrlParamProcessed(true);
       }
     }
   }, [employeeList, urlParamProcessed]);
+  
+  // Handle dialog close - return to generate page if came from there
+  const handleDialogClose = (open: boolean) => {
+    setEditDialogOpen(open);
+    if (!open && returnToGenerate) {
+      // Navigate back to generate payroll page with the period
+      setLocation(`/admin/payroll/generate`);
+      setReturnToGenerate(null);
+    }
+  };
 
   const filteredEmployees = employeeList?.employees?.filter(emp => {
     const search = searchTerm.toLowerCase();
@@ -363,7 +382,7 @@ export default function AdminEmployeePayrollPage() {
         employeeCode={employeeList?.employees?.find(e => e.id === selectedEmployeeId)?.employeeCode || null}
         open={editDialogOpen}
         onOpenChange={(open) => {
-          setEditDialogOpen(open);
+          handleDialogClose(open);
           if (!open) setSelectedEmployeeId(null);
         }}
       />
