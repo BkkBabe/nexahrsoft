@@ -172,7 +172,9 @@ export default function AdminPayrollGeneratePage() {
       setPreviewData(null);
       setConfirmDialogOpen(false);
       // Navigate back to Payroll Management after successful generation
-      setLocation("/admin/payroll");
+      setTimeout(() => {
+        setLocation("/admin/payroll");
+      }, 100);
     },
     onError: (error: Error) => {
       toast({
