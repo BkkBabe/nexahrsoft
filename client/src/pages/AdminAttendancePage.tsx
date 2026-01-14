@@ -2394,7 +2394,7 @@ export default function AdminAttendancePage() {
                 <div className="text-center py-8 text-muted-foreground">Loading heatmap data...</div>
               ) : (
                 <div className="overflow-x-auto print:overflow-visible" data-testid="heatmap-container">
-                  <div className="min-w-[800px]">
+                  <div className={heatmapViewType === 'month' ? 'min-w-[1500px]' : 'min-w-[800px]'}>
                     {/* Header row with dates */}
                     <div className="flex border-b sticky top-0 bg-background z-10">
                       {/* Checkbox column - hidden when printing */}
