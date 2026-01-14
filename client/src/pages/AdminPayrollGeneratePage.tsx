@@ -171,6 +171,8 @@ export default function AdminPayrollGeneratePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payroll/records"] });
       setPreviewData(null);
       setConfirmDialogOpen(false);
+      // Navigate back to Payroll Management after successful generation
+      setLocation("/admin/payroll");
     },
     onError: (error: Error) => {
       toast({
