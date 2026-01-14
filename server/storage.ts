@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -36,6 +36,14 @@ export interface IStorage {
   getDailyAttendanceSummaries(startDate: string, endDate: string, limit?: number): Promise<DailyAttendanceSummary[]>;
   recalculateDailyAttendanceSummary(date: string, userId: string): Promise<DailyAttendanceSummary | null>;
   recalculateAllSummariesForDate(date: string): Promise<{ processed: number; errors: number; deleted: number }>;
+  
+  // Attendance adjustment methods (leave/OT override)
+  createAttendanceAdjustment(adjustment: InsertAttendanceAdjustment): Promise<AttendanceAdjustment>;
+  getAttendanceAdjustment(userId: string, date: string): Promise<AttendanceAdjustment | undefined>;
+  getAttendanceAdjustmentById(id: string): Promise<AttendanceAdjustment | undefined>;
+  updateAttendanceAdjustment(id: string, updates: Partial<AttendanceAdjustment>): Promise<AttendanceAdjustment | undefined>;
+  deleteAttendanceAdjustment(id: string): Promise<void>;
+  getAttendanceAdjustmentsByDateRange(startDate: string, endDate: string): Promise<AttendanceAdjustment[]>;
   
   // Session tracking methods
   createUserSession(session: InsertUserSession): Promise<UserSession>;
@@ -397,6 +405,31 @@ export class MemStorage implements IStorage {
 
   async recalculateAllSummariesForDate(date: string): Promise<{ processed: number; errors: number; deleted: number }> {
     throw new Error("MemStorage daily summary not implemented");
+  }
+
+  // Attendance adjustment methods - stub implementations
+  async createAttendanceAdjustment(adjustment: InsertAttendanceAdjustment): Promise<AttendanceAdjustment> {
+    throw new Error("MemStorage attendance adjustment not implemented");
+  }
+
+  async getAttendanceAdjustment(userId: string, date: string): Promise<AttendanceAdjustment | undefined> {
+    throw new Error("MemStorage attendance adjustment not implemented");
+  }
+
+  async getAttendanceAdjustmentById(id: string): Promise<AttendanceAdjustment | undefined> {
+    throw new Error("MemStorage attendance adjustment not implemented");
+  }
+
+  async updateAttendanceAdjustment(id: string, updates: Partial<AttendanceAdjustment>): Promise<AttendanceAdjustment | undefined> {
+    throw new Error("MemStorage attendance adjustment not implemented");
+  }
+
+  async deleteAttendanceAdjustment(id: string): Promise<void> {
+    throw new Error("MemStorage attendance adjustment not implemented");
+  }
+
+  async getAttendanceAdjustmentsByDateRange(startDate: string, endDate: string): Promise<AttendanceAdjustment[]> {
+    throw new Error("MemStorage attendance adjustment not implemented");
   }
 
   // Session tracking methods - stub implementations for MemStorage
@@ -1051,6 +1084,59 @@ export class PgStorage implements IStorage {
     }
     
     return { processed, errors, deleted };
+  }
+
+  // Attendance adjustment methods (leave/OT override)
+  async createAttendanceAdjustment(adjustment: InsertAttendanceAdjustment): Promise<AttendanceAdjustment> {
+    const [record] = await db.insert(attendanceAdjustments)
+      .values(adjustment)
+      .returning();
+    return record;
+  }
+
+  async getAttendanceAdjustment(userId: string, date: string): Promise<AttendanceAdjustment | undefined> {
+    const [record] = await db.select()
+      .from(attendanceAdjustments)
+      .where(
+        and(
+          eq(attendanceAdjustments.userId, userId),
+          eq(attendanceAdjustments.date, date)
+        )
+      )
+      .limit(1);
+    return record;
+  }
+
+  async getAttendanceAdjustmentById(id: string): Promise<AttendanceAdjustment | undefined> {
+    const [record] = await db.select()
+      .from(attendanceAdjustments)
+      .where(eq(attendanceAdjustments.id, id))
+      .limit(1);
+    return record;
+  }
+
+  async updateAttendanceAdjustment(id: string, updates: Partial<AttendanceAdjustment>): Promise<AttendanceAdjustment | undefined> {
+    const [updated] = await db.update(attendanceAdjustments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(attendanceAdjustments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAttendanceAdjustment(id: string): Promise<void> {
+    await db.delete(attendanceAdjustments)
+      .where(eq(attendanceAdjustments.id, id));
+  }
+
+  async getAttendanceAdjustmentsByDateRange(startDate: string, endDate: string): Promise<AttendanceAdjustment[]> {
+    return await db.select()
+      .from(attendanceAdjustments)
+      .where(
+        and(
+          gte(attendanceAdjustments.date, startDate),
+          lte(attendanceAdjustments.date, endDate)
+        )
+      );
   }
 
   // Session tracking methods

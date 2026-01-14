@@ -2001,6 +2001,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Get attendance adjustments for a date range
+  app.get("/api/admin/attendance/adjustments", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+      
+      const now = new Date();
+      const defaultStartDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const defaultEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      
+      const queryStartDate = startDate || defaultStartDate;
+      const queryEndDate = endDate || defaultEndDate;
+      
+      const adjustments = await storage.getAttendanceAdjustmentsByDateRange(queryStartDate, queryEndDate);
+      res.json({ adjustments });
+    } catch (error: any) {
+      console.error("Get attendance adjustments error:", error);
+      res.status(500).json({ message: "Failed to get attendance adjustments" });
+    }
+  });
+
+  // Admin: Get single attendance adjustment
+  app.get("/api/admin/attendance/adjustments/:userId/:date", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId, date } = req.params;
+      const adjustment = await storage.getAttendanceAdjustment(userId, date);
+      res.json({ adjustment: adjustment || null });
+    } catch (error: any) {
+      console.error("Get attendance adjustment error:", error);
+      res.status(500).json({ message: "Failed to get attendance adjustment" });
+    }
+  });
+
+  // Admin: Create or update attendance adjustment (leave or hours override)
+  app.post("/api/admin/attendance/adjustments", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.string().uuid(),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        adjustmentType: z.enum(["leave", "hours"]),
+        leaveType: z.enum(["AL", "MC", "ML", "CL", "OIL"]).optional().nullable(),
+        regularHours: z.number().min(0).max(24).optional().nullable(),
+        otHours: z.number().min(0).max(24).optional().nullable(),
+        notes: z.string().optional().nullable(),
+      });
+      
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request", errors: parsed.error.errors });
+      }
+      
+      const { userId, date, adjustmentType, leaveType, regularHours, otHours, notes } = parsed.data;
+      
+      // Validate leave type is provided for leave adjustments
+      if (adjustmentType === "leave" && !leaveType) {
+        return res.status(400).json({ message: "Leave type is required for leave adjustments" });
+      }
+      
+      // Get admin user ID
+      const adminUserId = req.session?.userId;
+      if (!adminUserId) {
+        return res.status(401).json({ message: "Admin user not identified" });
+      }
+      
+      // Check if adjustment already exists for this user/date
+      const existingAdjustment = await storage.getAttendanceAdjustment(userId, date);
+      
+      if (existingAdjustment) {
+        // Update existing adjustment
+        const updated = await storage.updateAttendanceAdjustment(existingAdjustment.id, {
+          adjustmentType,
+          leaveType: leaveType || null,
+          regularHours: adjustmentType === "leave" ? 9 : (regularHours || null),
+          otHours: adjustmentType === "hours" ? (otHours || null) : null,
+          notes: notes || null,
+          createdBy: adminUserId,
+        });
+        res.json({ adjustment: updated, message: "Attendance adjustment updated" });
+      } else {
+        // Create new adjustment
+        const newAdjustment = await storage.createAttendanceAdjustment({
+          userId,
+          date,
+          adjustmentType,
+          leaveType: leaveType || null,
+          regularHours: adjustmentType === "leave" ? 9 : (regularHours || null),
+          otHours: adjustmentType === "hours" ? (otHours || null) : null,
+          notes: notes || null,
+          createdBy: adminUserId,
+        });
+        res.json({ adjustment: newAdjustment, message: "Attendance adjustment created" });
+      }
+    } catch (error: any) {
+      console.error("Create/update attendance adjustment error:", error);
+      res.status(500).json({ message: "Failed to save attendance adjustment" });
+    }
+  });
+
+  // Admin: Delete attendance adjustment (revert to actual clock-in data)
+  app.delete("/api/admin/attendance/adjustments/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const adjustment = await storage.getAttendanceAdjustmentById(id);
+      if (!adjustment) {
+        return res.status(404).json({ message: "Adjustment not found" });
+      }
+      
+      await storage.deleteAttendanceAdjustment(id);
+      res.json({ message: "Attendance adjustment deleted, reverting to actual clock-in data" });
+    } catch (error: any) {
+      console.error("Delete attendance adjustment error:", error);
+      res.status(500).json({ message: "Failed to delete attendance adjustment" });
+    }
+  });
+
   // Admin: Bulk close orphaned attendance sessions
   app.post("/api/admin/attendance/bulk-close-orphaned", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
