@@ -261,12 +261,13 @@ export function AttendanceEditModal({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row items-center justify-between gap-2 pt-4">
-          <div>
+        <div className="flex flex-row items-center justify-between gap-3 pt-4 border-t mt-2">
+          <div className="flex-shrink-0">
             {existingAdjustment && (
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 onClick={handleDelete}
                 disabled={deleteMutation.isPending || saveMutation.isPending}
                 className="text-destructive hover:text-destructive"
@@ -281,10 +282,11 @@ export function AttendanceEditModal({
               </Button>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => onOpenChange(false)}
               disabled={saveMutation.isPending || deleteMutation.isPending}
               data-testid="button-cancel"
@@ -293,6 +295,7 @@ export function AttendanceEditModal({
             </Button>
             <Button
               type="button"
+              size="sm"
               onClick={handleSave}
               disabled={saveMutation.isPending || deleteMutation.isPending}
               data-testid="button-save-adjustment"
@@ -301,7 +304,7 @@ export function AttendanceEditModal({
               Save Adjustment
             </Button>
           </div>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
