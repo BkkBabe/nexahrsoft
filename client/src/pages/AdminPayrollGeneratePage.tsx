@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play } from "lucide-react";
@@ -37,24 +37,35 @@ const MONTH_NAMES: Record<number, string> = {
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 
-const generatePeriodOptions = () => {
-  const options: { value: string; label: string }[] = [];
+interface PeriodGroup {
+  year: number;
+  months: { value: string; label: string }[];
+}
+
+const generatePeriodGroups = (): PeriodGroup[] => {
+  const groups: PeriodGroup[] = [];
   
   for (let yearOffset = 0; yearOffset < 3; yearOffset++) {
     const year = currentYear - yearOffset;
     const startMonth = yearOffset === 0 ? currentMonth : 12;
+    const months: { value: string; label: string }[] = [];
+    
     for (let month = startMonth; month >= 1; month--) {
-      options.push({ 
+      months.push({ 
         value: `${year}-${month}`, 
         label: `${MONTH_NAMES[month]} ${year}` 
       });
     }
+    
+    if (months.length > 0) {
+      groups.push({ year, months });
+    }
   }
   
-  return options;
+  return groups;
 };
 
-const PERIOD_OPTIONS = generatePeriodOptions();
+const PERIOD_GROUPS = generatePeriodGroups();
 
 interface PreviewEmployee {
   employeeCode: string;
@@ -224,10 +235,15 @@ export default function AdminPayrollGeneratePage() {
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
-                  {PERIOD_OPTIONS.map((period) => (
-                    <SelectItem key={period.value} value={period.value}>
-                      {period.label}
-                    </SelectItem>
+                  {PERIOD_GROUPS.map((group) => (
+                    <SelectGroup key={group.year}>
+                      <SelectLabel className="font-bold">All {group.year}</SelectLabel>
+                      {group.months.map((period) => (
+                        <SelectItem key={period.value} value={period.value}>
+                          {period.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>
