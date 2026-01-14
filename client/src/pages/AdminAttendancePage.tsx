@@ -2539,7 +2539,10 @@ export default function AdminAttendancePage() {
                                 
                                 const cellClassName = `${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 ${getCellColor()} ${(hours > 0 || hasOpenSession || hasAdjustment) ? 'text-white' : ''}`;
                                 
-                                const cellStyle = getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord);
+                                // Don't apply inline style for leave adjustments - let Tailwind class handle the color
+                                const cellStyle = (hasAdjustment && isLeaveAdjustment) 
+                                  ? { color: '#fff' } 
+                                  : getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord);
                                 
                                 // When printing, render simple div without Tooltip wrapper
                                 if (isPrinting) {
