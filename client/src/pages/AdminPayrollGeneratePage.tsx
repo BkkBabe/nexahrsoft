@@ -354,7 +354,7 @@ export default function AdminPayrollGeneratePage() {
                       variant="outline"
                       size="sm"
                       className="border-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
-                      onClick={() => setLocation(`/admin/payroll/employee-settings?employeeId=${emp.id}&returnTo=generate&period=${selectedPeriod}`)}
+                      onClick={() => setLocation(`/admin/payroll/employees?employeeId=${emp.id}&returnTo=generate&period=${selectedPeriod}`)}
                       data-testid={`button-skipped-employee-${emp.id}`}
                     >
                       {emp.employeeCode}: {emp.employeeName}
