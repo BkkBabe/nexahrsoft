@@ -261,25 +261,27 @@ export function AttendanceEditModal({
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          {existingAdjustment && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending || saveMutation.isPending}
-              className="text-destructive hover:text-destructive"
-              data-testid="button-delete-adjustment"
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-2" />
-              )}
-              Revert to Actual
-            </Button>
-          )}
-          <div className="flex gap-2 ml-auto">
+        <DialogFooter className="flex flex-row items-center justify-between gap-2 pt-4">
+          <div>
+            {existingAdjustment && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending || saveMutation.isPending}
+                className="text-destructive hover:text-destructive"
+                data-testid="button-delete-adjustment"
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Revert to Actual
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
             <Button
               type="button"
               variant="outline"
