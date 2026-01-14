@@ -3985,7 +3985,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
           // Calculate age for CPF rates
           const referenceDate = new Date(year, month - 1, 1); // First day of pay period
-          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 35; // Default to 35 if no birthdate
+          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 45; // Default to 45 if no birthdate (CPF 2026 rules)
           
           // Calculate SPR years if applicable
           let sprYears: number | undefined;
@@ -4227,7 +4227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
           const referenceDate = new Date(year, month - 1, 1);
-          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 35;
+          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 45; // Default to 45 if no birthdate (CPF 2026 rules)
           
           let sprYears: number | undefined;
           if (residencyStatus === 'SPR' && employee.sprStartDate) {
