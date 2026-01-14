@@ -120,6 +120,23 @@ export const dailyAttendanceSummary = pgTable("daily_attendance_summary", {
   unique("daily_attendance_summary_user_date_unique").on(table.userId, table.date),
 ]);
 
+// Attendance adjustments for leave and OT override
+export const attendanceAdjustments = pgTable("attendance_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  date: text("date").notNull(), // Format: YYYY-MM-DD
+  adjustmentType: text("adjustment_type").notNull(), // 'leave' or 'hours'
+  leaveType: text("leave_type"), // 'AL', 'MC', 'ML', 'CL', 'OIL' (only when adjustmentType is 'leave')
+  regularHours: real("regular_hours"), // Regular work hours (default 9 for leave, or admin-specified for hours adjustment)
+  otHours: real("ot_hours"), // Overtime hours (for 'hours' adjustmentType)
+  notes: text("notes"), // Optional notes by admin
+  createdBy: varchar("created_by").notNull().references(() => users.id), // Admin who created adjustment
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  unique("attendance_adjustments_user_date_unique").on(table.userId, table.date),
+]);
+
 export const userSessions = pgTable("user_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // Internal DB ID
   sessionId: text("session_id").notNull().unique(), // Express session ID
@@ -203,6 +220,26 @@ export const insertDailyAttendanceSummarySchema = createInsertSchema(dailyAttend
 });
 export type InsertDailyAttendanceSummary = z.infer<typeof insertDailyAttendanceSummarySchema>;
 export type DailyAttendanceSummary = typeof dailyAttendanceSummary.$inferSelect;
+
+// Attendance adjustments schemas and types
+export const leaveTypes = ["AL", "MC", "ML", "CL", "OIL"] as const;
+export type LeaveType = typeof leaveTypes[number];
+
+export const leaveTypeLabels: Record<LeaveType, string> = {
+  AL: "Annual Leave",
+  MC: "Medical Leave",
+  ML: "Maternity Leave",
+  CL: "Childcare Leave",
+  OIL: "Off in Lieu",
+};
+
+export const insertAttendanceAdjustmentSchema = createInsertSchema(attendanceAdjustments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAttendanceAdjustment = z.infer<typeof insertAttendanceAdjustmentSchema>;
+export type AttendanceAdjustment = typeof attendanceAdjustments.$inferSelect;
 
 export const insertUserSessionSchema = createInsertSchema(userSessions).omit({
   id: true,
