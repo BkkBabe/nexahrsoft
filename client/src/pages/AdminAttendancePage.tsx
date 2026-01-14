@@ -417,6 +417,40 @@ export default function AdminAttendancePage() {
     return map;
   }, [adjustmentsData]);
 
+  // Fetch employee monthly remarks for current heatmap month
+  type EmployeeMonthlyRemark = {
+    id: string;
+    userId: string;
+    year: number;
+    month: number;
+    remark: string | null;
+    createdBy: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  const { data: remarksData, refetch: refetchRemarks } = useQuery<EmployeeMonthlyRemark[]>({
+    queryKey: ['/api/admin/attendance/remarks', { year: heatmapMonth.year, month: heatmapMonth.month }],
+    staleTime: 0,
+    enabled: viewMode === 'heatmap',
+  });
+  
+  // Build a map of remarks keyed by userId for quick lookup
+  const remarksMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (remarksData) {
+      remarksData.forEach(r => {
+        if (r.remark) {
+          map.set(r.userId, r.remark);
+        }
+      });
+    }
+    return map;
+  }, [remarksData]);
+  
+  // State for editing remarks
+  const [editingRemarkUserId, setEditingRemarkUserId] = useState<string | null>(null);
+  const [editingRemarkValue, setEditingRemarkValue] = useState("");
+
   // Fetch company settings to check ignoreOrphanedSessions flag
   const { data: companySettings } = useQuery<CompanySettings>({
     queryKey: ['/api/company/settings'],
@@ -902,6 +936,29 @@ export default function AdminAttendancePage() {
     },
   });
   
+  // Save employee monthly remark mutation
+  const saveRemarkMutation = useMutation({
+    mutationFn: async (data: { userId: string; year: number; month: number; remark: string | null }) => {
+      const response = await apiRequest("POST", "/api/admin/attendance/remarks", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Remark Saved",
+        description: "Employee remark has been saved",
+      });
+      setEditingRemarkUserId(null);
+      refetchRemarks();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save remark",
+        variant: "destructive",
+      });
+    },
+  });
+  
   // Parse Excel file for import
   const parseImportFile = async (file: File) => {
     const workbook = new ExcelJS.Workbook();
@@ -1149,14 +1206,14 @@ export default function AdminAttendancePage() {
     const monthYearTitle = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     
     // Title row with month/year
-    const titleRow = [`Attendance Report - ${monthYearTitle}`, '', '', '', ...heatmapDays.map(() => ''), ''];
+    const titleRow = [`Attendance Report - ${monthYearTitle}`, '', '', '', ...heatmapDays.map(() => ''), '', ''];
     
     // Header row with just day numbers (1, 2, 3, etc.)
     const dateHeaders = heatmapDays.map(d => d.getDate().toString());
-    const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...dateHeaders, 'Total Hours'];
+    const headers = ['S/N', 'Employee Name', 'Employee Code', 'Department', ...dateHeaders, 'Total Hours', 'Remark'];
     
     // Day of week row
-    const dayOfWeekRow = ['', '', '', '', ...heatmapDays.map(d => getDayOfWeek(d)), ''];
+    const dayOfWeekRow = ['', '', '', '', ...heatmapDays.map(d => getDayOfWeek(d)), '', ''];
     
     const rows = filteredUsers.map((user, idx) => {
       const totalHours = heatmapDays.reduce((sum, day) => {
@@ -1167,6 +1224,8 @@ export default function AdminAttendancePage() {
         const aggData = heatmapDataMap[user.id]?.[dateKey];
         return sum + (aggData?.totalHours || 0);
       }, 0);
+      
+      const userRemark = remarksMap.get(user.id) || '';
       
       return [
         idx + 1,
@@ -1181,7 +1240,8 @@ export default function AdminAttendancePage() {
           const aggData = heatmapDataMap[user.id]?.[dateKey];
           return aggData?.totalHours || 0;
         }),
-        totalHours.toFixed(1)
+        totalHours.toFixed(1),
+        userRemark
       ];
     });
     
@@ -1245,11 +1305,12 @@ export default function AdminAttendancePage() {
       { width: 15 },  // Employee Code
       { width: 15 },  // Department
       ...heatmapDays.map(() => ({ width: 6 })), // Day columns
-      { width: 12 }   // Total Hours
+      { width: 12 },  // Total Hours
+      { width: 25 }   // Remark
     ];
     
     // Title row
-    const totalColumns = 4 + heatmapDays.length + 1;
+    const totalColumns = 4 + heatmapDays.length + 2; // +2 for Total Hours and Remark
     const titleRow = worksheet.addRow([`Attendance Report - ${monthYearTitle}`]);
     worksheet.mergeCells(1, 1, 1, totalColumns);
     titleRow.font = { bold: true, size: 14 };
@@ -1258,6 +1319,7 @@ export default function AdminAttendancePage() {
     const headerData = ['S/N', 'Employee Name', 'Employee Code', 'Department'];
     heatmapDays.forEach(day => headerData.push(day.getDate().toString()));
     headerData.push('Total Hours');
+    headerData.push('Remark');
     const headerRow = worksheet.addRow(headerData);
     headerRow.font = { bold: true };
     headerRow.eachCell((cell, colNumber) => {
@@ -1279,7 +1341,8 @@ export default function AdminAttendancePage() {
     // Day of week row
     const dayOfWeekData = ['', '', '', ''];
     heatmapDays.forEach(day => dayOfWeekData.push(getDayOfWeek(day)));
-    dayOfWeekData.push('');
+    dayOfWeekData.push(''); // Total Hours
+    dayOfWeekData.push(''); // Remark
     const dowRow = worksheet.addRow(dayOfWeekData);
     dowRow.eachCell((cell, colNumber) => {
       cell.alignment = { horizontal: 'center' };
@@ -1307,6 +1370,8 @@ export default function AdminAttendancePage() {
         return sum + (aggData?.totalHours || 0);
       }, 0);
       
+      const userRemark = remarksMap.get(user.id) || '';
+      
       const rowData: (string | number)[] = [
         idx + 1,
         user.name || '',
@@ -1327,6 +1392,7 @@ export default function AdminAttendancePage() {
       });
       
       rowData.push(parseFloat(totalHours.toFixed(1)));
+      rowData.push(userRemark);
       const dataRow = worksheet.addRow(rowData);
       
       // Apply weekend styling to data cells
@@ -2371,6 +2437,11 @@ export default function AdminAttendancePage() {
                         <div className="font-bold">Total</div>
                         <div className="text-muted-foreground text-[10px]">Hours</div>
                       </div>
+                      {/* Remark column header */}
+                      <div className="w-32 flex-shrink-0 p-1 text-center text-xs border-l bg-muted/50">
+                        <div className="font-bold">Remark</div>
+                        <div className="text-muted-foreground text-[10px]">Monthly</div>
+                      </div>
                     </div>
 
                     {/* Employee rows */}
@@ -2636,6 +2707,75 @@ export default function AdminAttendancePage() {
                                     <div>Total hours this {heatmapViewType === 'week' ? 'week' : 'month'}: {userTotalHours.toFixed(1)} hrs</div>
                                   </TooltipContent>
                                 </Tooltip>
+                              );
+                            })()}
+                            {/* Remark column for this employee */}
+                            {(() => {
+                              const userRemark = remarksMap.get(user.id) || '';
+                              const isEditing = editingRemarkUserId === user.id;
+                              
+                              // Editable remark cell
+                              if (isEditing) {
+                                return (
+                                  <div className="w-32 flex-shrink-0 min-h-[36px] flex items-center p-1 border-l bg-muted/30">
+                                    <Input
+                                      value={editingRemarkValue}
+                                      onChange={(e) => setEditingRemarkValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          saveRemarkMutation.mutate({
+                                            userId: user.id,
+                                            year: heatmapMonth.year,
+                                            month: heatmapMonth.month,
+                                            remark: editingRemarkValue || null,
+                                          });
+                                        } else if (e.key === 'Escape') {
+                                          setEditingRemarkUserId(null);
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        saveRemarkMutation.mutate({
+                                          userId: user.id,
+                                          year: heatmapMonth.year,
+                                          month: heatmapMonth.month,
+                                          remark: editingRemarkValue || null,
+                                        });
+                                      }}
+                                      className="h-6 text-xs"
+                                      placeholder="Enter remark..."
+                                      autoFocus
+                                      data-testid={`input-remark-${user.id}`}
+                                    />
+                                  </div>
+                                );
+                              }
+                              
+                              // Display mode - click to edit (not in print mode)
+                              if (isPrinting) {
+                                return (
+                                  <div 
+                                    className="w-32 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30"
+                                    data-testid={`remark-${user.id}`}
+                                  >
+                                    <span className="truncate">{userRemark || '-'}</span>
+                                  </div>
+                                );
+                              }
+                              
+                              return (
+                                <div 
+                                  className="w-32 flex-shrink-0 min-h-[36px] flex items-center p-1 text-xs border-l bg-muted/30 cursor-pointer hover:bg-muted/50"
+                                  onClick={() => {
+                                    if (!cannotEdit) {
+                                      setEditingRemarkUserId(user.id);
+                                      setEditingRemarkValue(userRemark);
+                                    }
+                                  }}
+                                  data-testid={`remark-${user.id}`}
+                                  title={cannotEdit ? 'View only' : 'Click to edit remark'}
+                                >
+                                  <span className="truncate">{userRemark || (cannotEdit ? '-' : 'Click to add...')}</span>
+                                </div>
                               );
                             })()}
                           </div>

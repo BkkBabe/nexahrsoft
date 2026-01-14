@@ -61,6 +61,43 @@ async function ensureSchemaMigrations(pool: Pool) {
     `);
     console.log("daily_attendance_summary unique index ready");
     
+    // Check if employee_monthly_remarks table exists
+    const remarksTableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'employee_monthly_remarks'
+      )
+    `);
+    
+    const remarksTableExists = remarksTableCheck.rows[0]?.exists;
+    console.log("employee_monthly_remarks table exists:", remarksTableExists);
+    
+    if (!remarksTableExists) {
+      // Create employee_monthly_remarks table
+      console.log("Creating employee_monthly_remarks table...");
+      await pool.query(`
+        CREATE TABLE employee_monthly_remarks (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id varchar NOT NULL REFERENCES users(id),
+          year integer NOT NULL,
+          month integer NOT NULL,
+          remark text,
+          created_by varchar NOT NULL REFERENCES users(id),
+          created_at timestamp NOT NULL DEFAULT now(),
+          updated_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+      console.log("employee_monthly_remarks table created");
+    }
+    
+    // Create unique index on user_id + year + month
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS employee_monthly_remarks_user_year_month_unique
+      ON employee_monthly_remarks (user_id, year, month)
+    `);
+    console.log("employee_monthly_remarks unique index ready");
+    
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production

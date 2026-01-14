@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -44,6 +44,11 @@ export interface IStorage {
   updateAttendanceAdjustment(id: string, updates: Partial<AttendanceAdjustment>): Promise<AttendanceAdjustment | undefined>;
   deleteAttendanceAdjustment(id: string): Promise<void>;
   getAttendanceAdjustmentsByDateRange(startDate: string, endDate: string): Promise<AttendanceAdjustment[]>;
+  
+  // Employee monthly remarks methods
+  upsertEmployeeMonthlyRemark(remark: InsertEmployeeMonthlyRemark): Promise<EmployeeMonthlyRemark>;
+  getEmployeeMonthlyRemarks(year: number, month: number): Promise<EmployeeMonthlyRemark[]>;
+  getEmployeeMonthlyRemark(userId: string, year: number, month: number): Promise<EmployeeMonthlyRemark | undefined>;
   
   // Session tracking methods
   createUserSession(session: InsertUserSession): Promise<UserSession>;
@@ -431,6 +436,19 @@ export class MemStorage implements IStorage {
 
   async getAttendanceAdjustmentsByDateRange(startDate: string, endDate: string): Promise<AttendanceAdjustment[]> {
     throw new Error("MemStorage attendance adjustment not implemented");
+  }
+
+  // Employee monthly remarks - stub implementations
+  async upsertEmployeeMonthlyRemark(remark: InsertEmployeeMonthlyRemark): Promise<EmployeeMonthlyRemark> {
+    throw new Error("MemStorage employee monthly remark not implemented");
+  }
+
+  async getEmployeeMonthlyRemarks(year: number, month: number): Promise<EmployeeMonthlyRemark[]> {
+    throw new Error("MemStorage employee monthly remark not implemented");
+  }
+
+  async getEmployeeMonthlyRemark(userId: string, year: number, month: number): Promise<EmployeeMonthlyRemark | undefined> {
+    throw new Error("MemStorage employee monthly remark not implemented");
   }
 
   // Session tracking methods - stub implementations for MemStorage
@@ -1142,6 +1160,56 @@ export class PgStorage implements IStorage {
           lte(attendanceAdjustments.date, endDate)
         )
       );
+  }
+
+  // Employee monthly remarks methods
+  async upsertEmployeeMonthlyRemark(remark: InsertEmployeeMonthlyRemark): Promise<EmployeeMonthlyRemark> {
+    // Check if remark exists
+    const existing = await this.getEmployeeMonthlyRemark(remark.userId, remark.year, remark.month);
+    
+    if (existing) {
+      // Update existing remark
+      const [updated] = await db.update(employeeMonthlyRemarks)
+        .set({ 
+          remark: remark.remark,
+          createdBy: remark.createdBy,
+          updatedAt: new Date() 
+        })
+        .where(eq(employeeMonthlyRemarks.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Insert new remark
+      const [created] = await db.insert(employeeMonthlyRemarks)
+        .values(remark)
+        .returning();
+      return created;
+    }
+  }
+
+  async getEmployeeMonthlyRemarks(year: number, month: number): Promise<EmployeeMonthlyRemark[]> {
+    return await db.select()
+      .from(employeeMonthlyRemarks)
+      .where(
+        and(
+          eq(employeeMonthlyRemarks.year, year),
+          eq(employeeMonthlyRemarks.month, month)
+        )
+      );
+  }
+
+  async getEmployeeMonthlyRemark(userId: string, year: number, month: number): Promise<EmployeeMonthlyRemark | undefined> {
+    const [record] = await db.select()
+      .from(employeeMonthlyRemarks)
+      .where(
+        and(
+          eq(employeeMonthlyRemarks.userId, userId),
+          eq(employeeMonthlyRemarks.year, year),
+          eq(employeeMonthlyRemarks.month, month)
+        )
+      )
+      .limit(1);
+    return record;
   }
 
   // Session tracking methods

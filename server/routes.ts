@@ -2137,6 +2137,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Get employee monthly remarks for a specific month
+  app.get("/api/admin/attendance/remarks", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { year, month } = req.query;
+      
+      if (!year || !month) {
+        return res.status(400).json({ message: "Year and month are required" });
+      }
+      
+      const remarks = await storage.getEmployeeMonthlyRemarks(
+        parseInt(year as string),
+        parseInt(month as string)
+      );
+      res.json(remarks);
+    } catch (error: any) {
+      console.error("Get employee monthly remarks error:", error);
+      res.status(500).json({ message: "Failed to get employee remarks" });
+    }
+  });
+
+  // Admin: Save employee monthly remark
+  app.post("/api/admin/attendance/remarks", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.string().uuid(),
+        year: z.number(),
+        month: z.number().min(0).max(11),
+        remark: z.string().nullable(),
+      });
+      
+      const { userId, year, month, remark } = schema.parse(req.body);
+      
+      // Handle master admin case - find a real admin user for createdBy
+      let creatorId = req.session?.userId;
+      if (!creatorId || creatorId === "admin") {
+        const adminUsers = await storage.getAdminUsers();
+        if (adminUsers.length > 0) {
+          creatorId = adminUsers[0].id;
+        } else {
+          creatorId = userId; // Fallback to target user
+        }
+      }
+      
+      const savedRemark = await storage.upsertEmployeeMonthlyRemark({
+        userId,
+        year,
+        month,
+        remark,
+        createdBy: creatorId,
+      });
+      
+      res.json({ remark: savedRemark, message: "Remark saved successfully" });
+    } catch (error: any) {
+      console.error("Save employee monthly remark error:", error);
+      res.status(500).json({ message: "Failed to save remark" });
+    }
+  });
+
   // Admin: Bulk close orphaned attendance sessions
   app.post("/api/admin/attendance/bulk-close-orphaned", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {

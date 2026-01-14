@@ -241,6 +241,28 @@ export const insertAttendanceAdjustmentSchema = createInsertSchema(attendanceAdj
 export type InsertAttendanceAdjustment = z.infer<typeof insertAttendanceAdjustmentSchema>;
 export type AttendanceAdjustment = typeof attendanceAdjustments.$inferSelect;
 
+// Employee monthly remarks for heatmap
+export const employeeMonthlyRemarks = pgTable("employee_monthly_remarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(), // 0-11 (JavaScript month format)
+  remark: text("remark"),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  unique("employee_monthly_remarks_user_year_month_unique").on(table.userId, table.year, table.month),
+]);
+
+export const insertEmployeeMonthlyRemarkSchema = createInsertSchema(employeeMonthlyRemarks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertEmployeeMonthlyRemark = z.infer<typeof insertEmployeeMonthlyRemarkSchema>;
+export type EmployeeMonthlyRemark = typeof employeeMonthlyRemarks.$inferSelect;
+
 export const insertUserSessionSchema = createInsertSchema(userSessions).omit({
   id: true,
   createdAt: true,
