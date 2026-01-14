@@ -11,12 +11,13 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw, Archive, ArchiveRestore, Download, Printer, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, Grid3X3, ChevronLeft, ChevronRight, Search, Plus, CalendarCheck, Trash2, History, FileText, MapPin, ExternalLink, AlertTriangle, CheckCircle2, MoreVertical, X, RefreshCw, Archive, ArchiveRestore, Download, Printer, Upload, FileSpreadsheet, Loader2, Edit } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link, useSearch } from "wouter";
 import ExcelJS from "exceljs";
-import type { AttendanceRecord, User, DailyAttendanceSummary, CompanySettings } from "@shared/schema";
+import { AttendanceEditModal } from "@/components/AttendanceEditModal";
+import type { AttendanceRecord, User, DailyAttendanceSummary, CompanySettings, AttendanceAdjustment } from "@shared/schema";
 
 // NOTE: Geocoding is now handled server-side during clock-in/out
 // Location text is stored in the database and displayed directly
@@ -259,6 +260,15 @@ export default function AdminAttendancePage() {
     action?: string;
   }[]>([]);
   
+  // Attendance edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editModalData, setEditModalData] = useState<{
+    userId: string;
+    userName: string;
+    date: string;
+    actualHours: number;
+  } | null>(null);
+  
   const { toast } = useToast();
 
   // Fetch session to check if user is nexaadmin (master admin) or view-only admin
@@ -387,6 +397,25 @@ export default function AdminAttendancePage() {
     enabled: viewMode === 'orphaned',
   });
   const orphanedSessions = orphanedSessionsData?.records || [];
+  
+  // Fetch attendance adjustments for heatmap date range
+  const { data: adjustmentsData, refetch: refetchAdjustments } = useQuery<{ adjustments: AttendanceAdjustment[] }>({
+    queryKey: ['/api/admin/attendance/adjustments', { startDate: heatmapStartDate, endDate: heatmapEndDate }],
+    staleTime: 0,
+    enabled: viewMode === 'heatmap',
+  });
+  
+  // Build a map of adjustments keyed by `${userId}-${date}` for quick lookup
+  const adjustmentsMap = useMemo(() => {
+    const map = new Map<string, AttendanceAdjustment>();
+    if (adjustmentsData?.adjustments) {
+      adjustmentsData.adjustments.forEach(adj => {
+        const key = `${adj.userId}-${adj.date}`;
+        map.set(key, adj);
+      });
+    }
+    return map;
+  }, [adjustmentsData]);
 
   // Fetch company settings to check ignoreOrphanedSessions flag
   const { data: companySettings } = useQuery<CompanySettings>({
@@ -2366,26 +2395,45 @@ export default function AdminAttendancePage() {
                                 today.setHours(0, 0, 0, 0);
                                 const isFuture = day > today;
                                 const hasRecord = aggData && recordCount > 0;
+                                
+                                // Check for adjustments
+                                const adjustmentKey = `${user.id}-${dateKey}`;
+                                const adjustment = adjustmentsMap.get(adjustmentKey);
+                                const hasAdjustment = !!adjustment;
+                                const isLeaveAdjustment = adjustment?.adjustmentType === 'leave';
+                                const leaveCode = adjustment?.leaveType;
 
                                 // Cell content - shared between print and interactive modes
                                 const cellContent = (
                                   <>
-                                    {!isFuture && hasOpenSession && hours === 0 && (
+                                    {!isFuture && hasAdjustment && isLeaveAdjustment && (
+                                      <span className="font-medium text-[10px]">{leaveCode}</span>
+                                    )}
+                                    {!isFuture && hasAdjustment && !isLeaveAdjustment && (
+                                      <span className="font-medium">{(adjustment?.regularHours || 0) + (adjustment?.otHours || 0)}</span>
+                                    )}
+                                    {!isFuture && !hasAdjustment && hasOpenSession && hours === 0 && (
                                       <Clock className="h-3 w-3" />
                                     )}
-                                    {hours > 0 && !isFuture && (
+                                    {!isFuture && !hasAdjustment && hours > 0 && (
                                       <span className="font-medium">{Number.isInteger(hours) ? hours : hours.toFixed(1)}</span>
                                     )}
                                   </>
                                 );
                                 
-                                const cellClassName = `${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 ${
-                                  isFuture 
-                                    ? 'bg-muted/30' 
-                                    : isWeekend && !hasRecord 
-                                      ? 'bg-muted/50'
-                                      : getHeatmapColor(hours, hasOpenSession)
-                                } ${(hours > 0 || hasOpenSession) ? 'text-white' : ''}`;
+                                // Determine cell background color
+                                const getCellColor = () => {
+                                  if (isFuture) return 'bg-muted/30';
+                                  if (hasAdjustment && isLeaveAdjustment) return 'bg-purple-500 dark:bg-purple-400'; // Purple for leave
+                                  if (hasAdjustment && !isLeaveAdjustment) {
+                                    const adjTotal = (adjustment?.regularHours || 0) + (adjustment?.otHours || 0);
+                                    return getHeatmapColor(adjTotal, false);
+                                  }
+                                  if (isWeekend && !hasRecord) return 'bg-muted/50';
+                                  return getHeatmapColor(hours, hasOpenSession);
+                                };
+                                
+                                const cellClassName = `${heatmapViewType === 'week' ? 'flex-1 min-w-[60px]' : 'w-8 flex-shrink-0'} min-h-[36px] flex items-center justify-center text-xs border-r last:border-r-0 ${getCellColor()} ${(hours > 0 || hasOpenSession || hasAdjustment) ? 'text-white' : ''}`;
                                 
                                 const cellStyle = getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord);
                                 
@@ -2418,7 +2466,31 @@ export default function AdminAttendancePage() {
                                     <TooltipContent side="top" className="text-xs max-w-xs">
                                       <div className="font-medium">{user.name}</div>
                                       <div className="text-muted-foreground">{formatDate(day)}</div>
-                                      {aggData ? (
+                                      
+                                      {/* Show adjustment details if present */}
+                                      {hasAdjustment && (
+                                        <div className="mt-1 space-y-1 bg-purple-100 dark:bg-purple-900/30 p-2 rounded">
+                                          <div className="text-purple-700 dark:text-purple-300 font-medium">
+                                            {isLeaveAdjustment ? `Leave: ${leaveCode}` : 'Hours Override'}
+                                          </div>
+                                          {isLeaveAdjustment ? (
+                                            <div>Payroll Hours: 9 (full day)</div>
+                                          ) : (
+                                            <>
+                                              <div>Regular: {adjustment?.regularHours || 0} hrs</div>
+                                              <div>OT: {adjustment?.otHours || 0} hrs</div>
+                                            </>
+                                          )}
+                                          {adjustment?.notes && (
+                                            <div className="text-muted-foreground italic">{adjustment.notes}</div>
+                                          )}
+                                          {hours > 0 && (
+                                            <div className="text-muted-foreground">(Actual: {hours.toFixed(1)} hrs)</div>
+                                          )}
+                                        </div>
+                                      )}
+                                      
+                                      {!hasAdjustment && aggData ? (
                                         <div className="mt-1 space-y-1">
                                           {recordCount > 1 && (
                                             <div className="text-yellow-600 dark:text-yellow-400 font-medium">
@@ -2455,10 +2527,33 @@ export default function AdminAttendancePage() {
                                             )}
                                           </div>
                                         </div>
-                                      ) : isFuture ? (
+                                      ) : !hasAdjustment && isFuture ? (
                                         <div className="text-muted-foreground">Future date</div>
-                                      ) : (
+                                      ) : !hasAdjustment ? (
                                         <div className="text-muted-foreground">No record</div>
+                                      ) : null}
+                                      
+                                      {/* Edit button for admins (non-future dates) */}
+                                      {!isFuture && !cannotEdit && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="w-full h-7 mt-2 text-xs"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditModalData({
+                                              userId: user.id,
+                                              userName: user.name || 'Unknown',
+                                              date: dateKey,
+                                              actualHours: hours,
+                                            });
+                                            setShowEditModal(true);
+                                          }}
+                                          data-testid={`button-edit-attendance-${user.id}-${dateKey}`}
+                                        >
+                                          <Edit className="h-3 w-3 mr-1" />
+                                          {hasAdjustment ? 'Edit Adjustment' : 'Add Adjustment'}
+                                        </Button>
                                       )}
                                     </TooltipContent>
                                   </Tooltip>
@@ -3307,6 +3402,26 @@ export default function AdminAttendancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Attendance Edit Modal for adjustments (leave/OT override) */}
+      {editModalData && (
+        <AttendanceEditModal
+          open={showEditModal}
+          onOpenChange={(open) => {
+            setShowEditModal(open);
+            if (!open) setEditModalData(null);
+          }}
+          userId={editModalData.userId}
+          userName={editModalData.userName}
+          date={editModalData.date}
+          actualHours={editModalData.actualHours}
+          existingAdjustment={adjustmentsMap.get(`${editModalData.userId}-${editModalData.date}`)}
+          onSuccess={() => {
+            refetchAdjustments();
+            refetchHeatmapRecords();
+          }}
+        />
+      )}
     </div>
   );
 }
