@@ -7,8 +7,10 @@ import { setupVite, serveStatic, log } from "./vite";
 
 // Startup migration helper - ensures critical tables exist
 async function ensureSchemaMigrations(pool: Pool) {
+  console.log("Running schema migrations...");
   try {
     // Create attendance_adjustments table if it doesn't exist
+    console.log("Creating attendance_adjustments table if not exists...");
     await pool.query(`
       CREATE TABLE IF NOT EXISTS attendance_adjustments (
         id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,22 +26,26 @@ async function ensureSchemaMigrations(pool: Pool) {
         updated_at timestamp NOT NULL DEFAULT now()
       )
     `);
+    console.log("attendance_adjustments table ready");
     
     // Create unique index on user_id + date
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS attendance_adjustments_user_date_unique
       ON attendance_adjustments (user_id, date)
     `);
+    console.log("attendance_adjustments unique index ready");
     
     // Also ensure the daily_attendance_summary unique index exists
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS daily_attendance_summary_user_date_unique
       ON daily_attendance_summary (user_id, date)
     `);
+    console.log("daily_attendance_summary unique index ready");
     
     log("Schema migrations verified successfully");
-  } catch (error) {
-    console.error("Schema migration error:", error);
+  } catch (error: any) {
+    console.error("Schema migration error:", error.message || error);
+    console.error("Full error:", JSON.stringify(error, null, 2));
     // Don't throw - let the app continue, table might already exist
   }
 }
