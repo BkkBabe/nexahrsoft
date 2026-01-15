@@ -5357,10 +5357,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: data.notes || null,
       });
       
-      // Note: Adjustments are tracked for reporting purposes but don't automatically 
-      // modify payroll totals. Admin should regenerate payroll if needed.
+      // Auto-recalculate payroll when suppress_ot15 or suppress_ot20 adjustment is created with status "approved"
+      let payrollRecalculated = false;
+      if ((data.adjustmentType === 'suppress_ot15' || data.adjustmentType === 'suppress_ot20') && 
+          (data.status === 'approved' || !data.status)) {
+        try {
+          // Find the existing payroll record for this employee and period
+          const allRecords = await storage.getPayrollRecords(data.payPeriodYear, data.payPeriodMonth);
+          const payrollRecord = allRecords.find(r => r.userId === data.userId);
+          
+          if (payrollRecord) {
+            // Get all approved suppress adjustments for this employee/period (including the one just created)
+            const allAdjustments = await storage.getPayrollAdjustmentsByEmployee(data.userId, data.payPeriodYear, data.payPeriodMonth);
+            const hasSuppressOt15 = allAdjustments.some(adj => adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved');
+            const hasSuppressOt20 = allAdjustments.some(adj => adj.adjustmentType === 'suppress_ot20' && adj.status === 'approved');
+            
+            // Parse current values
+            const currentOt15 = parseFloat(payrollRecord.ot15 as string) || 0;
+            const currentOt20 = parseFloat(payrollRecord.ot20 as string) || 0;
+            const currentGrossWages = parseFloat(payrollRecord.grossWages as string) || 0;
+            const currentNett = parseFloat(payrollRecord.nett as string) || 0;
+            
+            // Calculate the OT amount to remove
+            let otReduction = 0;
+            const updates: any = {};
+            
+            if (hasSuppressOt15 && currentOt15 > 0) {
+              updates.ot15 = toNumericString(0);
+              otReduction += currentOt15;
+            }
+            if (hasSuppressOt20 && currentOt20 > 0) {
+              updates.ot20 = toNumericString(0);
+              otReduction += currentOt20;
+            }
+            
+            if (otReduction > 0) {
+              // Recalculate gross wages and nett pay
+              const newGrossWages = currentGrossWages - otReduction;
+              updates.grossWages = toNumericString(Math.max(0, newGrossWages));
+              
+              // Nett pay = Gross - Employee CPF - other deductions
+              // Simplify: just reduce nett pay by the OT reduction amount
+              const newNett = currentNett - otReduction;
+              updates.nett = toNumericString(Math.max(0, newNett));
+              
+              // Update the payroll record
+              await storage.updatePayrollRecord(payrollRecord.id, updates);
+              payrollRecalculated = true;
+              
+              console.log(`Auto-recalculated payroll for ${payrollRecord.employeeName}: OT reduced by $${otReduction.toFixed(2)}`);
+            }
+          }
+        } catch (recalcError) {
+          console.error("Failed to auto-recalculate payroll after suppress adjustment:", recalcError);
+          // Don't fail the adjustment creation, just log the error
+        }
+      }
       
-      res.json({ adjustment, message: "Adjustment created successfully" });
+      res.json({ 
+        adjustment, 
+        message: payrollRecalculated 
+          ? "Adjustment created and payroll automatically recalculated" 
+          : "Adjustment created successfully" 
+      });
     } catch (error) {
       console.error("Create payroll adjustment error:", error);
       if (error instanceof z.ZodError) {
