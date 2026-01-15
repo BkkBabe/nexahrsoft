@@ -505,6 +505,8 @@ export const payrollRecords = pgTable("payroll_records", {
   // Metadata
   importedAt: timestamp("imported_at").notNull().defaultNow(),
   importedBy: text("imported_by"), // Admin who imported
+  importBatchId: varchar("import_batch_id"), // Link to import batch for historical imports
+  isHistoricalImport: boolean("is_historical_import").notNull().default(false), // True for imported historical data
 });
 
 export const insertPayrollRecordSchema = createInsertSchema(payrollRecords).omit({
@@ -734,3 +736,29 @@ export const insertEmployeeDataAuditLogSchema = createInsertSchema(employeeDataA
 
 export type InsertEmployeeDataAuditLog = z.infer<typeof insertEmployeeDataAuditLogSchema>;
 export type EmployeeDataAuditLog = typeof employeeDataAuditLogs.$inferSelect;
+
+// Payroll Import Batches - Track historical payroll import sessions
+export const payrollImportBatches = pgTable("payroll_import_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileName: text("file_name").notNull(),
+  fileHash: text("file_hash"), // SHA256 hash to detect duplicate uploads
+  payPeriodYear: integer("pay_period_year").notNull(),
+  payPeriodMonth: integer("pay_period_month").notNull(),
+  totalRecords: integer("total_records").notNull().default(0),
+  successfulRecords: integer("successful_records").notNull().default(0),
+  failedRecords: integer("failed_records").notNull().default(0),
+  skippedRecords: integer("skipped_records").notNull().default(0), // Duplicates skipped
+  status: text("status").notNull().default("pending"), // 'pending', 'validated', 'importing', 'completed', 'failed'
+  validationErrors: text("validation_errors"), // JSON string with validation errors
+  importedBy: text("imported_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertPayrollImportBatchSchema = createInsertSchema(payrollImportBatches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPayrollImportBatch = z.infer<typeof insertPayrollImportBatchSchema>;
+export type PayrollImportBatch = typeof payrollImportBatches.$inferSelect;
