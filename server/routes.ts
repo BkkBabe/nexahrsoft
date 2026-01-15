@@ -777,6 +777,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
+      // Get admin username for audit trail
+      const adminUser = req.session?.userId 
+        ? await storage.getUser(req.session.userId)
+        : null;
+      const changedBy = adminUser?.username || adminUser?.name || "nexaadmin";
+      
       // Whitelist allowed fields - prevent updating sensitive fields like role, passwordHash
       const allowedFields = ['name', 'email', 'department', 'designation', 'employeeCode', 'section', 'shortName', 'mobileNumber', 'gender', 'joinDate', 'resignDate', 'nricFin', 'fingerId'];
       
@@ -820,8 +826,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Create audit logs for each changed field
-      const changedBy = 'admin'; // Admin username for audit trail
-      
       for (const field of allowedFields) {
         if ((updates as any)[field] !== undefined) {
           const oldValue = (oldUser as any)[field];
@@ -829,7 +833,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Only log if value actually changed
           if (String(oldValue ?? '') !== String(newValue ?? '')) {
+            // Log to general audit logs table
             await storage.createAuditLog({
+              userId: id,
+              changedBy,
+              fieldChanged: field,
+              oldValue: oldValue !== null && oldValue !== undefined ? String(oldValue) : null,
+              newValue: newValue !== null && newValue !== undefined ? String(newValue) : null,
+              changeType: 'update',
+            });
+            
+            // Also log to employee data audit logs table
+            await storage.createEmployeeDataAuditLog({
               userId: id,
               changedBy,
               fieldChanged: field,
@@ -1319,6 +1334,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get employee audit logs error:", error);
       res.status(500).json({ message: "Failed to fetch audit logs" });
+    }
+  });
+  
+  // Get employee data audit logs for a specific employee
+  app.get("/api/admin/employees/:id/data-audit-logs", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      const auditLogs = await storage.getEmployeeDataAuditLogs(id);
+      
+      res.json({
+        employee: {
+          id: user.id,
+          name: user.name,
+          employeeCode: user.employeeCode,
+        },
+        auditLogs,
+      });
+    } catch (error) {
+      console.error("Get employee data audit logs error:", error);
+      res.status(500).json({ message: "Failed to fetch employee data audit logs" });
+    }
+  });
+  
+  // Get all employee data audit logs (global)
+  app.get("/api/admin/employee-data-audit-logs", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+      const auditLogs = await storage.getAllEmployeeDataAuditLogs(limit);
+      res.json({ auditLogs });
+    } catch (error) {
+      console.error("Get all employee data audit logs error:", error);
+      res.status(500).json({ message: "Failed to fetch employee data audit logs" });
     }
   });
 
