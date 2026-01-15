@@ -4075,8 +4075,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No records to import" });
       }
 
+      // Convert numeric fields to strings for PostgreSQL storage
+      const recordsForStorage = records.map(r => ({
+        ...r,
+        totSalary: toNumericString(r.totSalary),
+        basicSalary: toNumericString(r.basicSalary),
+        monthlyVariablesComponent: toNumericString(r.monthlyVariablesComponent),
+        flat: toNumericString(r.flat),
+        ot10: toNumericString(r.ot10),
+        ot15: toNumericString(r.ot15),
+        ot20: toNumericString(r.ot20),
+        ot30: toNumericString(r.ot30),
+        shiftAllowance: toNumericString(r.shiftAllowance),
+        totRestPhAmount: toNumericString(r.totRestPhAmount),
+        mobileAllowance: toNumericString(r.mobileAllowance),
+        transportAllowance: toNumericString(r.transportAllowance),
+        annualLeaveEncashment: toNumericString(r.annualLeaveEncashment),
+        serviceCallAllowances: toNumericString(r.serviceCallAllowances),
+        otherAllowance: toNumericString(r.otherAllowance),
+        houseRentalAllowances: toNumericString(r.houseRentalAllowances),
+        loanRepaymentTotal: toNumericString(r.loanRepaymentTotal),
+        noPayDay: toNumericString(r.noPayDay),
+        cc: toNumericString(r.cc),
+        cdac: toNumericString(r.cdac),
+        ecf: toNumericString(r.ecf),
+        mbmf: toNumericString(r.mbmf),
+        sinda: toNumericString(r.sinda),
+        bonus: toNumericString(r.bonus),
+        grossWages: toNumericString(r.grossWages),
+        cpfWages: toNumericString(r.cpfWages),
+        sdf: toNumericString(r.sdf),
+        fwl: toNumericString(r.fwl),
+        employerCpf: toNumericString(r.employerCpf),
+        employeeCpf: toNumericString(r.employeeCpf),
+        totalCpf: toNumericString(r.totalCpf),
+        total: toNumericString(r.total),
+        nett: toNumericString(r.nett),
+      }));
+
       // Bulk create payroll records
-      const created = await storage.bulkCreatePayrollRecords(records);
+      const created = await storage.bulkCreatePayrollRecords(recordsForStorage);
       
       res.json({
         success: true,
@@ -4764,14 +4802,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             unpaidLeaveApplications: [] as { startDate: string; endDate: string; totalDays: number; status: string }[],
           };
         }
-        acc[key].totalLeaveEncashment += record.annualLeaveEncashment;
-        acc[key].totalNoPayDeduction += record.noPayDay;
-        if (record.annualLeaveEncashment > 0 || record.noPayDay > 0) {
+        const leaveEncashmentNum = parseFloat(record.annualLeaveEncashment) || 0;
+        const noPayDayNum = parseFloat(record.noPayDay) || 0;
+        acc[key].totalLeaveEncashment += leaveEncashmentNum;
+        acc[key].totalNoPayDeduction += noPayDayNum;
+        if (leaveEncashmentNum > 0 || noPayDayNum > 0) {
           acc[key].monthsWithData.push({
             month: record.payPeriodMonth,
             year: record.payPeriodYear,
-            leaveEncashment: record.annualLeaveEncashment,
-            noPayDeduction: record.noPayDay,
+            leaveEncashment: leaveEncashmentNum,
+            noPayDeduction: noPayDayNum,
           });
         }
         return acc;
@@ -4819,8 +4859,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({
         year,
-        totalLeaveEncashment: records.reduce((sum, r) => sum + r.annualLeaveEncashment, 0),
-        totalNoPayDeduction: records.reduce((sum, r) => sum + r.noPayDay, 0),
+        totalLeaveEncashment: records.reduce((sum, r) => sum + (parseFloat(r.annualLeaveEncashment) || 0), 0),
+        totalNoPayDeduction: records.reduce((sum, r) => sum + (parseFloat(r.noPayDay) || 0), 0),
         employees: employeeSummaries,
       });
     } catch (error) {
@@ -4952,7 +4992,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
         const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(employeeCpf));
         const nett = roundToDollars(grossWages - totalDeductions);
-        return { totSalary, grossWages, cpfWages, totalCpf, total: grossWages, nett };
+        return { 
+          totSalary: toNumericString(totSalary), 
+          grossWages: toNumericString(grossWages), 
+          cpfWages: toNumericString(cpfWages), 
+          totalCpf: toNumericString(totalCpf), 
+          total: toNumericString(grossWages), 
+          nett: toNumericString(nett) 
+        };
       };
       
       const mergedRecord = { ...existingRecord, ...updates };
@@ -5040,7 +5087,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const loan = await storage.createPayrollLoanAccount({
         ...data,
-        outstandingBalance: data.principalAmount,
+        principalAmount: toNumericString(data.principalAmount),
+        monthlyRepayment: toNumericString(data.monthlyRepayment),
+        interestRate: toNumericString(data.interestRate),
+        outstandingBalance: toNumericString(data.principalAmount),
         createdBy: adminUsername,
         status: "active",
       });
@@ -5068,7 +5118,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const updates = schema.parse(req.body);
-      const loan = await storage.updatePayrollLoanAccount(id, updates);
+      const updatesForStorage: Record<string, any> = { ...updates };
+      if (updates.monthlyRepayment !== undefined) {
+        updatesForStorage.monthlyRepayment = toNumericString(updates.monthlyRepayment);
+      }
+      const loan = await storage.updatePayrollLoanAccount(id, updatesForStorage as any);
       
       if (!loan) {
         return res.status(404).json({ message: "Loan not found" });
@@ -5106,7 +5160,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const repayment = await storage.createPayrollLoanRepayment({
         loanAccountId: loanId,
-        ...data,
+        payPeriodYear: data.payPeriodYear,
+        payPeriodMonth: data.payPeriodMonth,
+        repaymentAmount: toNumericString(data.repaymentAmount),
+        repaymentType: data.repaymentType,
+        notes: data.notes,
         processedBy: adminUsername,
       });
       
@@ -5318,9 +5376,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                            updates.adjustmentType !== undefined;
       
       if (isValueUpdate) {
-        const hasHoursRate = (mergedHours !== null && mergedHours !== undefined && mergedHours > 0) && 
-                             (mergedRate !== null && mergedRate !== undefined && mergedRate > 0);
-        const hasAmount = mergedAmount !== null && mergedAmount !== undefined && Math.abs(mergedAmount) > 0;
+        const mergedHoursNum = typeof mergedHours === 'string' ? parseFloat(mergedHours) : mergedHours;
+        const mergedRateNum = typeof mergedRate === 'string' ? parseFloat(mergedRate) : mergedRate;
+        const mergedAmountNum = typeof mergedAmount === 'string' ? parseFloat(mergedAmount) : mergedAmount;
+        const hasHoursRate = (mergedHoursNum !== null && mergedHoursNum !== undefined && mergedHoursNum > 0) && 
+                             (mergedRateNum !== null && mergedRateNum !== undefined && mergedRateNum > 0);
+        const hasAmount = mergedAmountNum !== null && mergedAmountNum !== undefined && Math.abs(mergedAmountNum) > 0;
         const hasDays = mergedDays !== null && mergedDays !== undefined && mergedDays > 0;
         
         // For day-based adjustments (mc_days, al_days), days is sufficient
@@ -5335,10 +5396,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Normalize values to absolute before storage
-      const normalizedUpdates = {
+      // Normalize values to absolute before storage (convert amount to string for storage)
+      const normalizedUpdates: Record<string, any> = {
         ...updates,
-        amount: updates.amount !== undefined ? Math.abs(updates.amount) : undefined,
+        amount: updates.amount !== undefined ? toNumericString(Math.abs(updates.amount)) : undefined,
         hours: updates.hours !== undefined ? Math.abs(updates.hours) : undefined,
         days: updates.days !== undefined ? Math.abs(updates.days) : undefined,
         rate: updates.rate !== undefined ? Math.abs(updates.rate) : undefined,
@@ -5355,7 +5416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const adjustment = await storage.updatePayrollAdjustment(id, normalizedUpdates);
+      const adjustment = await storage.updatePayrollAdjustment(id, normalizedUpdates as any);
       
       // Create audit log entry
       await storage.createPayrollAdjustmentAuditLog({
