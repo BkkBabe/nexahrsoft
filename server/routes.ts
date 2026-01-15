@@ -5719,8 +5719,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           chequeNo: getValue("Cheque No")?.toString() || null,
         };
         
-        // Try to match employee
-        const existingUser = await storage.getUserByEmployeeCode(employeeCode);
+        // Try to match employee - first by code, then by name
+        let existingUser = await storage.getUserByEmployeeCode(employeeCode);
+        
+        // If no match by code, try matching by name (case-insensitive)
+        if (!existingUser && employeeName) {
+          existingUser = await storage.getUserByName(employeeName);
+        }
         
         records.push({
           ...record,

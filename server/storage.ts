@@ -89,6 +89,7 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   bulkCreateUsers(usersData: Partial<User>[]): Promise<User[]>;
   getUserByEmployeeCode(employeeCode: string): Promise<User | undefined>;
+  getUserByName(name: string): Promise<User | undefined>;
   getAdminUsers(): Promise<User[]>;
   
   // Email log methods
@@ -582,6 +583,10 @@ export class MemStorage implements IStorage {
 
   async getUserByEmployeeCode(employeeCode: string): Promise<User | undefined> {
     throw new Error("MemStorage getUserByEmployeeCode not implemented");
+  }
+
+  async getUserByName(name: string): Promise<User | undefined> {
+    throw new Error("MemStorage getUserByName not implemented");
   }
 
   async getAdminUsers(): Promise<User[]> {
@@ -1508,6 +1513,14 @@ export class PgStorage implements IStorage {
       .where(eq(users.employeeCode, employeeCode))
       .limit(1);
     return user;
+  }
+
+  async getUserByName(name: string): Promise<User | undefined> {
+    // Case-insensitive name matching
+    const normalizedName = name.trim().toUpperCase();
+    const allUsers = await db.select().from(users);
+    const matchedUser = allUsers.find(u => u.name.trim().toUpperCase() === normalizedName);
+    return matchedUser;
   }
 
   async getAdminUsers(): Promise<User[]> {
