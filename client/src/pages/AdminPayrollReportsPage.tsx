@@ -979,7 +979,7 @@ export default function AdminPayrollReportsPage() {
                         data-testid={`row-payroll-${idx}`}
                       >
                         <td className="p-2 text-center text-muted-foreground" data-testid={`cell-serial-${idx}`}>{idx + 1}</td>
-                        <td className="p-2" data-testid={`cell-name-${idx}`}>{row.employeeName}</td>
+                        <td className="p-2" data-testid={`cell-name-${idx}`}>{row.employeeName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')}</td>
                         <td className="p-2" data-testid={`cell-dept-${idx}`}>{row.deptName || '-'}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-basic-${idx}`}>{formatCurrency(row.basicSalary)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-gross-${idx}`}>{formatCurrency(row.grossWages)}</td>
