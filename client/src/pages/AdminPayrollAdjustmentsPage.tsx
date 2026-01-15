@@ -62,7 +62,10 @@ const ADJUSTMENT_TYPES = [
   { value: "claim", label: "Expense Claim", hasAmount: true },
   { value: "deduction", label: "Other Deduction", hasAmount: true, isDeduction: true },
   { value: "bonus", label: "Bonus", hasAmount: true },
+  { value: "addition", label: "Addition", hasAmount: true },
   { value: "other", label: "Other Adjustment", hasAmount: true },
+  { value: "suppress_ot15", label: "Suppress OT 1.5x (No OT1.5 in Payroll)", isFlag: true },
+  { value: "suppress_ot20", label: "Suppress OT 2.0x (No OT2.0 in Payroll)", isFlag: true },
 ];
 
 interface PayrollAdjustment {

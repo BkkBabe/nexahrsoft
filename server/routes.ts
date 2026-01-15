@@ -4200,14 +4200,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adjustmentsMap.set(`${adj.userId}-${adj.date}`, adj);
       }
       
-      // Get payroll adjustments for the period (including suppress_ot15)
+      // Get payroll adjustments for the period (including suppress_ot15 and suppress_ot20)
       const payrollAdjustmentsData = await storage.getPayrollAdjustmentsByPeriod(year, month);
       
-      // Build a set of employee IDs that have suppress_ot15 adjustment
+      // Build sets of employee IDs that have suppress_ot15 and suppress_ot20 adjustments
       const suppressOt15Employees = new Set<string>();
+      const suppressOt20Employees = new Set<string>();
       for (const adj of payrollAdjustmentsData) {
         if (adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved') {
           suppressOt15Employees.add(adj.userId);
+        }
+        if (adj.adjustmentType === 'suppress_ot20' && adj.status === 'approved') {
+          suppressOt20Employees.add(adj.userId);
         }
       }
 
@@ -4366,13 +4370,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           otAmount = overtimePay;
         }
         
-        // Check if OT should be suppressed for this employee (suppress_ot15 adjustment)
-        let finalOtAmount = otAmount;
+        // Check if OT should be suppressed for this employee (separate OT1.5 and OT2.0 suppression)
+        // OT 1.5x (standard overtime) and OT 2.0x (usually weekend/holiday OT) are tracked separately
+        let finalOt15Amount = otAmount; // Standard OT goes into 1.5x by default
+        let finalOt20Amount = 0; // 2.0x OT (usually from adjustments or weekend work)
         let finalOtHours = overtimeHours;
+        
+        // Apply OT suppression based on adjustment type
         if (suppressOt15Employees.has(employee.id)) {
-          finalOtAmount = 0;
-          finalOtHours = 0;
+          finalOt15Amount = 0;
+          // Only zero hours if both OT types are suppressed
+          if (suppressOt20Employees.has(employee.id)) {
+            finalOtHours = 0;
+          }
         }
+        if (suppressOt20Employees.has(employee.id)) {
+          finalOt20Amount = 0;
+        }
+        
+        // Total OT amount for gross wages calculation
+        const finalOtAmount = finalOt15Amount + finalOt20Amount;
 
         // Calculate gross wages (calculated earnings + OT)
         const grossWages = calculatedBasicPay + finalOtAmount;
@@ -4437,8 +4454,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           monthlyVariablesComponent: toNumericString(0),
           flat: toNumericString(0),
           ot10: toNumericString(0),
-          ot15: toNumericString(finalOtAmount), // All OT at 1.5x for now (0 if suppressed)
-          ot20: toNumericString(0),
+          ot15: toNumericString(finalOt15Amount), // OT at 1.5x (0 if suppress_ot15 is active)
+          ot20: toNumericString(finalOt20Amount), // OT at 2.0x (0 if suppress_ot20 is active)
           ot30: toNumericString(0),
           shiftAllowance: toNumericString(0),
           totRestPhAmount: toNumericString(0),
@@ -4539,14 +4556,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adjustmentsMap.set(`${adj.userId}-${adj.date}`, adj);
       }
       
-      // Get payroll adjustments for the period (including suppress_ot15)
+      // Get payroll adjustments for the period (including suppress_ot15 and suppress_ot20)
       const payrollAdjustmentsData = await storage.getPayrollAdjustmentsByPeriod(year, month);
       
-      // Build a set of employee IDs that have suppress_ot15 adjustment
+      // Build sets of employee IDs that have suppress_ot15 and suppress_ot20 adjustments
       const suppressOt15Employees = new Set<string>();
+      const suppressOt20Employees = new Set<string>();
       for (const adj of payrollAdjustmentsData) {
         if (adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved') {
           suppressOt15Employees.add(adj.userId);
+        }
+        if (adj.adjustmentType === 'suppress_ot20' && adj.status === 'approved') {
+          suppressOt20Employees.add(adj.userId);
         }
       }
 
@@ -4685,14 +4706,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           overtimePay = result.overtimePay;
         }
         
-        // Check if OT should be suppressed for this employee (suppress_ot15 adjustment)
+        // Check if OT should be suppressed for this employee (separate OT1.5 and OT2.0 suppression)
+        let finalOt15Pay = overtimePay; // Standard OT goes into 1.5x by default
+        let finalOt20Pay = 0; // 2.0x OT (usually from adjustments or weekend work)
         let finalOvertimeHours = overtimeHours;
-        let finalOvertimePay = overtimePay;
+        
         if (suppressOt15Employees.has(employee.id)) {
-          finalOvertimeHours = 0;
-          finalOvertimePay = 0;
+          finalOt15Pay = 0;
+          // Only zero hours if both OT types are suppressed
+          if (suppressOt20Employees.has(employee.id)) {
+            finalOvertimeHours = 0;
+          }
+        }
+        if (suppressOt20Employees.has(employee.id)) {
+          finalOt20Pay = 0;
         }
         
+        const finalOvertimePay = finalOt15Pay + finalOt20Pay;
         const grossWages = basicPay + finalOvertimePay;
 
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
@@ -5269,7 +5299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: z.string().min(1),
         payPeriodYear: z.number().min(2000).max(2100),
         payPeriodMonth: z.number().min(1).max(12),
-        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition', 'suppress_ot15']),
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition', 'suppress_ot15', 'suppress_ot20']),
         description: z.string().optional().nullable(),
         hours: z.number().positive().optional().nullable(), // Must be > 0 if provided
         days: z.number().positive().optional().nullable(), // Must be > 0 if provided
@@ -5346,7 +5376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       
       const schema = z.object({
-        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition', 'suppress_ot15']).optional(),
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition', 'suppress_ot15', 'suppress_ot20']).optional(),
         description: z.string().optional(),
         hours: z.number().positive().optional(), // Must be > 0 if provided
         days: z.number().positive().optional(), // Must be > 0 if provided
@@ -5533,16 +5563,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const companySettings = await storage.getCompanySettings();
       const otMultiplier = companySettings?.otMultiplier15 || 1.5;
       
-      // Get adjustments for this period (need to check for suppress_ot15 before calculating)
+      // Get adjustments for this period (need to check for suppress_ot15/ot20 before calculating)
       const adjustments = await storage.getPayrollAdjustmentsByEmployee(userId, yearNum, monthNum);
       
-      // Check if OT should be suppressed (suppress_ot15 adjustment)
+      // Check if OT should be suppressed (suppress_ot15 and/or suppress_ot20 adjustments)
       const hasSuppressOt15 = adjustments.some(adj => adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved');
+      const hasSuppressOt20 = adjustments.some(adj => adj.adjustmentType === 'suppress_ot20' && adj.status === 'approved');
       
       // Calculate base earnings from attendance
       // Executive employees get full monthly salary, not hourly calculation
       let baseEarnings = 0;
-      let autoOvertimePay = 0;
+      let autoOt15Pay = 0;  // OT at 1.5x
+      let autoOt20Pay = 0;  // OT at 2.0x
       let finalOvertimeHours = overtimeHours;
       
       if (isExecutive) {
@@ -5551,14 +5583,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Use shared rounding utility for consistent precision
         baseEarnings = roundToDollars(regularHours * hourlyRate);
-        // Apply OT suppression if present
-        if (hasSuppressOt15) {
-          autoOvertimePay = 0;
+        // Apply OT suppression if present - separate for OT1.5 and OT2.0
+        if (!hasSuppressOt15) {
+          autoOt15Pay = roundToDollars(overtimeHours * hourlyRate * otMultiplier);
+        }
+        // OT 2.0 would come from specific adjustments or weekend work, calculated separately
+        if (!hasSuppressOt20) {
+          // OT 2.0 typically from weekend/holiday work - handled by adjustments
+          autoOt20Pay = 0; // Will be set if there are specific 2.0x OT adjustments
+        }
+        // Only zero hours if both OT types are suppressed
+        if (hasSuppressOt15 && hasSuppressOt20) {
           finalOvertimeHours = 0;
-        } else {
-          autoOvertimePay = roundToDollars(overtimeHours * hourlyRate * otMultiplier);
         }
       }
+      const autoOvertimePay = autoOt15Pay + autoOt20Pay;
       
       // Calculate totals from adjustments
       let totalOvertimeFromAdj = 0;
