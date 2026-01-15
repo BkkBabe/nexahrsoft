@@ -555,6 +555,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     next();
   };
+  
+  // Middleware for master admin (nexaadmin) only operations
+  const requireMasterAdmin = (req: Request, res: Response, next: any) => {
+    if (req.session.userId !== "admin") {
+      return res.status(403).json({ message: "Only master admin can access this feature" });
+    }
+    next();
+  };
 
   // Get all users (admin only)
   app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
@@ -5520,6 +5528,381 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get payroll summary error:", error);
       res.status(500).json({ message: "Failed to calculate payroll summary" });
+    }
+  });
+
+  // ============================================================
+  // Historical Payroll Import (Master Admin Only)
+  // ============================================================
+  
+  // Check if user is master admin
+  app.get("/api/admin/is-master-admin", requireAdmin, async (req: Request, res: Response) => {
+    res.json({ isMasterAdmin: req.session.userId === "admin" });
+  });
+  
+  // Get all import batches
+  app.get("/api/admin/payroll/import-batches", requireAdmin, requireMasterAdmin, async (req: Request, res: Response) => {
+    try {
+      const batches = await storage.getPayrollImportBatches();
+      res.json({ batches });
+    } catch (error) {
+      console.error("Get import batches error:", error);
+      res.status(500).json({ message: "Failed to fetch import batches" });
+    }
+  });
+  
+  // Parse Excel file for historical payroll import (validation/preview step)
+  app.post("/api/admin/payroll/historical-import/parse", requireAdmin, requireMasterAdmin, async (req: Request, res: Response) => {
+    try {
+      const XLSX = require("xlsx");
+      const { fileBase64, fileName } = req.body;
+      
+      if (!fileBase64 || !fileName) {
+        return res.status(400).json({ message: "File data and name are required" });
+      }
+      
+      // Decode base64 file
+      const buffer = Buffer.from(fileBase64, "base64");
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      
+      // Read first sheet
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      
+      // Find pay period from header rows
+      let payPeriodYear: number | null = null;
+      let payPeriodMonth: number | null = null;
+      let payPeriodText = "";
+      
+      for (let i = 0; i < Math.min(5, rawData.length); i++) {
+        const row = rawData[i] as any[];
+        if (row && row[0] && typeof row[0] === "string" && row[0].includes("Pay Period")) {
+          payPeriodText = row[1] || "";
+          // Parse format like "END,MID,BONUS Month - JUL '2025" or "JAN '2025"
+          const monthMatch = payPeriodText.match(/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s*['"]?(\d{4})/i);
+          if (monthMatch) {
+            const monthNames: Record<string, number> = {
+              JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6,
+              JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12
+            };
+            payPeriodMonth = monthNames[monthMatch[1].toUpperCase()] || null;
+            payPeriodYear = parseInt(monthMatch[2]);
+          }
+          break;
+        }
+      }
+      
+      // Find header row (starts with "No")
+      let headerRowIndex = -1;
+      let headers: string[] = [];
+      for (let i = 0; i < rawData.length; i++) {
+        const row = rawData[i] as any[];
+        if (row && row[0] === "No") {
+          headerRowIndex = i;
+          headers = row.map((h: any) => (h || "").toString().trim());
+          break;
+        }
+      }
+      
+      if (headerRowIndex === -1) {
+        return res.status(400).json({ message: "Could not find header row in Excel file" });
+      }
+      
+      // Parse data rows
+      const records: any[] = [];
+      const validationErrors: string[] = [];
+      let successCount = 0;
+      let errorCount = 0;
+      let skipCount = 0;
+      
+      for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+        const row = rawData[i] as any[];
+        if (!row || !row[0] || row[0] === "" || typeof row[0] !== "number") continue;
+        
+        const getValue = (columnName: string): any => {
+          const index = headers.indexOf(columnName);
+          return index >= 0 && row[index] !== undefined ? row[index] : null;
+        };
+        
+        const getNumericValue = (columnName: string): string => {
+          const val = getValue(columnName);
+          if (val === null || val === undefined || val === "") return "0";
+          return String(parseFloat(val) || 0);
+        };
+        
+        const employeeCode = getValue("EMP CODE")?.toString() || "";
+        const employeeName = getValue("EMPLOYEE NAME") || "";
+        
+        if (!employeeCode || !employeeName) {
+          errorCount++;
+          validationErrors.push(`Row ${i + 1}: Missing employee code or name`);
+          continue;
+        }
+        
+        // Check for duplicates in current payroll
+        if (payPeriodYear && payPeriodMonth) {
+          const exists = await storage.checkDuplicatePayrollRecord(employeeCode, payPeriodYear, payPeriodMonth);
+          if (exists) {
+            skipCount++;
+            validationErrors.push(`Row ${i + 1}: ${employeeName} (${employeeCode}) already has payroll record for this period - will skip`);
+            continue;
+          }
+        }
+        
+        // Map Excel columns to payroll record fields
+        const record = {
+          employeeCode,
+          employeeName: employeeName.toString(),
+          deptCode: getValue("DEPT CODE")?.toString() || null,
+          deptName: getValue("DEPT NAME")?.toString() || null,
+          secCode: getValue("SEC CODE")?.toString() || null,
+          secName: getValue("SEC NAME")?.toString() || null,
+          catCode: getValue("CAT CODE")?.toString() || null,
+          catName: getValue("CAT NAME")?.toString() || null,
+          nric: getValue("NRIC")?.toString() || null,
+          joinDate: getValue("JOIN DATE") ? 
+            (typeof getValue("JOIN DATE") === "number" 
+              ? new Date((getValue("JOIN DATE") - 25569) * 86400 * 1000).toISOString().split("T")[0]
+              : getValue("JOIN DATE").toString())
+            : null,
+          totSalary: getNumericValue("TOT SALARY"),
+          basicSalary: getNumericValue("BASIC SALARY"),
+          monthlyVariablesComponent: getNumericValue("MONTHLY VARIABLES COMPONENT"),
+          flat: getNumericValue("FLAT"),
+          ot10: getNumericValue("OT10"),
+          ot15: getNumericValue("OT15"),
+          ot20: getNumericValue("OT20"),
+          ot30: getNumericValue("OT30"),
+          shiftAllowance: getNumericValue("SHIFT ALLOWANCE"),
+          totRestPhAmount: getNumericValue("TOT REST/PH AMOUNT"),
+          transportAllowance: getNumericValue("TRANSPORT ALLOWANCE (60-111)"),
+          annualLeaveEncashment: getNumericValue("ANNUAL LEAVE ENCASHMENT"),
+          serviceCallAllowances: getNumericValue("SERVICE CALL ALLOWANCES (60-102)"),
+          otherAllowance: getNumericValue("OTHER ALLOWANCE"),
+          houseRentalAllowances: getNumericValue("HOUSE RENTAL ALLOWANCES (60-217)"),
+          noPayDay: getNumericValue("NO PAY DAY"),
+          cc: getNumericValue("CC"),
+          cdac: getNumericValue("CDAC"),
+          ecf: getNumericValue("ECF"),
+          mbmf: getNumericValue("MBMF"),
+          sinda: getNumericValue("SINDA"),
+          bonus: getNumericValue("BONUS"),
+          grossWages: getNumericValue("GROSS WAGES"),
+          cpfWages: getNumericValue("CPF WAGES"),
+          sdf: getNumericValue("SDF"),
+          fwl: getNumericValue("FWL"),
+          employerCpf: getNumericValue("EMPLOYER CPF"),
+          employeeCpf: getNumericValue("EMPLOYEE CPF"),
+          totalCpf: getNumericValue("TOTAL"),
+          nett: getNumericValue("NETT"),
+          payMode: getValue("Pay Mode")?.toString() || null,
+          chequeNo: getValue("Cheque No")?.toString() || null,
+        };
+        
+        // Try to match employee
+        const existingUser = await storage.getUserByEmployeeCode(employeeCode);
+        
+        records.push({
+          ...record,
+          userId: existingUser?.id || null,
+          matchedEmployee: existingUser ? { id: existingUser.id, name: existingUser.name } : null,
+          rowNumber: i + 1,
+        });
+        successCount++;
+      }
+      
+      res.json({
+        payPeriod: {
+          year: payPeriodYear,
+          month: payPeriodMonth,
+          text: payPeriodText,
+        },
+        records,
+        summary: {
+          total: records.length + errorCount + skipCount,
+          valid: successCount,
+          errors: errorCount,
+          skipped: skipCount,
+        },
+        validationErrors,
+        headers,
+      });
+    } catch (error) {
+      console.error("Parse historical payroll error:", error);
+      res.status(500).json({ message: "Failed to parse payroll file" });
+    }
+  });
+  
+  // Execute historical payroll import
+  app.post("/api/admin/payroll/historical-import/execute", requireAdmin, requireMasterAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        fileName: z.string(),
+        payPeriodYear: z.number().int().min(2000).max(2100),
+        payPeriodMonth: z.number().int().min(1).max(12),
+        records: z.array(z.object({
+          employeeCode: z.string(),
+          employeeName: z.string(),
+          userId: z.string().nullable().optional(),
+          deptCode: z.string().nullable().optional(),
+          deptName: z.string().nullable().optional(),
+          secCode: z.string().nullable().optional(),
+          secName: z.string().nullable().optional(),
+          catCode: z.string().nullable().optional(),
+          catName: z.string().nullable().optional(),
+          nric: z.string().nullable().optional(),
+          joinDate: z.string().nullable().optional(),
+          totSalary: z.string().default("0"),
+          basicSalary: z.string().default("0"),
+          monthlyVariablesComponent: z.string().default("0"),
+          flat: z.string().default("0"),
+          ot10: z.string().default("0"),
+          ot15: z.string().default("0"),
+          ot20: z.string().default("0"),
+          ot30: z.string().default("0"),
+          shiftAllowance: z.string().default("0"),
+          totRestPhAmount: z.string().default("0"),
+          transportAllowance: z.string().default("0"),
+          annualLeaveEncashment: z.string().default("0"),
+          serviceCallAllowances: z.string().default("0"),
+          otherAllowance: z.string().default("0"),
+          houseRentalAllowances: z.string().default("0"),
+          noPayDay: z.string().default("0"),
+          cc: z.string().default("0"),
+          cdac: z.string().default("0"),
+          ecf: z.string().default("0"),
+          mbmf: z.string().default("0"),
+          sinda: z.string().default("0"),
+          bonus: z.string().default("0"),
+          grossWages: z.string().default("0"),
+          cpfWages: z.string().default("0"),
+          sdf: z.string().default("0"),
+          fwl: z.string().default("0"),
+          employerCpf: z.string().default("0"),
+          employeeCpf: z.string().default("0"),
+          totalCpf: z.string().default("0"),
+          nett: z.string().default("0"),
+          payMode: z.string().nullable().optional(),
+          chequeNo: z.string().nullable().optional(),
+        })),
+      });
+      
+      const { fileName, payPeriodYear, payPeriodMonth, records } = schema.parse(req.body);
+      
+      const monthNames = ["", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+      const payPeriod = `${monthNames[payPeriodMonth]} ${payPeriodYear}`;
+      
+      // Create import batch record
+      const batch = await storage.createPayrollImportBatch({
+        fileName,
+        payPeriodYear,
+        payPeriodMonth,
+        totalRecords: records.length,
+        importedBy: "master_admin (nexaadmin)",
+        status: "importing",
+      });
+      
+      let successCount = 0;
+      let errorCount = 0;
+      let skippedCount = 0;
+      const errors: string[] = [];
+      
+      for (const record of records) {
+        try {
+          // Check for duplicate again
+          const exists = await storage.checkDuplicatePayrollRecord(record.employeeCode, payPeriodYear, payPeriodMonth);
+          if (exists) {
+            skippedCount++;
+            continue;
+          }
+          
+          // Create payroll record
+          await storage.createPayrollRecord({
+            userId: record.userId || undefined,
+            payPeriod,
+            payPeriodYear,
+            payPeriodMonth,
+            employeeCode: record.employeeCode,
+            employeeName: record.employeeName,
+            deptCode: record.deptCode,
+            deptName: record.deptName,
+            secCode: record.secCode,
+            secName: record.secName,
+            catCode: record.catCode,
+            catName: record.catName,
+            nric: record.nric,
+            joinDate: record.joinDate,
+            totSalary: record.totSalary,
+            basicSalary: record.basicSalary,
+            monthlyVariablesComponent: record.monthlyVariablesComponent,
+            flat: record.flat,
+            ot10: record.ot10,
+            ot15: record.ot15,
+            ot20: record.ot20,
+            ot30: record.ot30,
+            shiftAllowance: record.shiftAllowance,
+            totRestPhAmount: record.totRestPhAmount,
+            transportAllowance: record.transportAllowance,
+            annualLeaveEncashment: record.annualLeaveEncashment,
+            serviceCallAllowances: record.serviceCallAllowances,
+            otherAllowance: record.otherAllowance,
+            houseRentalAllowances: record.houseRentalAllowances,
+            noPayDay: record.noPayDay,
+            cc: record.cc,
+            cdac: record.cdac,
+            ecf: record.ecf,
+            mbmf: record.mbmf,
+            sinda: record.sinda,
+            bonus: record.bonus,
+            grossWages: record.grossWages,
+            cpfWages: record.cpfWages,
+            sdf: record.sdf,
+            fwl: record.fwl,
+            employerCpf: record.employerCpf,
+            employeeCpf: record.employeeCpf,
+            totalCpf: record.totalCpf,
+            nett: record.nett,
+            payMode: record.payMode,
+            chequeNo: record.chequeNo,
+            importedBy: "master_admin (nexaadmin)",
+            importBatchId: batch.id,
+            isHistoricalImport: true,
+          });
+          successCount++;
+        } catch (err: any) {
+          errorCount++;
+          errors.push(`${record.employeeName} (${record.employeeCode}): ${err.message}`);
+        }
+      }
+      
+      // Update batch status
+      await storage.updatePayrollImportBatch(batch.id, {
+        status: "completed",
+        successfulRecords: successCount,
+        failedRecords: errorCount,
+        skippedRecords: skippedCount,
+        validationErrors: errors.length > 0 ? JSON.stringify(errors) : null,
+        completedAt: new Date(),
+      });
+      
+      res.json({
+        success: true,
+        batchId: batch.id,
+        summary: {
+          total: records.length,
+          successful: successCount,
+          failed: errorCount,
+          skipped: skippedCount,
+        },
+        errors,
+      });
+    } catch (error) {
+      console.error("Execute historical import error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to import payroll records" });
     }
   });
 
