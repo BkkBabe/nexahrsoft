@@ -97,7 +97,15 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
     mutationFn: async (data: any) => {
       return apiRequest("POST", "/api/admin/payroll/adjustments", data);
     },
-    onSuccess: () => {
+    onSuccess: async (_, variables) => {
+      const isSuppressType = variables.adjustmentType === 'suppress_ot15' || variables.adjustmentType === 'suppress_ot20';
+      
+      if (isSuppressType) {
+        toast({ title: "Adjustment Added", description: "Recalculating payroll..." });
+        // Add delay for suppress adjustments to allow payroll recalculation to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
       toast({ title: "Adjustment Added", description: "The adjustment has been saved." });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/records'] });
