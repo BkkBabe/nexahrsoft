@@ -49,6 +49,19 @@ export const users = pgTable("users", {
   salaryAdjustmentReason: text("salary_adjustment_reason"),
   // Work schedule - for salary calculations
   regularDaysPerWeek: real("regular_days_per_week").default(5), // 5 or 5.5 days per week
+  // OT rate fields (calculated from hourly rate)
+  ot15Rate: numeric("ot15_rate", { precision: 10, scale: 2 }), // Calculated OT 1.5x rate
+  ot20Rate: numeric("ot20_rate", { precision: 10, scale: 2 }), // Calculated OT 2.0x rate
+  // Additional employee fields
+  birthday: text("birthday"), // YYYY-MM-DD format
+  workPermitNumber: text("work_permit_number"),
+  workPermitExpiry: text("work_permit_expiry"), // YYYY-MM-DD format
+  finNumber: text("fin_number"),
+  finNumberExpiry: text("fin_number_expiry"), // YYYY-MM-DD format
+  remarks1: text("remarks_1"),
+  remarks2: text("remarks_2"),
+  remarks3: text("remarks_3"),
+  remarks4: text("remarks_4"),
 });
 
 export const companySettings = pgTable("company_settings", {
