@@ -4735,32 +4735,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const month = req.query.month ? parseInt(req.query.month as string) : undefined;
       
       const records = await storage.getPayrollRecords(year, month);
-      
-      // Apply suppress_ot15 adjustments - zero out OT 1.5x for records with approved suppress adjustments
-      const allAdjustments = await storage.getPayrollAdjustments();
-      const suppressAdjustments = allAdjustments.filter(
-        adj => adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved'
-      );
-      
-      const processedRecords = records.map(record => {
-        // Check if there's an approved suppress_ot15 adjustment for this employee/period
-        const hasSuppress = suppressAdjustments.some(
-          adj => adj.userId === record.userId && 
-                 adj.payPeriodYear === record.payPeriodYear && 
-                 adj.payPeriodMonth === record.payPeriodMonth
-        );
-        
-        if (hasSuppress) {
-          return {
-            ...record,
-            overtime15Hours: 0,
-            ot15: 0,
-          };
-        }
-        return record;
-      });
-      
-      res.json({ records: processedRecords });
+      res.json({ records });
     } catch (error) {
       console.error("Get payroll records error:", error);
       res.status(500).json({ message: "Failed to fetch payroll records" });
@@ -4879,28 +4854,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/payroll/records/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      let record = await storage.getPayrollRecordById(id);
+      const record = await storage.getPayrollRecordById(id);
       if (!record) {
         return res.status(404).json({ message: "Payroll record not found" });
       }
-      
-      // Apply suppress_ot15 adjustment if approved
-      const adjustments = await storage.getPayrollAdjustmentsByUser(record.userId || '');
-      const hasSuppress = adjustments.some(
-        adj => adj.adjustmentType === 'suppress_ot15' && 
-               adj.status === 'approved' &&
-               adj.payPeriodYear === record!.payPeriodYear && 
-               adj.payPeriodMonth === record!.payPeriodMonth
-      );
-      
-      if (hasSuppress) {
-        record = {
-          ...record,
-          overtime15Hours: 0,
-          ot15: 0,
-        };
-      }
-      
       const auditLogs = await storage.getPayrollAuditLogsByRecord(id);
       res.json({ record, auditLogs });
     } catch (error) {
