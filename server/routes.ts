@@ -5561,14 +5561,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "File data and name are required" });
       }
       
+      console.log(`[Historical Import] Parsing file: ${fileName}, base64 length: ${fileBase64?.length || 0}`);
+      
       // Decode base64 file
-      const buffer = Buffer.from(fileBase64, "base64");
-      const workbook = XLSX.read(buffer, { type: "buffer" });
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(fileBase64, "base64");
+        console.log(`[Historical Import] Buffer created, size: ${buffer.length} bytes`);
+      } catch (bufferError) {
+        console.error("[Historical Import] Buffer creation failed:", bufferError);
+        return res.status(400).json({ message: "Invalid file data encoding" });
+      }
+      
+      let workbook;
+      try {
+        workbook = XLSX.read(buffer, { type: "buffer" });
+        console.log(`[Historical Import] Workbook read successfully, sheets: ${workbook.SheetNames.join(", ")}`);
+      } catch (xlsxError: any) {
+        console.error("[Historical Import] XLSX parse failed:", xlsxError);
+        return res.status(400).json({ message: `Failed to parse Excel file: ${xlsxError.message || "Unknown error"}. Please ensure the file is a valid .xlsx or .xls file.` });
+      }
       
       // Read first sheet
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      
+      console.log(`[Historical Import] Raw data rows: ${rawData.length}`);
       
       // Find pay period from header rows
       let payPeriodYear: number | null = null;
@@ -5728,9 +5747,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validationErrors,
         headers,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Parse historical payroll error:", error);
-      res.status(500).json({ message: "Failed to parse payroll file" });
+      const errorMessage = error?.message || "Unknown error occurred";
+      res.status(500).json({ message: `Failed to parse payroll file: ${errorMessage}` });
     }
   });
   

@@ -173,9 +173,20 @@ export default function AdminHistoricalPayrollImportPage() {
     },
   });
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
+  const processFile = useCallback((selectedFile: File) => {
     if (!selectedFile) return;
+    
+    // Validate file type
+    const validExtensions = ['.xlsx', '.xls'];
+    const fileExtension = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf('.'));
+    if (!validExtensions.includes(fileExtension)) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload an Excel file (.xlsx or .xls)",
+        variant: "destructive",
+      });
+      return;
+    }
     
     setFile(selectedFile);
     
@@ -185,8 +196,37 @@ export default function AdminHistoricalPayrollImportPage() {
       const base64Data = base64.split(",")[1] || base64;
       parseMutation.mutate({ fileBase64: base64Data, fileName: selectedFile.name });
     };
+    reader.onerror = () => {
+      toast({
+        title: "File Read Error",
+        description: "Failed to read the file. Please try again.",
+        variant: "destructive",
+      });
+    };
     reader.readAsDataURL(selectedFile);
-  }, [parseMutation]);
+  }, [parseMutation, toast]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      processFile(selectedFile);
+    }
+  }, [processFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      processFile(droppedFile);
+    }
+  }, [processFile]);
 
   const handleImport = () => {
     if (!parseResult || !selectedYear || !selectedMonth) return;
@@ -236,7 +276,12 @@ export default function AdminHistoricalPayrollImportPage() {
             </AlertDescription>
           </Alert>
           
-          <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-12 text-center">
+          <div 
+            className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-12 text-center hover:border-primary/50 transition-colors"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            data-testid="drop-zone"
+          >
             <input
               type="file"
               accept=".xlsx,.xls"
