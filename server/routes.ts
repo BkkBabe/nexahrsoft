@@ -5342,10 +5342,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rate: parseNum(data.rate) !== undefined ? toNumericString(parseNum(data.rate)!) : null,
       };
       
+      // For suppress adjustments, default to 'approved' so they take effect immediately
+      const isSuppressType = data.adjustmentType === 'suppress_ot15' || data.adjustmentType === 'suppress_ot20';
+      const defaultStatus = isSuppressType ? 'approved' : 'pending';
+      
       const adjustment = await storage.createPayrollAdjustment({
         ...adjustedData,
         createdBy,
-        status: data.status || 'pending',
+        status: data.status || defaultStatus,
       });
       
       // Create audit log entry
@@ -5359,8 +5363,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Auto-recalculate payroll when suppress_ot15 or suppress_ot20 adjustment is created with status "approved"
       let payrollRecalculated = false;
-      if ((data.adjustmentType === 'suppress_ot15' || data.adjustmentType === 'suppress_ot20') && 
-          (data.status === 'approved' || !data.status)) {
+      if (isSuppressType && adjustment.status === 'approved') {
+        console.log(`Processing auto-recalculation for suppress adjustment: ${adjustment.adjustmentType}, status: ${adjustment.status}`);
         try {
           // Find the existing payroll record for this employee and period
           const allRecords = await storage.getPayrollRecords(data.payPeriodYear, data.payPeriodMonth);
