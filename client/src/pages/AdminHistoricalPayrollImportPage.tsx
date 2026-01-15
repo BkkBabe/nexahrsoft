@@ -533,7 +533,7 @@ export default function AdminHistoricalPayrollImportPage() {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => setLocation("/admin")}
+              onClick={() => setLocation("/admin/dashboard")}
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
