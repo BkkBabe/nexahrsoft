@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Printer, Settings2 } from "lucide-react";
+import { Eye, EyeOff, Printer, Settings2, Download, Loader2 } from "lucide-react";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
 import PayrollAdjustmentsDialog from "./PayrollAdjustmentsDialog";
+import html2pdf from "html2pdf.js";
 
 interface PayrollAdjustment {
   id: string;
@@ -155,7 +156,43 @@ export default function PayslipView({
 }: PayslipViewProps) {
   const [viewMode, setViewMode] = useState<"employee" | "employer">(defaultMode);
   const [adjustmentsDialogOpen, setAdjustmentsDialogOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const payslipRef = useRef<HTMLDivElement>(null);
   const isEmployerView = viewMode === "employer";
+
+  const handleExportPdf = async () => {
+    if (!payslipRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      const element = payslipRef.current;
+      const employeeName = record.employeeName?.replace(/[^a-zA-Z0-9]/g, '_') || 'Employee';
+      const filename = `Payslip_${employeeName}_${record.payPeriod?.replace(/\s+/g, '_')}.pdf`;
+      
+      const opt = {
+        margin: [10, 10, 10, 10] as [number, number, number, number],
+        filename,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        },
+        jsPDF: { 
+          unit: 'mm' as const, 
+          format: 'a4' as const, 
+          orientation: 'portrait' as const
+        }
+      };
+      
+      await html2pdf().set(opt).from(element).save();
+    } catch (error) {
+      console.error('PDF export error:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const { data: adjustmentsData } = useQuery<{ adjustments: PayrollAdjustment[] }>({
     queryKey: ['/api/admin/payroll/adjustments', record?.userId, record?.payPeriodYear, record?.payPeriodMonth],
@@ -217,7 +254,7 @@ export default function PayslipView({
     parseAmount(record.bonus);
 
   return (
-    <Card className="print:shadow-none print:border-none" data-testid="payslip-view">
+    <Card ref={payslipRef} className="print:shadow-none print:border-none bg-white" data-testid="payslip-view">
       <CardHeader className="space-y-4">
         <div className="flex items-start justify-between flex-wrap gap-4 print:gap-2">
           <div className="flex items-start gap-4 print:gap-2">
@@ -273,6 +310,25 @@ export default function PayslipView({
                 </Label>
               </div>
             )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleExportPdf}
+              disabled={isExporting}
+              data-testid="button-export-pdf"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export PDF
+                </>
+              )}
+            </Button>
             {onPrint && (
               <Button variant="outline" size="sm" onClick={onPrint} data-testid="button-print">
                 <Printer className="h-4 w-4 mr-2" />
