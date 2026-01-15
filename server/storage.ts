@@ -2,7 +2,7 @@ import { type User, type InsertUser, type CompanySettings, type AttendanceRecord
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches } from "@shared/schema";
-import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
+import { eq, or, and, gte, lte, lt, desc, asc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -1691,16 +1691,16 @@ export class PgStorage implements IStorage {
             eq(payrollRecords.payPeriodMonth, month)
           )
         )
-        .orderBy(desc(payrollRecords.importedAt));
+        .orderBy(asc(payrollRecords.employeeName));
     } else if (year !== undefined) {
       return await db.select()
         .from(payrollRecords)
         .where(eq(payrollRecords.payPeriodYear, year))
-        .orderBy(desc(payrollRecords.importedAt));
+        .orderBy(asc(payrollRecords.employeeName));
     }
     return await db.select()
       .from(payrollRecords)
-      .orderBy(desc(payrollRecords.importedAt));
+      .orderBy(asc(payrollRecords.employeeName));
   }
   
   async getPayrollRecordsByEmployee(employeeCode: string): Promise<PayrollRecord[]> {
@@ -1751,11 +1751,11 @@ export class PgStorage implements IStorage {
       return await db.select()
         .from(payrollRecords)
         .where(and(...conditions))
-        .orderBy(payrollRecords.employeeName);
+        .orderBy(asc(payrollRecords.employeeName));
     }
     return await db.select()
       .from(payrollRecords)
-      .orderBy(payrollRecords.employeeName);
+      .orderBy(asc(payrollRecords.employeeName));
   }
   
   async createPayrollAuditLog(log: InsertPayrollAuditLog): Promise<PayrollAuditLog> {
