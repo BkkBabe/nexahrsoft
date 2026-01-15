@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog, type PayrollImportBatch, type InsertPayrollImportBatch } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -184,6 +184,14 @@ export interface IStorage {
   createEmployeeDataAuditLog(log: InsertEmployeeDataAuditLog): Promise<EmployeeDataAuditLog>;
   getEmployeeDataAuditLogs(userId: string): Promise<EmployeeDataAuditLog[]>;
   getAllEmployeeDataAuditLogs(limit?: number): Promise<EmployeeDataAuditLog[]>;
+  
+  // Payroll Import Batch methods
+  createPayrollImportBatch(batch: InsertPayrollImportBatch): Promise<PayrollImportBatch>;
+  updatePayrollImportBatch(id: string, updates: Partial<PayrollImportBatch>): Promise<PayrollImportBatch | undefined>;
+  getPayrollImportBatch(id: string): Promise<PayrollImportBatch | undefined>;
+  getPayrollImportBatches(): Promise<PayrollImportBatch[]>;
+  getPayrollImportBatchByPeriod(year: number, month: number): Promise<PayrollImportBatch | undefined>;
+  checkDuplicatePayrollRecord(employeeCode: string, year: number, month: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -2093,6 +2101,60 @@ export class PgStorage implements IStorage {
       return await query.limit(limit);
     }
     return await query;
+  }
+  
+  // Payroll Import Batch methods
+  async createPayrollImportBatch(batch: InsertPayrollImportBatch): Promise<PayrollImportBatch> {
+    const [created] = await db.insert(payrollImportBatches)
+      .values(batch)
+      .returning();
+    return created;
+  }
+  
+  async updatePayrollImportBatch(id: string, updates: Partial<PayrollImportBatch>): Promise<PayrollImportBatch | undefined> {
+    const [updated] = await db.update(payrollImportBatches)
+      .set(updates)
+      .where(eq(payrollImportBatches.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async getPayrollImportBatch(id: string): Promise<PayrollImportBatch | undefined> {
+    const [batch] = await db.select()
+      .from(payrollImportBatches)
+      .where(eq(payrollImportBatches.id, id))
+      .limit(1);
+    return batch;
+  }
+  
+  async getPayrollImportBatches(): Promise<PayrollImportBatch[]> {
+    return await db.select()
+      .from(payrollImportBatches)
+      .orderBy(desc(payrollImportBatches.createdAt));
+  }
+  
+  async getPayrollImportBatchByPeriod(year: number, month: number): Promise<PayrollImportBatch | undefined> {
+    const [batch] = await db.select()
+      .from(payrollImportBatches)
+      .where(and(
+        eq(payrollImportBatches.payPeriodYear, year),
+        eq(payrollImportBatches.payPeriodMonth, month),
+        eq(payrollImportBatches.status, 'completed')
+      ))
+      .limit(1);
+    return batch;
+  }
+  
+  async checkDuplicatePayrollRecord(employeeCode: string, year: number, month: number): Promise<boolean> {
+    const [existing] = await db.select()
+      .from(payrollRecords)
+      .where(and(
+        eq(payrollRecords.employeeCode, employeeCode),
+        eq(payrollRecords.payPeriodYear, year),
+        eq(payrollRecords.payPeriodMonth, month)
+      ))
+      .limit(1);
+    return !!existing;
   }
 }
 
