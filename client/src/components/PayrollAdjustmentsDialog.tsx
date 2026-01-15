@@ -53,7 +53,16 @@ interface PayrollAdjustmentsDialogProps {
 export const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
   addition: "Addition",
   deduction: "Deduction",
+  suppress_ot15: "Suppress OT 1.5x",
+  suppress_ot20: "Suppress OT 2.0x",
 };
+
+const ADJUSTMENT_TYPES = [
+  { value: "addition", label: "Addition", hasAmount: true },
+  { value: "deduction", label: "Deduction", hasAmount: true },
+  { value: "suppress_ot15", label: "Suppress OT 1.5x (No OT1.5 in Payroll)", isFlag: true },
+  { value: "suppress_ot20", label: "Suppress OT 2.0x (No OT2.0 in Payroll)", isFlag: true },
+];
 
 function formatCurrency(dollars: number | string | null): string {
   if (dollars === null || dollars === undefined) return "$0.00";
@@ -124,11 +133,14 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
 
   const handleAddAdjustment = () => {
     if (!record?.userId || !newAdjustment.adjustmentType) {
-      toast({ title: "Error", description: "Please select Addition or Deduction", variant: "destructive" });
+      toast({ title: "Error", description: "Please select an adjustment type", variant: "destructive" });
       return;
     }
 
-    if (!newAdjustment.amount || parseFloat(newAdjustment.amount) <= 0) {
+    const typeConfig = ADJUSTMENT_TYPES.find(t => t.value === newAdjustment.adjustmentType);
+    const isFlag = typeConfig?.isFlag;
+
+    if (!isFlag && (!newAdjustment.amount || parseFloat(newAdjustment.amount) <= 0)) {
       toast({ title: "Error", description: "Please enter a valid amount", variant: "destructive" });
       return;
     }
@@ -142,13 +154,15 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
       hours: null,
       days: null,
       rate: null,
-      amount: newAdjustment.amount,
+      amount: isFlag ? null : newAdjustment.amount,
       notes: newAdjustment.notes || null,
       status: "approved",
     };
 
     addMutation.mutate(payload);
   };
+
+  const selectedTypeConfig = ADJUSTMENT_TYPES.find(t => t.value === newAdjustment.adjustmentType);
 
   const adjustments = adjustmentsData?.adjustments || [];
 
@@ -186,20 +200,22 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                     <TableBody>
                       {adjustments.map((adj) => {
                         const isDeduction = adj.adjustmentType === 'deduction';
+                        const isSuppress = adj.adjustmentType === 'suppress_ot15' || adj.adjustmentType === 'suppress_ot20';
                         const amount = adj.amount ? parseFloat(adj.amount) : 0;
+                        const typeLabel = ADJUSTMENT_TYPE_LABELS[adj.adjustmentType] || adj.adjustmentType;
                         
                         return (
                           <TableRow key={adj.id}>
                             <TableCell>
-                              <Badge variant={isDeduction ? "destructive" : "default"}>
-                                {isDeduction ? "Deduction" : "Addition"}
+                              <Badge variant={isSuppress ? "secondary" : isDeduction ? "destructive" : "default"}>
+                                {typeLabel}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground">
                               {adj.notes || adj.description || "-"}
                             </TableCell>
-                            <TableCell className={`text-right font-mono ${isDeduction ? 'text-red-600' : 'text-green-600'}`}>
-                              {isDeduction ? '-' : ''}{formatCurrency(amount)}
+                            <TableCell className={`text-right font-mono ${isSuppress ? 'text-muted-foreground' : isDeduction ? 'text-red-600' : 'text-green-600'}`}>
+                              {isSuppress ? '(Flag)' : `${isDeduction ? '-' : ''}${formatCurrency(amount)}`}
                             </TableCell>
                             <TableCell className="text-center">
                               <Button
@@ -242,17 +258,20 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                   
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Deductions / Additions *</Label>
+                      <Label>Adjustment Type *</Label>
                       <Select
                         value={newAdjustment.adjustmentType}
-                        onValueChange={(value) => setNewAdjustment(prev => ({ ...prev, adjustmentType: value }))}
+                        onValueChange={(value) => setNewAdjustment(prev => ({ ...prev, adjustmentType: value, amount: '' }))}
                       >
                         <SelectTrigger data-testid="select-adjustment-type">
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="addition">Addition</SelectItem>
-                          <SelectItem value="deduction">Deduction</SelectItem>
+                          {ADJUSTMENT_TYPES.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -268,22 +287,30 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Amount ($) *</Label>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        value={newAdjustment.amount}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                            setNewAdjustment(prev => ({ ...prev, amount: value }));
-                          }
-                        }}
-                        placeholder="0.00"
-                        data-testid="input-adjustment-amount"
-                      />
-                    </div>
+                    {selectedTypeConfig?.hasAmount && (
+                      <div className="space-y-2">
+                        <Label>Amount ($) *</Label>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={newAdjustment.amount}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                              setNewAdjustment(prev => ({ ...prev, amount: value }));
+                            }
+                          }}
+                          placeholder="0.00"
+                          data-testid="input-adjustment-amount"
+                        />
+                      </div>
+                    )}
+                    
+                    {selectedTypeConfig?.isFlag && (
+                      <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground">
+                        This adjustment is a flag that will suppress the corresponding overtime calculation for this employee during payroll generation.
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-2 justify-end">
@@ -299,7 +326,7 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
                     </Button>
                     <Button
                       onClick={handleAddAdjustment}
-                      disabled={addMutation.isPending || !newAdjustment.adjustmentType || !newAdjustment.amount}
+                      disabled={addMutation.isPending || !newAdjustment.adjustmentType || (selectedTypeConfig?.hasAmount && !newAdjustment.amount)}
                       data-testid="button-save-adjustment"
                     >
                       {addMutation.isPending ? (
