@@ -847,10 +847,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.createEmployeeDataAuditLog({
               userId: id,
               changedBy,
-              fieldChanged: field,
+              fieldName: field,
               oldValue: oldValue !== null && oldValue !== undefined ? String(oldValue) : null,
               newValue: newValue !== null && newValue !== undefined ? String(newValue) : null,
-              changeType: 'update',
+              action: 'update',
             });
           }
         }
