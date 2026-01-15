@@ -1,14 +1,20 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut, Users, Calendar, FileText, DollarSign, Receipt, Settings, BarChart3, Mail, UserCog } from "lucide-react";
+import { LogOut, Users, Calendar, FileText, DollarSign, Receipt, Settings, BarChart3, Mail, UserCog, History } from "lucide-react";
 import { useLocation } from "wouter";
 import { MenuCard } from "@/components/MenuCard";
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+
+  const { data: masterAdminData } = useQuery<{ isMasterAdmin: boolean }>({
+    queryKey: ["/api/admin/is-master-admin"],
+  });
+
+  const isMasterAdmin = masterAdminData?.isMasterAdmin === true;
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -77,6 +83,15 @@ export default function AdminDashboardPage() {
     },
   ];
 
+  const masterAdminItems = [
+    {
+      title: "Historical Import",
+      icon: History,
+      href: "/admin/payroll/historical-import",
+      iconColor: "bg-amber-500/10",
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -101,6 +116,15 @@ export default function AdminDashboardPage() {
 
         <div className="grid grid-cols-3 gap-2 md:gap-6">
           {menuItems.map((item) => (
+            <MenuCard
+              key={item.title}
+              title={item.title}
+              icon={item.icon}
+              iconColor={item.iconColor}
+              onClick={() => setLocation(item.href)}
+            />
+          ))}
+          {isMasterAdmin && masterAdminItems.map((item) => (
             <MenuCard
               key={item.title}
               title={item.title}
