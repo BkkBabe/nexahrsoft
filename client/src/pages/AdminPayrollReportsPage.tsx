@@ -959,8 +959,7 @@ export default function AdminPayrollReportsPage() {
                 <table className="w-full text-sm" data-testid="table-payroll-records">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Period</th>
-                      <th className="text-left p-2 font-medium">Emp Code</th>
+                      <th className="text-center p-2 font-medium w-12">#</th>
                       <th className="text-left p-2 font-medium">Name</th>
                       <th className="text-left p-2 font-medium">Department</th>
                       <th className="text-right p-2 font-medium">Basic</th>
@@ -979,8 +978,7 @@ export default function AdminPayrollReportsPage() {
                         className="border-b hover:bg-muted/30"
                         data-testid={`row-payroll-${idx}`}
                       >
-                        <td className="p-2 text-muted-foreground" data-testid={`cell-period-${idx}`}>{row.payPeriod}</td>
-                        <td className="p-2 font-mono" data-testid={`cell-code-${idx}`}>{row.employeeCode}</td>
+                        <td className="p-2 text-center text-muted-foreground" data-testid={`cell-serial-${idx}`}>{idx + 1}</td>
                         <td className="p-2" data-testid={`cell-name-${idx}`}>{row.employeeName}</td>
                         <td className="p-2" data-testid={`cell-dept-${idx}`}>{row.deptName || '-'}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-basic-${idx}`}>{formatCurrency(row.basicSalary)}</td>
