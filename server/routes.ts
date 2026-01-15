@@ -5173,7 +5173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: z.string().min(1),
         payPeriodYear: z.number().min(2000).max(2100),
         payPeriodMonth: z.number().min(1).max(12),
-        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other']),
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition']),
         description: z.string().optional().nullable(),
         hours: z.number().positive().optional().nullable(), // Must be > 0 if provided
         days: z.number().positive().optional().nullable(), // Must be > 0 if provided
@@ -5250,7 +5250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       
       const schema = z.object({
-        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other']).optional(),
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition']).optional(),
         description: z.string().optional(),
         hours: z.number().positive().optional(), // Must be > 0 if provided
         days: z.number().positive().optional(), // Must be > 0 if provided
