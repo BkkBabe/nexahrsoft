@@ -1696,9 +1696,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clockInTime = new Date(openSession.clockInTime);
         const hoursAgo = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
         
-        // Check if we should ignore orphaned sessions (older than 24 hours)
+        // Check if we should ignore orphaned sessions (older than 16 hours)
         const companySettings = await storage.getCompanySettings();
-        const isOrphaned = hoursAgo >= 24;
+        const isOrphaned = hoursAgo >= 16;
         
         // If the session is orphaned and ignoreOrphanedSessions is enabled, allow clock-in
         if (isOrphaned && companySettings?.ignoreOrphanedSessions) {
