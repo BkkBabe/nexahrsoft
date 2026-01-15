@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, isNull, not, like, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -179,6 +179,11 @@ export interface IStorage {
   createEmployeeSalaryAdjustment(adjustment: InsertEmployeeSalaryAdjustment): Promise<EmployeeSalaryAdjustment>;
   updateEmployeeSalaryAdjustment(id: string, updates: Partial<EmployeeSalaryAdjustment>): Promise<EmployeeSalaryAdjustment | undefined>;
   deleteEmployeeSalaryAdjustment(id: string): Promise<boolean>;
+  
+  // Employee Data Audit Log methods
+  createEmployeeDataAuditLog(log: InsertEmployeeDataAuditLog): Promise<EmployeeDataAuditLog>;
+  getEmployeeDataAuditLogs(userId: string): Promise<EmployeeDataAuditLog[]>;
+  getAllEmployeeDataAuditLogs(limit?: number): Promise<EmployeeDataAuditLog[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -747,6 +752,17 @@ export class MemStorage implements IStorage {
   }
   async deleteEmployeeSalaryAdjustment(id: string): Promise<boolean> {
     throw new Error("MemStorage deleteEmployeeSalaryAdjustment not implemented");
+  }
+  
+  // Employee Data Audit Log stubs
+  async createEmployeeDataAuditLog(log: InsertEmployeeDataAuditLog): Promise<EmployeeDataAuditLog> {
+    throw new Error("MemStorage createEmployeeDataAuditLog not implemented");
+  }
+  async getEmployeeDataAuditLogs(userId: string): Promise<EmployeeDataAuditLog[]> {
+    throw new Error("MemStorage getEmployeeDataAuditLogs not implemented");
+  }
+  async getAllEmployeeDataAuditLogs(limit?: number): Promise<EmployeeDataAuditLog[]> {
+    throw new Error("MemStorage getAllEmployeeDataAuditLogs not implemented");
   }
 }
 
@@ -2051,6 +2067,32 @@ export class PgStorage implements IStorage {
       .where(eq(employeeSalaryAdjustments.id, id))
       .returning();
     return result.length > 0;
+  }
+  
+  // Employee Data Audit Log methods
+  async createEmployeeDataAuditLog(log: InsertEmployeeDataAuditLog): Promise<EmployeeDataAuditLog> {
+    const [created] = await db.insert(employeeDataAuditLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+  
+  async getEmployeeDataAuditLogs(userId: string): Promise<EmployeeDataAuditLog[]> {
+    return await db.select()
+      .from(employeeDataAuditLogs)
+      .where(eq(employeeDataAuditLogs.userId, userId))
+      .orderBy(desc(employeeDataAuditLogs.changedAt));
+  }
+  
+  async getAllEmployeeDataAuditLogs(limit?: number): Promise<EmployeeDataAuditLog[]> {
+    const query = db.select()
+      .from(employeeDataAuditLogs)
+      .orderBy(desc(employeeDataAuditLogs.changedAt));
+    
+    if (limit) {
+      return await query.limit(limit);
+    }
+    return await query;
   }
 }
 
