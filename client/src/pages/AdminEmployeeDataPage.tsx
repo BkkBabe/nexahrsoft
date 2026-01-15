@@ -8,7 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter } from "lucide-react";
+import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import { useLocation } from "wouter";
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
@@ -19,16 +21,32 @@ import type { User, EmployeeDataAuditLog } from "@shared/schema";
 interface EditableFields {
   name: string;
   email: string;
-  department: string;
   designation: string;
-  section: string;
-  shortName: string;
   mobileNumber: string;
   gender: string;
   joinDate: string;
   resignDate: string;
   nricFin: string;
-  fingerId: string;
+  birthday: string;
+  workPermitNumber: string;
+  workPermitExpiry: string;
+  finNumber: string;
+  finNumberExpiry: string;
+  remarks1: string;
+  remarks2: string;
+  remarks3: string;
+  remarks4: string;
+  // Salary calculation fields
+  basicMonthlySalary: string;
+  hourlyRate: string;
+  ot15Rate: string;
+  ot20Rate: string;
+  defaultMobileAllowance: string;
+  defaultTransportAllowance: string;
+  defaultMealAllowance: string;
+  defaultShiftAllowance: string;
+  defaultOtherAllowance: string;
+  defaultHouseRentalAllowance: string;
 }
 
 export default function AdminEmployeeDataPage() {
@@ -41,16 +59,31 @@ export default function AdminEmployeeDataPage() {
   const [editFormData, setEditFormData] = useState<EditableFields>({
     name: "",
     email: "",
-    department: "",
     designation: "",
-    section: "",
-    shortName: "",
     mobileNumber: "",
     gender: "",
     joinDate: "",
     resignDate: "",
     nricFin: "",
-    fingerId: "",
+    birthday: "",
+    workPermitNumber: "",
+    workPermitExpiry: "",
+    finNumber: "",
+    finNumberExpiry: "",
+    remarks1: "",
+    remarks2: "",
+    remarks3: "",
+    remarks4: "",
+    basicMonthlySalary: "",
+    hourlyRate: "",
+    ot15Rate: "",
+    ot20Rate: "",
+    defaultMobileAllowance: "",
+    defaultTransportAllowance: "",
+    defaultMealAllowance: "",
+    defaultShiftAllowance: "",
+    defaultOtherAllowance: "",
+    defaultHouseRentalAllowance: "",
   });
 
   const { data: usersData, isLoading: usersLoading, refetch: refetchUsers } = useQuery<User[]>({
@@ -122,16 +155,31 @@ export default function AdminEmployeeDataPage() {
     setEditFormData({
       name: user.name || "",
       email: user.email || "",
-      department: user.department || "",
       designation: user.designation || "",
-      section: user.section || "",
-      shortName: user.shortName || "",
       mobileNumber: user.mobileNumber || "",
       gender: user.gender || "",
       joinDate: user.joinDate || "",
       resignDate: user.resignDate || "",
       nricFin: user.nricFin || "",
-      fingerId: user.fingerId || "",
+      birthday: user.birthday || "",
+      workPermitNumber: user.workPermitNumber || "",
+      workPermitExpiry: user.workPermitExpiry || "",
+      finNumber: user.finNumber || "",
+      finNumberExpiry: user.finNumberExpiry || "",
+      remarks1: user.remarks1 || "",
+      remarks2: user.remarks2 || "",
+      remarks3: user.remarks3 || "",
+      remarks4: user.remarks4 || "",
+      basicMonthlySalary: user.basicMonthlySalary || "",
+      hourlyRate: user.hourlyRate || "",
+      ot15Rate: user.ot15Rate || "",
+      ot20Rate: user.ot20Rate || "",
+      defaultMobileAllowance: user.defaultMobileAllowance || "",
+      defaultTransportAllowance: user.defaultTransportAllowance || "",
+      defaultMealAllowance: user.defaultMealAllowance || "",
+      defaultShiftAllowance: user.defaultShiftAllowance || "",
+      defaultOtherAllowance: user.defaultOtherAllowance || "",
+      defaultHouseRentalAllowance: user.defaultHouseRentalAllowance || "",
     });
   };
 
@@ -153,19 +201,62 @@ export default function AdminEmployeeDataPage() {
     const labels: Record<string, string> = {
       name: "Name",
       email: "Email",
-      department: "Department",
       designation: "Designation",
-      section: "Section",
-      shortName: "Short Name",
       mobileNumber: "Mobile Number",
       gender: "Gender",
       joinDate: "Join Date",
       resignDate: "Resign Date",
       nricFin: "NRIC/FIN",
-      fingerId: "Finger ID",
       employeeCode: "Employee Code",
+      birthday: "Birthday",
+      workPermitNumber: "Work Permit Number",
+      workPermitExpiry: "Work Permit Expiry",
+      finNumber: "FIN Number",
+      finNumberExpiry: "FIN Number Expiry",
+      remarks1: "Remarks 1",
+      remarks2: "Remarks 2",
+      remarks3: "Remarks 3",
+      remarks4: "Remarks 4",
+      basicMonthlySalary: "Monthly Salary",
+      hourlyRate: "Hourly Rate",
+      ot15Rate: "OT 1.5x Rate",
+      ot20Rate: "OT 2.0x Rate",
+      defaultMobileAllowance: "Mobile Allowance",
+      defaultTransportAllowance: "Transport Allowance",
+      defaultMealAllowance: "Meal Allowance",
+      defaultShiftAllowance: "Shift Allowance",
+      defaultOtherAllowance: "Other Allowance",
+      defaultHouseRentalAllowance: "House Rental Allowance",
     };
     return labels[field] || field;
+  };
+
+  const calculateRates = () => {
+    const monthlySalary = parseFloat(editFormData.basicMonthlySalary) || 0;
+    if (monthlySalary <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid monthly salary first",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Standard calculation: Monthly / 26 days / 8 hours
+    const hourly = monthlySalary / 26 / 8;
+    const ot15 = hourly * 1.5;
+    const ot20 = hourly * 2.0;
+    
+    setEditFormData(prev => ({
+      ...prev,
+      hourlyRate: hourly.toFixed(2),
+      ot15Rate: ot15.toFixed(2),
+      ot20Rate: ot20.toFixed(2),
+    }));
+    
+    toast({
+      title: "Rates Calculated",
+      description: `Hourly: $${hourly.toFixed(2)}, OT 1.5x: $${ot15.toFixed(2)}, OT 2.0x: $${ot20.toFixed(2)}`,
+    });
   };
 
   return (
@@ -306,123 +397,338 @@ export default function AdminEmployeeDataPage() {
                 Edit Employee: {editingUser?.name}
               </DialogTitle>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Name</Label>
-                <Input
-                  id="edit-name"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
-                  data-testid="input-edit-name"
-                />
+            <div className="space-y-6 py-4">
+              {/* Basic Information */}
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Basic Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">Name</Label>
+                    <Input
+                      id="edit-name"
+                      value={editFormData.name}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                      data-testid="input-edit-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-email">Email</Label>
+                    <Input
+                      id="edit-email"
+                      type="email"
+                      value={editFormData.email}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                      data-testid="input-edit-email"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-designation">Designation</Label>
+                    <Input
+                      id="edit-designation"
+                      value={editFormData.designation}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, designation: e.target.value }))}
+                      data-testid="input-edit-designation"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-mobileNumber">Mobile Number</Label>
+                    <Input
+                      id="edit-mobileNumber"
+                      value={editFormData.mobileNumber}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, mobileNumber: e.target.value }))}
+                      data-testid="input-edit-mobileNumber"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-gender">Gender</Label>
+                    <Select 
+                      value={editFormData.gender} 
+                      onValueChange={(value) => setEditFormData(prev => ({ ...prev, gender: value }))}
+                    >
+                      <SelectTrigger data-testid="select-edit-gender">
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-birthday">Birthday</Label>
+                    <Input
+                      id="edit-birthday"
+                      type="date"
+                      value={editFormData.birthday}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, birthday: e.target.value }))}
+                      data-testid="input-edit-birthday"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-joinDate">Join Date</Label>
+                    <Input
+                      id="edit-joinDate"
+                      type="date"
+                      value={editFormData.joinDate}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, joinDate: e.target.value }))}
+                      data-testid="input-edit-joinDate"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-resignDate">Resign Date</Label>
+                    <Input
+                      id="edit-resignDate"
+                      type="date"
+                      value={editFormData.resignDate}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, resignDate: e.target.value }))}
+                      data-testid="input-edit-resignDate"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-nricFin">NRIC/FIN</Label>
+                    <Input
+                      id="edit-nricFin"
+                      value={editFormData.nricFin}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, nricFin: e.target.value }))}
+                      data-testid="input-edit-nricFin"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">Email</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={editFormData.email}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
-                  data-testid="input-edit-email"
-                />
+
+              <Separator />
+
+              {/* Work Permit & FIN Details */}
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Work Permit & FIN Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-workPermitNumber">Work Permit Number</Label>
+                    <Input
+                      id="edit-workPermitNumber"
+                      value={editFormData.workPermitNumber}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitNumber: e.target.value }))}
+                      data-testid="input-edit-workPermitNumber"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-workPermitExpiry">Work Permit Expiry</Label>
+                    <Input
+                      id="edit-workPermitExpiry"
+                      type="date"
+                      value={editFormData.workPermitExpiry}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitExpiry: e.target.value }))}
+                      data-testid="input-edit-workPermitExpiry"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-finNumber">FIN Number</Label>
+                    <Input
+                      id="edit-finNumber"
+                      value={editFormData.finNumber}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, finNumber: e.target.value }))}
+                      data-testid="input-edit-finNumber"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
+                    <Input
+                      id="edit-finNumberExpiry"
+                      type="date"
+                      value={editFormData.finNumberExpiry}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
+                      data-testid="input-edit-finNumberExpiry"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-department">Department</Label>
-                <Input
-                  id="edit-department"
-                  value={editFormData.department}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, department: e.target.value }))}
-                  data-testid="input-edit-department"
-                />
+
+              <Separator />
+
+              {/* Salary Calculation */}
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Salary Settings</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-basicMonthlySalary">Monthly Salary ($)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="edit-basicMonthlySalary"
+                        type="number"
+                        step="0.01"
+                        value={editFormData.basicMonthlySalary}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, basicMonthlySalary: e.target.value }))}
+                        data-testid="input-edit-basicMonthlySalary"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={calculateRates}
+                        data-testid="button-calculate-rates"
+                      >
+                        <Calculator className="h-4 w-4 mr-1" />
+                        Calculate
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-hourlyRate">Hourly Rate ($)</Label>
+                    <Input
+                      id="edit-hourlyRate"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.hourlyRate}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, hourlyRate: e.target.value }))}
+                      data-testid="input-edit-hourlyRate"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-ot15Rate">OT 1.5x Rate ($)</Label>
+                    <Input
+                      id="edit-ot15Rate"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.ot15Rate}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, ot15Rate: e.target.value }))}
+                      data-testid="input-edit-ot15Rate"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-ot20Rate">OT 2.0x Rate ($)</Label>
+                    <Input
+                      id="edit-ot20Rate"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.ot20Rate}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, ot20Rate: e.target.value }))}
+                      data-testid="input-edit-ot20Rate"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-designation">Designation</Label>
-                <Input
-                  id="edit-designation"
-                  value={editFormData.designation}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, designation: e.target.value }))}
-                  data-testid="input-edit-designation"
-                />
+
+              <Separator />
+
+              {/* Allowances */}
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Allowances</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-defaultMobileAllowance">Mobile Allowance ($)</Label>
+                    <Input
+                      id="edit-defaultMobileAllowance"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.defaultMobileAllowance}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, defaultMobileAllowance: e.target.value }))}
+                      data-testid="input-edit-defaultMobileAllowance"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-defaultTransportAllowance">Transport Allowance ($)</Label>
+                    <Input
+                      id="edit-defaultTransportAllowance"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.defaultTransportAllowance}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, defaultTransportAllowance: e.target.value }))}
+                      data-testid="input-edit-defaultTransportAllowance"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-defaultMealAllowance">Meal Allowance ($)</Label>
+                    <Input
+                      id="edit-defaultMealAllowance"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.defaultMealAllowance}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, defaultMealAllowance: e.target.value }))}
+                      data-testid="input-edit-defaultMealAllowance"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-defaultShiftAllowance">Shift Allowance ($)</Label>
+                    <Input
+                      id="edit-defaultShiftAllowance"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.defaultShiftAllowance}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, defaultShiftAllowance: e.target.value }))}
+                      data-testid="input-edit-defaultShiftAllowance"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-defaultOtherAllowance">Other Allowance ($)</Label>
+                    <Input
+                      id="edit-defaultOtherAllowance"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.defaultOtherAllowance}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, defaultOtherAllowance: e.target.value }))}
+                      data-testid="input-edit-defaultOtherAllowance"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-defaultHouseRentalAllowance">House Rental ($)</Label>
+                    <Input
+                      id="edit-defaultHouseRentalAllowance"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.defaultHouseRentalAllowance}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, defaultHouseRentalAllowance: e.target.value }))}
+                      data-testid="input-edit-defaultHouseRentalAllowance"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-section">Section</Label>
-                <Input
-                  id="edit-section"
-                  value={editFormData.section}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, section: e.target.value }))}
-                  data-testid="input-edit-section"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-shortName">Short Name</Label>
-                <Input
-                  id="edit-shortName"
-                  value={editFormData.shortName}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, shortName: e.target.value }))}
-                  data-testid="input-edit-shortName"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-mobileNumber">Mobile Number</Label>
-                <Input
-                  id="edit-mobileNumber"
-                  value={editFormData.mobileNumber}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, mobileNumber: e.target.value }))}
-                  data-testid="input-edit-mobileNumber"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-gender">Gender</Label>
-                <Select 
-                  value={editFormData.gender} 
-                  onValueChange={(value) => setEditFormData(prev => ({ ...prev, gender: value }))}
-                >
-                  <SelectTrigger data-testid="select-edit-gender">
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-joinDate">Join Date</Label>
-                <Input
-                  id="edit-joinDate"
-                  type="date"
-                  value={editFormData.joinDate}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, joinDate: e.target.value }))}
-                  data-testid="input-edit-joinDate"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-resignDate">Resign Date</Label>
-                <Input
-                  id="edit-resignDate"
-                  type="date"
-                  value={editFormData.resignDate}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, resignDate: e.target.value }))}
-                  data-testid="input-edit-resignDate"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-nricFin">NRIC/FIN</Label>
-                <Input
-                  id="edit-nricFin"
-                  value={editFormData.nricFin}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, nricFin: e.target.value }))}
-                  data-testid="input-edit-nricFin"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-fingerId">Finger ID</Label>
-                <Input
-                  id="edit-fingerId"
-                  value={editFormData.fingerId}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, fingerId: e.target.value }))}
-                  data-testid="input-edit-fingerId"
-                />
+
+              <Separator />
+
+              {/* Remarks */}
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Remarks</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-remarks1">Remarks 1</Label>
+                    <Textarea
+                      id="edit-remarks1"
+                      value={editFormData.remarks1}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, remarks1: e.target.value }))}
+                      rows={2}
+                      data-testid="input-edit-remarks1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-remarks2">Remarks 2</Label>
+                    <Textarea
+                      id="edit-remarks2"
+                      value={editFormData.remarks2}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, remarks2: e.target.value }))}
+                      rows={2}
+                      data-testid="input-edit-remarks2"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-remarks3">Remarks 3</Label>
+                    <Textarea
+                      id="edit-remarks3"
+                      value={editFormData.remarks3}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, remarks3: e.target.value }))}
+                      rows={2}
+                      data-testid="input-edit-remarks3"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-remarks4">Remarks 4</Label>
+                    <Textarea
+                      id="edit-remarks4"
+                      value={editFormData.remarks4}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, remarks4: e.target.value }))}
+                      rows={2}
+                      data-testid="input-edit-remarks4"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <DialogFooter>

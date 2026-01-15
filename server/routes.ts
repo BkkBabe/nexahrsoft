@@ -793,7 +793,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const changedBy = adminUser?.username || adminUser?.name || "nexaadmin";
       
       // Whitelist allowed fields - prevent updating sensitive fields like role, passwordHash
-      const allowedFields = ['name', 'email', 'department', 'designation', 'employeeCode', 'section', 'shortName', 'mobileNumber', 'gender', 'joinDate', 'resignDate', 'nricFin', 'fingerId'];
+      const allowedFields = [
+        'name', 'email', 'department', 'designation', 'employeeCode', 'section', 'shortName', 
+        'mobileNumber', 'gender', 'joinDate', 'resignDate', 'nricFin', 'fingerId',
+        'birthday', 'workPermitNumber', 'workPermitExpiry', 'finNumber', 'finNumberExpiry',
+        'remarks1', 'remarks2', 'remarks3', 'remarks4',
+        'basicMonthlySalary', 'hourlyRate', 'ot15Rate', 'ot20Rate',
+        'defaultMobileAllowance', 'defaultTransportAllowance', 'defaultMealAllowance',
+        'defaultShiftAllowance', 'defaultOtherAllowance', 'defaultHouseRentalAllowance'
+      ];
       
       // Validate and sanitize input
       const updateSchema = z.object({
@@ -810,6 +818,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resignDate: z.string().optional(),
         nricFin: z.string().optional(),
         fingerId: z.string().optional(),
+        birthday: z.string().optional(),
+        workPermitNumber: z.string().optional(),
+        workPermitExpiry: z.string().optional(),
+        finNumber: z.string().optional(),
+        finNumberExpiry: z.string().optional(),
+        remarks1: z.string().optional(),
+        remarks2: z.string().optional(),
+        remarks3: z.string().optional(),
+        remarks4: z.string().optional(),
+        basicMonthlySalary: z.string().optional().transform(v => v === '' ? null : v),
+        hourlyRate: z.string().optional().transform(v => v === '' ? null : v),
+        ot15Rate: z.string().optional().transform(v => v === '' ? null : v),
+        ot20Rate: z.string().optional().transform(v => v === '' ? null : v),
+        defaultMobileAllowance: z.string().optional().transform(v => v === '' ? null : v),
+        defaultTransportAllowance: z.string().optional().transform(v => v === '' ? null : v),
+        defaultMealAllowance: z.string().optional().transform(v => v === '' ? null : v),
+        defaultShiftAllowance: z.string().optional().transform(v => v === '' ? null : v),
+        defaultOtherAllowance: z.string().optional().transform(v => v === '' ? null : v),
+        defaultHouseRentalAllowance: z.string().optional().transform(v => v === '' ? null : v),
       });
       
       const validatedData = updateSchema.parse(req.body);
