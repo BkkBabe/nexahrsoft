@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
+import * as XLSX from "xlsx";
 import { registerUserSchema, loginUserSchema } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { Resend } from "resend";
@@ -5554,7 +5555,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Parse Excel file for historical payroll import (validation/preview step)
   app.post("/api/admin/payroll/historical-import/parse", requireAdmin, requireMasterAdmin, async (req: Request, res: Response) => {
     try {
-      const XLSX = require("xlsx");
       const { fileBase64, fileName } = req.body;
       
       if (!fileBase64 || !fileName) {
