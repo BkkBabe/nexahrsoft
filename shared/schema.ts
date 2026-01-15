@@ -714,3 +714,23 @@ export const insertEmployeeSalaryAdjustmentSchema = createInsertSchema(employeeS
 
 export type InsertEmployeeSalaryAdjustment = z.infer<typeof insertEmployeeSalaryAdjustmentSchema>;
 export type EmployeeSalaryAdjustment = typeof employeeSalaryAdjustments.$inferSelect;
+
+// Employee Data Audit Logs - Track changes to employee profile fields
+export const employeeDataAuditLogs = pgTable("employee_data_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  action: text("action").notNull(), // 'create', 'update', 'archive', 'unarchive'
+  fieldName: text("field_name"), // Which field was changed (for updates)
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  changedBy: text("changed_by").notNull(), // Admin username/name who made the change
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+});
+
+export const insertEmployeeDataAuditLogSchema = createInsertSchema(employeeDataAuditLogs).omit({
+  id: true,
+  changedAt: true,
+});
+
+export type InsertEmployeeDataAuditLog = z.infer<typeof insertEmployeeDataAuditLogSchema>;
+export type EmployeeDataAuditLog = typeof employeeDataAuditLogs.$inferSelect;
