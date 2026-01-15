@@ -48,6 +48,7 @@ interface PayrollAdjustmentsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   record: PayrollRecord | null;
+  onAdjustmentSaved?: () => void;
 }
 
 export const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
@@ -70,7 +71,7 @@ function formatCurrency(dollars: number | string | null): string {
   return `$${num.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }: PayrollAdjustmentsDialogProps) {
+export default function PayrollAdjustmentsDialog({ open, onOpenChange, record, onAdjustmentSaved }: PayrollAdjustmentsDialogProps) {
   const { toast } = useToast();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newAdjustment, setNewAdjustment] = useState({
@@ -111,6 +112,11 @@ export default function PayrollAdjustmentsDialog({ open, onOpenChange, record }:
       queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/records'] });
       setShowAddForm(false);
       resetForm();
+      
+      // Notify parent to refresh payslip view
+      if (onAdjustmentSaved) {
+        onAdjustmentSaved();
+      }
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to add adjustment", variant: "destructive" });

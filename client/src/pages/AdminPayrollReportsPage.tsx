@@ -152,7 +152,7 @@ export default function AdminPayrollReportsPage() {
 
   const queryUrl = buildQueryUrl();
 
-  const { data, isLoading } = useQuery<{ records: PayrollRecord[] }>({
+  const { data, isLoading, refetch } = useQuery<{ records: PayrollRecord[] }>({
     queryKey: ['/api/admin/payroll/records', selectedYear, selectedMonth || null],
     queryFn: async () => {
       const res = await fetch(queryUrl, { credentials: 'include' });
@@ -1120,6 +1120,18 @@ export default function AdminPayrollReportsPage() {
         open={adjustmentsDialogOpen}
         onOpenChange={setAdjustmentsDialogOpen}
         record={adjustmentsRecord}
+        onAdjustmentSaved={async () => {
+          // Refresh payroll records data
+          const result = await refetch();
+          
+          // Update the selected payslip if viewing one with the fresh data
+          if (selectedPayslip && result.data?.records) {
+            const updatedRecord = result.data.records.find(r => r.id === selectedPayslip.id);
+            if (updatedRecord) {
+              setSelectedPayslip(updatedRecord);
+            }
+          }
+        }}
       />
     </div>
   );
