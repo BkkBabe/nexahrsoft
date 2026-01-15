@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play } from "lucide-react";
+import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History } from "lucide-react";
 import { useLocation } from "wouter";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -120,6 +121,12 @@ export default function AdminPayrollGeneratePage() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>(`${currentYear}-${currentMonth}`);
   const [previewData, setPreviewData] = useState<PreviewResponse | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+
+  const { data: masterAdminData } = useQuery<{ isMasterAdmin: boolean }>({
+    queryKey: ["/api/admin/is-master-admin"],
+  });
+
+  const isMasterAdmin = masterAdminData?.isMasterAdmin === true;
   
   const parsePeriod = (period: string) => {
     const [year, month] = period.split('-');
@@ -271,6 +278,26 @@ export default function AdminPayrollGeneratePage() {
               )}
             </Button>
           </div>
+          
+          {isMasterAdmin && (
+            <>
+              <Separator className="my-4" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Historical Payroll Import</p>
+                  <p className="text-xs text-muted-foreground">Import legacy payroll data from Excel files (Master Admin Only)</p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setLocation("/admin/payroll/historical-import")}
+                  data-testid="button-historical-import"
+                >
+                  <History className="h-4 w-4 mr-2" />
+                  Historical Import
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
