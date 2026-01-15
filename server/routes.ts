@@ -4161,6 +4161,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const adj of adjustmentsData) {
         adjustmentsMap.set(`${adj.userId}-${adj.date}`, adj);
       }
+      
+      // Get payroll adjustments for the period (including suppress_ot15)
+      const payrollAdjustmentsData = await storage.getPayrollAdjustmentsByPeriod(year, month);
+      
+      // Build a set of employee IDs that have suppress_ot15 adjustment
+      const suppressOt15Employees = new Set<string>();
+      for (const adj of payrollAdjustmentsData) {
+        if (adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved') {
+          suppressOt15Employees.add(adj.userId);
+        }
+      }
 
       const generatedRecords: any[] = [];
       const skippedEmployees: { employeeCode: string; employeeName: string; reason: string }[] = [];
@@ -4316,9 +4327,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           calculatedBasicPay = regularPay;
           otAmount = overtimePay;
         }
+        
+        // Check if OT should be suppressed for this employee (suppress_ot15 adjustment)
+        let finalOtAmount = otAmount;
+        let finalOtHours = overtimeHours;
+        if (suppressOt15Employees.has(employee.id)) {
+          finalOtAmount = 0;
+          finalOtHours = 0;
+        }
 
         // Calculate gross wages (calculated earnings + OT)
-        const grossWages = calculatedBasicPay + otAmount;
+        const grossWages = calculatedBasicPay + finalOtAmount;
         
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
         const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
@@ -4374,13 +4393,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           joinDate: employee.joinDate || null,
           // Hours worked (for employer view only)
           basicHoursWorked: regularHours,
-          otHoursWorked: overtimeHours,
+          otHoursWorked: finalOtHours,
           totSalary: toNumericString(calculatedBasicPay),
           basicSalary: toNumericString(configuredMonthlySalary),
           monthlyVariablesComponent: toNumericString(0),
           flat: toNumericString(0),
           ot10: toNumericString(0),
-          ot15: toNumericString(otAmount), // All OT at 1.5x for now
+          ot15: toNumericString(finalOtAmount), // All OT at 1.5x for now (0 if suppressed)
           ot20: toNumericString(0),
           ot30: toNumericString(0),
           shiftAllowance: toNumericString(0),
@@ -4480,6 +4499,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const adjustmentsMap = new Map<string, typeof adjustmentsData[0]>();
       for (const adj of adjustmentsData) {
         adjustmentsMap.set(`${adj.userId}-${adj.date}`, adj);
+      }
+      
+      // Get payroll adjustments for the period (including suppress_ot15)
+      const payrollAdjustmentsData = await storage.getPayrollAdjustmentsByPeriod(year, month);
+      
+      // Build a set of employee IDs that have suppress_ot15 adjustment
+      const suppressOt15Employees = new Set<string>();
+      for (const adj of payrollAdjustmentsData) {
+        if (adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved') {
+          suppressOt15Employees.add(adj.userId);
+        }
       }
 
       const preview: {
@@ -4617,7 +4647,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           overtimePay = result.overtimePay;
         }
         
-        const grossWages = basicPay + overtimePay;
+        // Check if OT should be suppressed for this employee (suppress_ot15 adjustment)
+        let finalOvertimeHours = overtimeHours;
+        let finalOvertimePay = overtimePay;
+        if (suppressOt15Employees.has(employee.id)) {
+          finalOvertimeHours = 0;
+          finalOvertimePay = 0;
+        }
+        
+        const grossWages = basicPay + finalOvertimePay;
 
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
         const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
@@ -4655,12 +4693,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           department: employee.department || '',
           totalHoursWorked,
           regularHours,
-          overtimeHours,
+          overtimeHours: finalOvertimeHours,
           daysWorked,
           payType,
           hourlyRate,
           basicPay,
-          overtimePay,
+          overtimePay: finalOvertimePay,
           grossWages,
           employeeCPF: cpfResult.employeeCPF,
           employerCPF: cpfResult.employerCPF,
@@ -5173,7 +5211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: z.string().min(1),
         payPeriodYear: z.number().min(2000).max(2100),
         payPeriodMonth: z.number().min(1).max(12),
-        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition']),
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition', 'suppress_ot15']),
         description: z.string().optional().nullable(),
         hours: z.number().positive().optional().nullable(), // Must be > 0 if provided
         days: z.number().positive().optional().nullable(), // Must be > 0 if provided
@@ -5250,7 +5288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       
       const schema = z.object({
-        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition']).optional(),
+        adjustmentType: z.enum(['overtime', 'mc_days', 'al_days', 'late_hours', 'advance', 'claim', 'deduction', 'bonus', 'other', 'addition', 'suppress_ot15']).optional(),
         description: z.string().optional(),
         hours: z.number().positive().optional(), // Must be > 0 if provided
         days: z.number().positive().optional(), // Must be > 0 if provided
@@ -5434,10 +5472,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const companySettings = await storage.getCompanySettings();
       const otMultiplier = companySettings?.otMultiplier15 || 1.5;
       
+      // Get adjustments for this period (need to check for suppress_ot15 before calculating)
+      const adjustments = await storage.getPayrollAdjustmentsByEmployee(userId, yearNum, monthNum);
+      
+      // Check if OT should be suppressed (suppress_ot15 adjustment)
+      const hasSuppressOt15 = adjustments.some(adj => adj.adjustmentType === 'suppress_ot15' && adj.status === 'approved');
+      
       // Calculate base earnings from attendance
       // Executive employees get full monthly salary, not hourly calculation
       let baseEarnings = 0;
       let autoOvertimePay = 0;
+      let finalOvertimeHours = overtimeHours;
       
       if (isExecutive) {
         // Executive gets full monthly salary
@@ -5445,11 +5490,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Use shared rounding utility for consistent precision
         baseEarnings = roundToDollars(regularHours * hourlyRate);
-        autoOvertimePay = roundToDollars(overtimeHours * hourlyRate * otMultiplier);
+        // Apply OT suppression if present
+        if (hasSuppressOt15) {
+          autoOvertimePay = 0;
+          finalOvertimeHours = 0;
+        } else {
+          autoOvertimePay = roundToDollars(overtimeHours * hourlyRate * otMultiplier);
+        }
       }
-      
-      // Get adjustments for this period
-      const adjustments = await storage.getPayrollAdjustmentsByEmployee(userId, yearNum, monthNum);
       
       // Calculate totals from adjustments
       let totalOvertimeFromAdj = 0;
@@ -5529,7 +5577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attendance: {
           totalHoursWorked: Math.round(totalHoursWorked * 100) / 100,
           regularHours: Math.round(regularHours * 100) / 100,
-          overtimeHours: Math.round(overtimeHours * 100) / 100,
+          overtimeHours: Math.round(finalOvertimeHours * 100) / 100,
           daysWorked: userAttendance.length,
         },
         earnings: {
