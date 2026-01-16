@@ -4941,6 +4941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const adminUsername = (req.session as any)?.adminUsername || "admin";
+      const recalculateCpf = req.body.recalculateCpf === true;
       
       const existingRecord = await storage.getPayrollRecordById(id);
       if (!existingRecord) {
@@ -4978,11 +4979,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      if (Object.keys(updates).length === 0) {
+      if (Object.keys(updates).length === 0 && !recalculateCpf) {
         return res.json({ record: existingRecord, message: "No changes made" });
       }
       
-      const recalculate = (record: any) => {
+      const recalculate = async (record: any, shouldRecalculateCpf: boolean) => {
         // Parse all numeric fields (database returns strings for numeric type)
         const basicSalary = parseNumeric(record.basicSalary);
         const monthlyVariablesComponent = parseNumeric(record.monthlyVariablesComponent);
@@ -5000,8 +5001,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const otherAllowance = parseNumeric(record.otherAllowance);
         const houseRentalAllowances = parseNumeric(record.houseRentalAllowances);
         const bonus = parseNumeric(record.bonus);
-        const employerCpf = parseNumeric(record.employerCpf);
-        const employeeCpf = parseNumeric(record.employeeCpf);
+        let employerCpf = parseNumeric(record.employerCpf);
+        let employeeCpf = parseNumeric(record.employeeCpf);
         const cc = parseNumeric(record.cc);
         const cdac = parseNumeric(record.cdac);
         const ecf = parseNumeric(record.ecf);
@@ -5017,12 +5018,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const allowancesWithoutCpf = roundToDollars(otherAllowance + houseRentalAllowances);
         const grossWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + allowancesWithoutCpf + bonus);
         const cpfWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + bonus);
+        
+        // Recalculate CPF contributions if requested
+        let cpfRecalculated = false;
+        if (shouldRecalculateCpf) {
+          const { calculateCPF, calculateAge, calculateSPRYears } = await import("./cpf-calculator");
+          
+          // Find the employee by their userId or employeeCode
+          let employee = null;
+          if (record.userId) {
+            employee = await storage.getUser(record.userId);
+          }
+          if (!employee && record.employeeCode) {
+            employee = await storage.getUserByEmployeeCode(record.employeeCode);
+          }
+          
+          if (employee) {
+            const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
+            
+            if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
+              // Get reference date from pay period (e.g., "JAN 2026" -> 2026-01-01)
+              const payPeriod = record.payPeriod || '';
+              const monthMap: Record<string, number> = { 'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5, 'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11 };
+              const parts = payPeriod.split(' ');
+              const periodMonth = monthMap[parts[0]?.toUpperCase()] ?? new Date().getMonth();
+              const periodYear = parseInt(parts[1]) || new Date().getFullYear();
+              const referenceDate = new Date(periodYear, periodMonth, 1);
+              
+              const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 45;
+              
+              let sprYears: number | undefined;
+              if (residencyStatus === 'SPR' && employee.sprStartDate) {
+                sprYears = calculateSPRYears(employee.sprStartDate, referenceDate);
+              }
+              
+              const cpfResult = calculateCPF(cpfWages, age, residencyStatus, sprYears);
+              
+              // Store employee CPF as negative (deduction from salary)
+              employerCpf = cpfResult.employerCPF;
+              employeeCpf = -Math.abs(cpfResult.employeeCPF);
+              cpfRecalculated = true;
+              
+              console.log(`Recalculated CPF for ${record.employeeName}: CPF wages $${cpfWages.toFixed(2)}, age ${age}, employer $${employerCpf.toFixed(2)}, employee $${Math.abs(employeeCpf).toFixed(2)}`);
+            }
+          }
+        }
+        
         // Note: employeeCpf is stored as negative, use Math.abs for total
         const totalCpf = roundToDollars(employerCpf + Math.abs(employeeCpf));
         const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
         const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(employeeCpf));
         const nett = roundToDollars(grossWages - totalDeductions);
-        return { 
+        
+        const result: Record<string, any> = { 
           totSalary: toNumericString(totSalary), 
           grossWages: toNumericString(grossWages), 
           cpfWages: toNumericString(cpfWages), 
@@ -5030,15 +5078,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
           total: toNumericString(grossWages), 
           nett: toNumericString(nett) 
         };
+        
+        // Include recalculated CPF values if they were updated
+        if (cpfRecalculated) {
+          result.employerCpf = toNumericString(employerCpf);
+          result.employeeCpf = toNumericString(employeeCpf);
+        }
+        
+        return result;
       };
       
       const mergedRecord = { ...existingRecord, ...updates };
-      const recalculated = recalculate(mergedRecord);
+      const recalculated = await recalculate(mergedRecord, recalculateCpf);
+      
+      // If CPF was recalculated, add audit logs for the CPF changes
+      if (recalculateCpf && recalculated.employerCpf !== undefined) {
+        const oldEmployerCpf = parseNumeric(existingRecord.employerCpf);
+        const newEmployerCpf = parseNumeric(recalculated.employerCpf);
+        const oldEmployeeCpf = parseNumeric(existingRecord.employeeCpf);
+        const newEmployeeCpf = parseNumeric(recalculated.employeeCpf);
+        
+        if (oldEmployerCpf !== newEmployerCpf) {
+          await storage.createPayrollAuditLog({
+            payrollRecordId: id,
+            fieldName: 'employerCpf',
+            oldValue: String(oldEmployerCpf),
+            newValue: String(newEmployerCpf),
+            changedBy: adminUsername,
+            reason: reason || 'CPF auto-recalculated after allowance change',
+          });
+        }
+        if (oldEmployeeCpf !== newEmployeeCpf) {
+          await storage.createPayrollAuditLog({
+            payrollRecordId: id,
+            fieldName: 'employeeCpf',
+            oldValue: String(oldEmployeeCpf),
+            newValue: String(newEmployeeCpf),
+            changedBy: adminUsername,
+            reason: reason || 'CPF auto-recalculated after allowance change',
+          });
+        }
+      }
       
       const finalUpdates = { ...updates, ...recalculated };
       const updated = await storage.updatePayrollRecord(id, finalUpdates);
       
-      res.json({ record: updated, message: "Record updated successfully" });
+      const cpfWasRecalculated = recalculateCpf && recalculated.employerCpf !== undefined;
+      const cpfSkippedReason = recalculateCpf && !cpfWasRecalculated 
+        ? "CPF recalculation skipped - employee residency status not set to SC or SPR"
+        : undefined;
+      
+      res.json({ 
+        record: updated, 
+        message: cpfWasRecalculated 
+          ? "Record updated and CPF recalculated" 
+          : cpfSkippedReason 
+            ? `Record updated. ${cpfSkippedReason}`
+            : "Record updated successfully",
+        cpfRecalculated: cpfWasRecalculated,
+        cpfSkippedReason
+      });
     } catch (error) {
       console.error("Update payroll record error:", error);
       res.status(500).json({ message: "Failed to update payroll record" });

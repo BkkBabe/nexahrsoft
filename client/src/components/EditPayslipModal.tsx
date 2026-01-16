@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Save, History, DollarSign, AlertCircle } from "lucide-react";
+import { Loader2, Save, History, DollarSign, AlertCircle, Calculator } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Accordion,
   AccordionContent,
@@ -24,6 +34,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PayrollRecord, PayrollAuditLog } from "@shared/schema";
+
+const CPF_ELIGIBLE_FIELDS = [
+  'basicSalary', 'monthlyVariablesComponent', 'flat', 'ot10', 'ot15', 'ot20', 'ot30',
+  'shiftAllowance', 'mobileAllowance', 'transportAllowance', 'serviceCallAllowances',
+  'annualLeaveEncashment', 'totRestPhAmount', 'bonus'
+];
 
 interface EditPayslipModalProps {
   record: PayrollRecord | null;
@@ -114,6 +130,8 @@ export default function EditPayslipModal({
   const [values, setValues] = useState<Record<string, number>>({});
   const [reason, setReason] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
+  const [showCpfConfirmDialog, setShowCpfConfirmDialog] = useState(false);
+  const [isRecalculatingCpf, setIsRecalculatingCpf] = useState(false);
 
   const { data: recordWithAudit, isLoading: loadingAudit } = useQuery<{
     record: PayrollRecord;
@@ -180,23 +198,51 @@ export default function EditPayslipModal({
 
   const totals = calculateTotals();
 
+  const hasCpfEligibleChanges = useMemo(() => {
+    if (!record) return false;
+    return CPF_ELIGIBLE_FIELDS.some(field => {
+      const originalValue = parseAmount((record as any)[field]);
+      const currentValue = values[field] || 0;
+      return currentValue !== originalValue;
+    });
+  }, [record, values]);
+
   const updateMutation = useMutation({
     mutationFn: async (data: Record<string, any>) => {
       return apiRequest("PATCH", `/api/admin/payroll/records/${record?.id}`, data);
     },
-    onSuccess: () => {
-      toast({
-        title: "Payslip Updated",
-        description: "Changes have been saved with audit trail.",
-      });
+    onSuccess: (response: any) => {
+      const cpfRecalculated = response?.cpfRecalculated;
+      const cpfSkippedReason = response?.cpfSkippedReason;
+      
+      if (cpfRecalculated) {
+        toast({
+          title: "Payslip Updated & CPF Recalculated",
+          description: "Changes saved with CPF contributions recalculated based on updated wages.",
+        });
+      } else if (cpfSkippedReason) {
+        toast({
+          title: "Payslip Updated",
+          description: cpfSkippedReason,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Payslip Updated",
+          description: "Changes have been saved with audit trail.",
+        });
+      }
+      
       queryClient.invalidateQueries({
         queryKey: ["/api/admin/payroll/records"],
         exact: false,
       });
+      setIsRecalculatingCpf(false);
       if (onSaved) onSaved();
       onClose();
     },
     onError: (error: Error) => {
+      setIsRecalculatingCpf(false);
       toast({
         title: "Update Failed",
         description: error.message,
@@ -213,7 +259,24 @@ export default function EditPayslipModal({
 
   const handleSave = () => {
     if (!record) return;
-    const payload = { ...values, reason };
+    
+    if (hasCpfEligibleChanges) {
+      setShowCpfConfirmDialog(true);
+    } else {
+      const payload = { ...values, reason };
+      updateMutation.mutate(payload);
+    }
+  };
+
+  const handleSaveWithCpfRecalculation = (recalculateCpf: boolean) => {
+    if (!record) return;
+    setShowCpfConfirmDialog(false);
+    
+    if (recalculateCpf) {
+      setIsRecalculatingCpf(true);
+    }
+    
+    const payload = { ...values, reason, recalculateCpf };
     updateMutation.mutate(payload);
   };
 
@@ -419,7 +482,13 @@ export default function EditPayslipModal({
               Reason is required to save changes
             </div>
           )}
-          {hasChanges && reason.trim() && (
+          {hasChanges && reason.trim() && hasCpfEligibleChanges && (
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <Calculator className="h-4 w-4" />
+              CPF-eligible fields changed - will prompt for recalculation
+            </div>
+          )}
+          {hasChanges && reason.trim() && !hasCpfEligibleChanges && (
             <div className="flex items-center gap-2 text-sm text-amber-600">
               <AlertCircle className="h-4 w-4" />
               Unsaved changes
@@ -431,19 +500,55 @@ export default function EditPayslipModal({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!hasChanges || updateMutation.isPending || !reason.trim()}
+              disabled={!hasChanges || updateMutation.isPending || isRecalculatingCpf || !reason.trim()}
               data-testid="button-save"
             >
-              {updateMutation.isPending ? (
+              {isRecalculatingCpf ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Recalculating CPF...
+                </>
+              ) : updateMutation.isPending ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              Save Changes
+              {!isRecalculatingCpf && !updateMutation.isPending && "Save Changes"}
             </Button>
           </div>
         </div>
       </DialogContent>
+
+      <AlertDialog open={showCpfConfirmDialog} onOpenChange={setShowCpfConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-blue-600" />
+              Recalculate CPF Contributions?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                You have modified fields that affect CPF wages (salary, overtime, allowances, or bonus).
+              </p>
+              <p>
+                Would you like the system to automatically recalculate CPF contributions based on the updated wages and the employee's age/residency status?
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Note: CPF rates are calculated using official Singapore CPF 2026 rates based on the employee's age and residency status.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleSaveWithCpfRecalculation(false)} data-testid="button-skip-cpf">
+              Save Without Recalculating
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleSaveWithCpfRecalculation(true)} data-testid="button-recalculate-cpf">
+              <Calculator className="h-4 w-4 mr-2" />
+              Recalculate CPF
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
