@@ -165,7 +165,7 @@ export default function LeavePage() {
                   <SelectContent>
                     {balances.map((balance) => (
                       <SelectItem key={balance.id} value={balance.leaveType}>
-                        {balance.leaveType} ({balance.totalDays - balance.usedDays} days left)
+                        {balance.leaveType} ({balance.balance} days left)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -236,8 +236,10 @@ export default function LeavePage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-3">
           {balances.map((leave) => {
-            const remainingDays = leave.totalDays - leave.usedDays;
-            const usedPercentage = (leave.usedDays / leave.totalDays) * 100;
+            const remainingDays = parseFloat(leave.balance || '0');
+            const eligible = parseFloat(leave.eligible || '0');
+            const taken = parseFloat(leave.taken || '0');
+            const usedPercentage = eligible > 0 ? (taken / eligible) * 100 : 0;
 
             return (
               <Card key={leave.id} data-testid={`card-leave-balance-${leave.id}`}>
@@ -256,7 +258,7 @@ export default function LeavePage() {
                       className="h-2"
                     />
                     <p className="text-sm text-muted-foreground" data-testid={`text-leave-balance-${leave.id}`}>
-                      Used {leave.usedDays} of {leave.totalDays} days
+                      Taken {leave.taken} of {leave.eligible} days
                     </p>
                   </div>
                 </CardContent>
@@ -292,7 +294,7 @@ export default function LeavePage() {
                     </p>
                     <p className="text-sm text-muted-foreground">
                       <Clock className="inline h-3 w-3 mr-1" />
-                      {new Date(record.startDate).toLocaleDateString()} - {new Date(record.endDate).toLocaleDateString()} • {record.totalDays} {record.totalDays === 1 ? "day" : "days"}
+                      {new Date(record.startDate).toLocaleDateString()} - {new Date(record.endDate).toLocaleDateString()} • {record.totalDays} {parseFloat(String(record.totalDays)) === 1 ? "day" : "days"}
                     </p>
                     {record.reason && (
                       <p className="text-sm text-muted-foreground mt-1">

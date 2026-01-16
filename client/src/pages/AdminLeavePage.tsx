@@ -384,13 +384,15 @@ export default function AdminLeavePage() {
   const exportBalancesToCSV = () => {
     if (balances.length === 0) return;
     
-    const headers = ['Employee', 'Leave Type', 'Total Days', 'Used Days', 'Remaining'];
+    const headers = ['Employee', 'Leave Type', 'Brought Fwd', 'Earned', 'Eligible', 'Taken', 'Balance'];
     const rows = balances.map(b => [
-      getUserName(b.userId),
+      b.employeeName || getUserName(b.userId),
       b.leaveType,
-      b.totalDays.toString(),
-      b.usedDays.toString(),
-      (b.totalDays - b.usedDays).toString(),
+      b.broughtForward,
+      b.earned,
+      b.eligible,
+      b.taken,
+      b.balance,
     ]);
     
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -552,16 +554,18 @@ export default function AdminLeavePage() {
 
   // Low balance alerts - employees with less than 20% of total leave remaining (or overdrawn)
   const lowBalanceAlerts = balances.filter(b => {
-    const remaining = b.totalDays - b.usedDays;
-    const percentRemaining = b.totalDays > 0 ? (remaining / b.totalDays) * 100 : 100;
+    const remaining = parseFloat(b.balance || '0');
+    const eligible = parseFloat(b.eligible || '0');
+    const percentRemaining = eligible > 0 ? (remaining / eligible) * 100 : 100;
     return percentRemaining <= 20;
   }).map(b => {
-    const remaining = b.totalDays - b.usedDays;
+    const remaining = parseFloat(b.balance || '0');
+    const eligible = parseFloat(b.eligible || '0');
     return {
       ...b,
       remaining: Math.max(0, remaining),
-      percentRemaining: b.totalDays > 0 ? Math.max(0, (remaining / b.totalDays) * 100) : 100,
-      userName: getUserName(b.userId),
+      percentRemaining: eligible > 0 ? Math.max(0, (remaining / eligible) * 100) : 100,
+      userName: b.employeeName || getUserName(b.userId),
       isOverdrawn: remaining < 0,
     };
   });
@@ -658,7 +662,7 @@ export default function AdminLeavePage() {
                       </div>
                       <div className="text-right">
                         <Badge variant="outline" className="border-orange-500 text-orange-600">
-                          {alert.remaining.toFixed(1)} / {alert.totalDays} days
+                          {alert.remaining.toFixed(1)} / {alert.eligible} days
                         </Badge>
                         <p className="text-xs text-muted-foreground mt-1">
                           {alert.percentRemaining.toFixed(0)}% remaining
@@ -803,11 +807,11 @@ export default function AdminLeavePage() {
                                 <div className="flex items-center justify-between">
                                   <span className="font-medium">{balance.leaveType}</span>
                                   <Badge variant="outline">
-                                    {balance.totalDays - balance.usedDays} / {balance.totalDays} days
+                                    {balance.balance} / {balance.eligible} days
                                   </Badge>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  Used: {balance.usedDays} days
+                                  Taken: {balance.taken} days | B/F: {balance.broughtForward}
                                 </p>
                               </div>
                             </CardContent>
@@ -861,7 +865,7 @@ export default function AdminLeavePage() {
                                 </div>
                                 <div>
                                   <p className="text-muted-foreground">Duration</p>
-                                  <p className="font-medium">{app.totalDays} {app.totalDays === 1 ? "day" : "days"}</p>
+                                  <p className="font-medium">{app.totalDays} {parseFloat(String(app.totalDays)) === 1 ? "day" : "days"}</p>
                                 </div>
                               </div>
                               <div>
