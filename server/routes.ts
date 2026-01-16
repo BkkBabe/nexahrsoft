@@ -4390,9 +4390,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Total OT amount for gross wages calculation
         const finalOtAmount = finalOt15Amount + finalOt20Amount;
+        
+        // Get default allowances from employee profile
+        const mobileAllowance = parseFloat(employee.defaultMobileAllowance || '0');
+        const transportAllowance = parseFloat(employee.defaultTransportAllowance || '0');
+        const shiftAllowance = parseFloat(employee.defaultShiftAllowance || '0');
+        const otherAllowance = parseFloat(employee.defaultOtherAllowance || '0');
+        const houseRentalAllowance = parseFloat(employee.defaultHouseRentalAllowance || '0');
+        const totalAllowances = mobileAllowance + transportAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
 
-        // Calculate gross wages (calculated earnings + OT)
-        const grossWages = calculatedBasicPay + finalOtAmount;
+        // Calculate gross wages (calculated earnings + OT + allowances)
+        const grossWages = calculatedBasicPay + finalOtAmount + totalAllowances;
         
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
         const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
@@ -4457,14 +4465,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ot15: toNumericString(finalOt15Amount), // OT at 1.5x (0 if suppress_ot15 is active)
           ot20: toNumericString(finalOt20Amount), // OT at 2.0x (0 if suppress_ot20 is active)
           ot30: toNumericString(0),
-          shiftAllowance: toNumericString(0),
+          shiftAllowance: toNumericString(shiftAllowance),
           totRestPhAmount: toNumericString(0),
-          mobileAllowance: toNumericString(0),
-          transportAllowance: toNumericString(0),
+          mobileAllowance: toNumericString(mobileAllowance),
+          transportAllowance: toNumericString(transportAllowance),
           annualLeaveEncashment: toNumericString(0),
           serviceCallAllowances: toNumericString(0),
-          otherAllowance: toNumericString(0),
-          houseRentalAllowances: toNumericString(0),
+          otherAllowance: toNumericString(otherAllowance),
+          houseRentalAllowances: toNumericString(houseRentalAllowance),
           loanRepaymentTotal: toNumericString(0),
           loanRepaymentDetails: null,
           noPayDay: toNumericString(0),
@@ -4723,7 +4731,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         const finalOvertimePay = finalOt15Pay + finalOt20Pay;
-        const grossWages = basicPay + finalOvertimePay;
+        
+        // Get default allowances from employee profile
+        const mobileAllowance = parseFloat(employee.defaultMobileAllowance || '0');
+        const transportAllowance = parseFloat(employee.defaultTransportAllowance || '0');
+        const shiftAllowance = parseFloat(employee.defaultShiftAllowance || '0');
+        const otherAllowance = parseFloat(employee.defaultOtherAllowance || '0');
+        const houseRentalAllowance = parseFloat(employee.defaultHouseRentalAllowance || '0');
+        const totalAllowances = mobileAllowance + transportAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
+        
+        const grossWages = basicPay + finalOvertimePay + totalAllowances;
 
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
         const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
