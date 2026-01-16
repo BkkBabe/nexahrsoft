@@ -76,7 +76,7 @@ export interface IStorage {
   getLeaveBalance(userId: string, leaveType: string, year: number): Promise<LeaveBalance | undefined>;
   getUserLeaveBalances(userId: string, year: number): Promise<LeaveBalance[]>;
   getAllLeaveBalances(year: number): Promise<LeaveBalance[]>;
-  updateLeaveUsedDays(id: string, usedDays: number): Promise<LeaveBalance | undefined>;
+  updateLeaveBalanceTaken(id: string, taken: string, balance: string): Promise<LeaveBalance | undefined>;
   
   createLeaveApplication(application: InsertLeaveApplication): Promise<LeaveApplication>;
   updateLeaveApplication(id: string, updates: Partial<LeaveApplication>): Promise<LeaveApplication | undefined>;
@@ -544,7 +544,7 @@ export class MemStorage implements IStorage {
     throw new Error("MemStorage leave not implemented");
   }
 
-  async updateLeaveUsedDays(id: string, usedDays: number): Promise<LeaveBalance | undefined> {
+  async updateLeaveBalanceTaken(id: string, taken: string, balance: string): Promise<LeaveBalance | undefined> {
     throw new Error("MemStorage leave not implemented");
   }
 
@@ -1381,7 +1381,13 @@ export class PgStorage implements IStorage {
       // Update existing balance
       const [updated] = await db.update(leaveBalances)
         .set({
-          totalDays: balance.totalDays,
+          broughtForward: balance.broughtForward,
+          earned: balance.earned,
+          eligible: balance.eligible,
+          taken: balance.taken,
+          balance: balance.balance,
+          employeeCode: balance.employeeCode,
+          employeeName: balance.employeeName,
           updatedAt: new Date(),
         })
         .where(eq(leaveBalances.id, existing.id))
@@ -1428,10 +1434,11 @@ export class PgStorage implements IStorage {
       .orderBy(leaveBalances.userId, leaveBalances.leaveType);
   }
 
-  async updateLeaveUsedDays(id: string, usedDays: number): Promise<LeaveBalance | undefined> {
+  async updateLeaveBalanceTaken(id: string, taken: string, balance: string): Promise<LeaveBalance | undefined> {
     const [updated] = await db.update(leaveBalances)
       .set({
-        usedDays,
+        taken,
+        balance,
         updatedAt: new Date(),
       })
       .where(eq(leaveBalances.id, id))

@@ -3247,8 +3247,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const schema = z.object({
         userId: z.string(),
         leaveType: z.string(),
-        totalDays: z.number().min(0),
         year: z.number().optional(),
+        broughtForward: z.number().optional().default(0),
+        earned: z.number().optional().default(0),
+        eligible: z.number().optional().default(0),
+        taken: z.number().optional().default(0),
+        balance: z.number().optional().default(0),
+        employeeCode: z.string().optional(),
+        employeeName: z.string().optional(),
       });
 
       const data = schema.parse(req.body);
@@ -3257,9 +3263,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const balance = await storage.createOrUpdateLeaveBalance({
         userId: data.userId,
         leaveType: data.leaveType,
-        totalDays: data.totalDays,
-        usedDays: 0,
         year,
+        broughtForward: String(data.broughtForward),
+        earned: String(data.earned),
+        eligible: String(data.eligible),
+        taken: String(data.taken),
+        balance: String(data.balance),
+        employeeCode: data.employeeCode,
+        employeeName: data.employeeName,
       });
 
       res.json({ success: true, balance });
@@ -3305,18 +3316,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Leave application not found" });
       }
 
-      // If approved, update leave balance
+      // If approved, update leave balance (increment taken field)
       if (data.status === "approved") {
+        const leaveYear = new Date(application.startDate).getFullYear();
         const balance = await storage.getLeaveBalance(
           application.userId,
           application.leaveType,
-          new Date().getFullYear()
+          leaveYear
         );
 
         if (balance) {
-          await storage.updateLeaveUsedDays(
+          const currentTaken = parseFloat(balance.taken || '0');
+          const applicationDays = parseFloat(String(application.totalDays) || '0');
+          const newTaken = currentTaken + applicationDays;
+          const currentBalance = parseFloat(balance.balance || '0');
+          const newBalance = currentBalance - applicationDays;
+          
+          await storage.updateLeaveBalanceTaken(
             balance.id,
-            balance.usedDays + application.totalDays
+            String(newTaken),
+            String(newBalance)
           );
         }
       }
@@ -3348,10 +3367,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           employeeName: z.string(),
           leaveType: z.string(),
           leaveDate: z.string(),
-          dayOfWeek: z.string().optional(),
-          remarks: z.string().optional(),
+          dayOfWeek: z.string().optional().nullable(),
+          remarks: z.string().optional().nullable(),
           daysOrHours: z.string().default("1.00 day"),
-          mlClaimAmount: z.number().optional().default(0),
+          mlClaimAmount: z.string().optional().nullable(),
           year: z.number(),
         })),
         replaceExisting: z.boolean().optional().default(false),
@@ -3623,22 +3642,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         leaveType: z.string(),
         startDate: z.string(),
         endDate: z.string(),
-        totalDays: z.number().min(1),
+        totalDays: z.number().min(0.5),
+        dayType: z.enum(["full", "first_half", "second_half"]).optional().default("full"),
         reason: z.string().min(1),
+        mcFileUrl: z.string().optional().nullable(),
+        receiptFileUrl: z.string().optional().nullable(),
+        mlClaimAmount: z.number().optional().nullable(),
       });
 
       const data = schema.parse(req.body);
       const userId = req.session.userId;
 
       // Check if user has enough leave balance
+      const leaveYear = new Date(data.startDate).getFullYear();
       const balance = await storage.getLeaveBalance(
         userId,
         data.leaveType,
-        new Date().getFullYear()
+        leaveYear
       );
 
       if (balance) {
-        const remainingDays = balance.totalDays - balance.usedDays;
+        const remainingDays = parseFloat(balance.balance || '0');
         if (data.totalDays > remainingDays) {
           return res.status(400).json({ 
             message: `Insufficient leave balance. You have ${remainingDays} days remaining.` 
@@ -3646,14 +3670,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Get user details for denormalization
+      const user = await storage.getUser(userId);
+
       const application = await storage.createLeaveApplication({
         userId,
+        employeeCode: user?.employeeCode || null,
+        employeeName: user?.name || null,
         leaveType: data.leaveType,
         startDate: data.startDate,
         endDate: data.endDate,
-        totalDays: data.totalDays,
+        totalDays: String(data.totalDays),
+        dayType: data.dayType,
         reason: data.reason,
         status: "pending",
+        mcFileUrl: data.mcFileUrl || null,
+        receiptFileUrl: data.receiptFileUrl || null,
+        mlClaimAmount: data.mlClaimAmount ? String(data.mlClaimAmount) : null,
         reviewedBy: null,
         reviewedAt: null,
         reviewComments: null,
@@ -4845,8 +4878,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalLeaveEncashment: 0,
             totalNoPayDeduction: 0,
             monthsWithData: [] as { month: number; year: number; leaveEncashment: number; noPayDeduction: number }[],
-            leaveBalances: [] as { leaveType: string; totalDays: number; usedDays: number; remainingDays: number }[],
-            unpaidLeaveApplications: [] as { startDate: string; endDate: string; totalDays: number; status: string }[],
+            leaveBalances: [] as { leaveType: string; eligible: string; taken: string; balance: string }[],
+            unpaidLeaveApplications: [] as { startDate: string; endDate: string; totalDays: string; status: string }[],
           };
         }
         const leaveEncashmentNum = parseFloat(record.annualLeaveEncashment) || 0;
@@ -4869,8 +4902,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalLeaveEncashment: number; 
         totalNoPayDeduction: number;
         monthsWithData: { month: number; year: number; leaveEncashment: number; noPayDeduction: number }[];
-        leaveBalances: { leaveType: string; totalDays: number; usedDays: number; remainingDays: number }[];
-        unpaidLeaveApplications: { startDate: string; endDate: string; totalDays: number; status: string }[];
+        leaveBalances: { leaveType: string; eligible: string; taken: string; balance: string }[];
+        unpaidLeaveApplications: { startDate: string; endDate: string; totalDays: string; status: string }[];
       }>);
       
       // Enrich with leave balance data
@@ -4880,15 +4913,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const balances = allLeaveBalances.filter(b => b.userId === emp.userId && b.year === year);
           emp.leaveBalances = balances.map(b => ({
             leaveType: b.leaveType,
-            totalDays: b.totalDays,
-            usedDays: b.usedDays,
-            remainingDays: b.totalDays - b.usedDays,
+            eligible: b.eligible,
+            taken: b.taken,
+            balance: b.balance,
           }));
           
           // Get unpaid leave applications for this year
           const unpaidApps = allLeaveApplications.filter(a => 
             a.userId === emp.userId && 
-            a.leaveType === 'unpaid' &&
+            a.leaveType === 'UL' &&
             a.startDate.startsWith(String(year))
           );
           emp.unpaidLeaveApplications = unpaidApps.map(a => ({
