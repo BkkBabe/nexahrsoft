@@ -26,6 +26,7 @@ Preferred communication style: Simple, everyday language.
 ### Database Schema
 
 - **Core Tables**: `Users` (employee info, auth, HR metadata), `Company Settings` (singleton for branding, email, timezone), `Payroll Loan Accounts`, `Payroll Loan Repayments`, `Attendance Records`, `Daily Attendance Summary` (pre-calculated for performance), `Attendance Adjustments` (for overrides).
+- **Leave Tables**: `Leave Balances` (broughtForward, earned, eligible, taken, balance per employee/type/year), `Leave Applications` (employee requests with MC file uploads for ML), `Leave History` (historical records), `Leave Audit Logs` (change tracking).
 - **Extensibility**: Designed to easily accommodate future HR modules.
 
 ### Key Features
@@ -34,6 +35,12 @@ Preferred communication style: Simple, everyday language.
 - **Admin Reports**: Generation and export of attendance and employee reports with date filtering and summary statistics.
 - **Admin Email Onboarding**: Batch and individual welcome email sending with password generation and QR codes for app access.
 - **Admin Settings**: Configuration for company branding, email sender, timezone, orphaned session toggle, and admin user management (including master admin password changes).
+- **Admin Leave Management**:
+    - **Leave Balances**: Track employee leave balances with broughtForward, earned, eligible, taken, and remaining balance fields. Supports AL, ML, CL, OIL, UL leave types.
+    - **Leave Applications**: Employee leave requests with day type selection (full/half-day), Medical Leave supports MC and receipt file uploads via Object Storage.
+    - **Approval Workflow**: Admin approve/reject functionality that automatically updates leave balances when approved.
+    - **Leave History Import**: Excel import for historical leave data with validation and error handling.
+    - **Audit Logs**: Change tracking for all leave balance modifications.
 - **Admin Payroll Management**:
     - **Employee Payroll Settings**: Configuration of individual employee profiles including residency status, DOB, salary, and recurring salary adjustments with full CRUD and audit trails.
     - **Payroll Generation**: Automatic payroll generation from attendance records, supporting CPF calculations (Singapore-specific), overtime, and various pay types. Features idempotency checks and handles special cases for CPF.
@@ -65,4 +72,6 @@ Preferred communication style: Simple, everyday language.
 - **Form Management**: react-hook-form, @hookform/resolvers
 - **Validation**: zod, drizzle-zod
 - **Build Tool**: Vite
+- **File Uploads**: multer (memory storage with file type/size validation)
+- **Object Storage**: @google-cloud/storage (for MC documents and receipts)
 - **Mapping/Geocoding**: OpenStreetMap Nominatim API
