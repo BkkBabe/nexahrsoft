@@ -319,10 +319,15 @@ export type PayslipRecord = typeof payslipRecords.$inferSelect;
 export const leaveBalances = pgTable("leave_balances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
-  leaveType: text("leave_type").notNull(), // 'annual', 'sick', 'unpaid', etc.
-  totalDays: integer("total_days").notNull().default(0), // Total entitled days
-  usedDays: integer("used_days").notNull().default(0), // Days already used
+  employeeCode: text("employee_code"), // Denormalized for quick reference
+  employeeName: text("employee_name"), // Denormalized for quick reference
+  leaveType: text("leave_type").notNull(), // 'AL', 'ML', 'OIL', 'UL', 'CL', etc.
   year: integer("year").notNull(), // Year for this balance
+  broughtForward: numeric("brought_forward", { precision: 6, scale: 2 }).notNull().default("0"), // Days from previous year
+  earned: numeric("earned", { precision: 6, scale: 2 }).notNull().default("0"), // Days earned this year
+  eligible: numeric("eligible", { precision: 6, scale: 2 }).notNull().default("0"), // Total entitled days
+  taken: numeric("taken", { precision: 6, scale: 2 }).notNull().default("0"), // Days already used
+  balance: numeric("balance", { precision: 6, scale: 2 }).notNull().default("0"), // Remaining balance (can be negative)
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -330,12 +335,20 @@ export const leaveBalances = pgTable("leave_balances", {
 export const leaveApplications = pgTable("leave_applications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
-  leaveType: text("leave_type").notNull(), // 'annual', 'sick', 'unpaid', etc.
+  employeeCode: text("employee_code"), // Denormalized for quick reference
+  employeeName: text("employee_name"), // Denormalized for quick reference
+  leaveType: text("leave_type").notNull(), // 'AL', 'ML', 'OIL', 'UL', 'CL', etc.
   startDate: text("start_date").notNull(), // Format: YYYY-MM-DD
   endDate: text("end_date").notNull(), // Format: YYYY-MM-DD
-  totalDays: integer("total_days").notNull(), // Number of days requested
+  totalDays: numeric("total_days", { precision: 6, scale: 2 }).notNull(), // Number of days requested (supports 0.5 for half-day)
+  dayType: text("day_type").notNull().default("full"), // 'full', 'first_half', 'second_half'
   reason: text("reason").notNull(),
-  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected'
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected', 'cancelled'
+  // Medical Leave specific fields
+  mcFileUrl: text("mc_file_url"), // URL to medical certificate file
+  receiptFileUrl: text("receipt_file_url"), // URL to medical receipt/claim file
+  mlClaimAmount: numeric("ml_claim_amount", { precision: 10, scale: 2 }), // Claim amount for medical leave
+  // Review fields
   reviewedBy: varchar("reviewed_by").references(() => users.id), // Admin who reviewed
   reviewedAt: timestamp("reviewed_at"), // When it was reviewed
   reviewComments: text("review_comments"), // Admin's comments
