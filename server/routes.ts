@@ -6,9 +6,25 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
 import * as XLSX from "xlsx";
+import multer from "multer";
 import { registerUserSchema, loginUserSchema } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { Resend } from "resend";
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max file size
+  },
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, JPEG, and PNG files are allowed.'));
+    }
+  }
+});
 
 /**
  * Helper to convert PostgreSQL numeric strings to numbers.
@@ -3631,8 +3647,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User: Submit leave application
-  app.post("/api/leave/applications", async (req: Request, res: Response) => {
+  // User: Submit leave application (with file upload support)
+  app.post("/api/leave/applications", upload.fields([
+    { name: 'mcFile', maxCount: 1 },
+    { name: 'receiptFile', maxCount: 1 }
+  ]), async (req: Request, res: Response) => {
     if (!req.session?.userId || req.session.isAdmin) {
       return res.status(401).json({ message: "User authentication required" });
     }
@@ -3642,12 +3661,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         leaveType: z.string(),
         startDate: z.string(),
         endDate: z.string(),
-        totalDays: z.number().min(0.5),
+        totalDays: z.string().transform(val => parseFloat(val)),
         dayType: z.enum(["full", "first_half", "second_half"]).optional().default("full"),
         reason: z.string().min(1),
-        mcFileUrl: z.string().optional().nullable(),
-        receiptFileUrl: z.string().optional().nullable(),
-        mlClaimAmount: z.number().optional().nullable(),
+        mlClaimAmount: z.string().optional().nullable().transform(val => val ? parseFloat(val) : null),
       });
 
       const data = schema.parse(req.body);
@@ -3670,6 +3687,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Handle file uploads to object storage
+      let mcFileUrl: string | null = null;
+      let receiptFileUrl: string | null = null;
+      
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      
+      if (files) {
+        const objectStorageService = new ObjectStorageService();
+        
+        if (files.mcFile && files.mcFile[0]) {
+          const mcFile = files.mcFile[0];
+          mcFileUrl = await objectStorageService.uploadPrivateFile(
+            mcFile.buffer,
+            mcFile.originalname,
+            mcFile.mimetype,
+            "leave-mc"
+          );
+        }
+        
+        if (files.receiptFile && files.receiptFile[0]) {
+          const receiptFile = files.receiptFile[0];
+          receiptFileUrl = await objectStorageService.uploadPrivateFile(
+            receiptFile.buffer,
+            receiptFile.originalname,
+            receiptFile.mimetype,
+            "leave-receipts"
+          );
+        }
+      }
+
       // Get user details for denormalization
       const user = await storage.getUser(userId);
 
@@ -3684,8 +3731,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dayType: data.dayType,
         reason: data.reason,
         status: "pending",
-        mcFileUrl: data.mcFileUrl || null,
-        receiptFileUrl: data.receiptFileUrl || null,
+        mcFileUrl,
+        receiptFileUrl,
         mlClaimAmount: data.mlClaimAmount ? String(data.mlClaimAmount) : null,
         reviewedBy: null,
         reviewedAt: null,
@@ -3695,6 +3742,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, application });
     } catch (error) {
       console.error("Submit leave application error:", error);
+      if (error instanceof multer.MulterError) {
+        return res.status(400).json({ message: `File upload error: ${error.message}` });
+      }
       res.status(500).json({ message: "Failed to submit leave application" });
     }
   });
@@ -6330,6 +6380,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       objectStorageService.downloadObject(file, res);
     } catch (error) {
       console.error("Error searching for public object:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Serve private objects (authenticated users only - for MC docs, receipts)
+  app.get("/private-objects/:filePath(*)", async (req: Request, res: Response) => {
+    // Only authenticated users can view private files
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    const filePath = req.params.filePath;
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const file = await objectStorageService.getPrivateFile(`/private-objects/${filePath}`);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error fetching private object:", error);
       return res.status(500).json({ error: "Internal server error" });
     }
   });

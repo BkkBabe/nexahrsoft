@@ -118,6 +118,56 @@ export class ObjectStorageService {
     });
   }
 
+  async uploadPrivateFile(
+    buffer: Buffer,
+    filename: string,
+    contentType: string,
+    subfolder: string = "leave-mc"
+  ): Promise<string> {
+    const privateDir = process.env.PRIVATE_OBJECT_DIR;
+    if (!privateDir) {
+      throw new Error("PRIVATE_OBJECT_DIR not set");
+    }
+
+    const objectId = randomUUID();
+    const extension = filename.split('.').pop() || '';
+    const fullPath = `${privateDir}/${subfolder}/${objectId}.${extension}`;
+
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    await file.save(buffer, {
+      contentType,
+      metadata: {
+        originalFilename: filename,
+      },
+    });
+
+    return `/private-objects/${subfolder}/${objectId}.${extension}`;
+  }
+
+  async getPrivateFile(filePath: string): Promise<File | null> {
+    const privateDir = process.env.PRIVATE_OBJECT_DIR;
+    if (!privateDir) {
+      throw new Error("PRIVATE_OBJECT_DIR not set");
+    }
+
+    const relativePath = filePath.replace(/^\/private-objects\//, '');
+    const fullPath = `${privateDir}/${relativePath}`;
+
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    const [exists] = await file.exists();
+    if (exists) {
+      return file;
+    }
+
+    return null;
+  }
+
   normalizePublicAssetPath(rawPath: string): string {
     if (!rawPath.startsWith("https://storage.googleapis.com/")) {
       return rawPath;

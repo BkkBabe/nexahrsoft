@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Calendar, Plus, Clock } from "lucide-react";
+import { useState, useRef } from "react";
+import { Calendar, Plus, Clock, Upload, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { LeaveBalance, LeaveApplication } from "@shared/schema";
@@ -34,6 +35,7 @@ const leaveApplicationSchema = z.object({
   leaveType: z.string().min(1, "Leave type is required"),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
+  dayType: z.enum(["full", "first_half", "second_half"]).default("full"),
   reason: z.string().min(1, "Reason is required"),
 });
 
@@ -41,6 +43,10 @@ type LeaveApplicationForm = z.infer<typeof leaveApplicationSchema>;
 
 export default function LeavePage() {
   const [open, setOpen] = useState(false);
+  const [mcFile, setMcFile] = useState<File | null>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const mcFileInputRef = useRef<HTMLInputElement>(null);
+  const receiptFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const { data: balancesData, isLoading: balancesLoading } = useQuery<{ balances: LeaveBalance[] }>({
@@ -57,20 +63,52 @@ export default function LeavePage() {
       leaveType: "",
       startDate: "",
       endDate: "",
+      dayType: "full",
       reason: "",
     },
   });
+
+  const selectedLeaveType = form.watch("leaveType");
+  const selectedDayType = form.watch("dayType");
+  const isMedicalLeave = selectedLeaveType === "ML";
 
   const submitMutation = useMutation({
     mutationFn: async (data: LeaveApplicationForm) => {
       const start = new Date(data.startDate);
       const end = new Date(data.endDate);
-      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      let daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
+      if (data.dayType === "first_half" || data.dayType === "second_half") {
+        daysDiff = 0.5;
+      }
 
-      return apiRequest("POST", "/api/leave/applications", {
-        ...data,
-        totalDays: daysDiff,
+      const formData = new FormData();
+      formData.append("leaveType", data.leaveType);
+      formData.append("startDate", data.startDate);
+      formData.append("endDate", data.endDate);
+      formData.append("dayType", data.dayType);
+      formData.append("reason", data.reason);
+      formData.append("totalDays", String(daysDiff));
+      
+      if (mcFile) {
+        formData.append("mcFile", mcFile);
+      }
+      if (receiptFile) {
+        formData.append("receiptFile", receiptFile);
+      }
+
+      const response = await fetch("/api/leave/applications", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to submit application");
+      }
+      
+      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -80,6 +118,8 @@ export default function LeavePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/leave/applications"] });
       setOpen(false);
       form.reset();
+      setMcFile(null);
+      setReceiptFile(null);
     },
     onError: (error: Error) => {
       toast({
@@ -198,6 +238,112 @@ export default function LeavePage() {
                   <p className="text-sm text-destructive">{form.formState.errors.endDate.message}</p>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label>Day Type</Label>
+                <RadioGroup
+                  value={selectedDayType}
+                  onValueChange={(value) => form.setValue("dayType", value as "full" | "first_half" | "second_half")}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="full" id="day-full" data-testid="radio-day-full" />
+                    <Label htmlFor="day-full" className="text-sm font-normal">Full Day</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="first_half" id="day-first-half" data-testid="radio-day-first-half" />
+                    <Label htmlFor="day-first-half" className="text-sm font-normal">AM Half</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="second_half" id="day-second-half" data-testid="radio-day-second-half" />
+                    <Label htmlFor="day-second-half" className="text-sm font-normal">PM Half</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              {isMedicalLeave && (
+                <div className="space-y-3 p-3 rounded-md bg-muted/50">
+                  <p className="text-sm font-medium">Medical Certificate (MC) Upload</p>
+                  <div className="space-y-2">
+                    <Label htmlFor="mc-file">MC Document</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="file"
+                        id="mc-file"
+                        ref={mcFileInputRef}
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => setMcFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                        data-testid="input-mc-file"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => mcFileInputRef.current?.click()}
+                        data-testid="button-upload-mc"
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload MC
+                      </Button>
+                      {mcFile && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <FileText className="h-4 w-4" />
+                          <span className="truncate max-w-[150px]">{mcFile.name}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => setMcFile(null)}
+                            data-testid="button-remove-mc"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-file">Receipt (Optional)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="file"
+                        id="receipt-file"
+                        ref={receiptFileInputRef}
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                        data-testid="input-receipt-file"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => receiptFileInputRef.current?.click()}
+                        data-testid="button-upload-receipt"
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload Receipt
+                      </Button>
+                      {receiptFile && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <FileText className="h-4 w-4" />
+                          <span className="truncate max-w-[150px]">{receiptFile.name}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => setReceiptFile(null)}
+                            data-testid="button-remove-receipt"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="reason">Reason</Label>
                 <Textarea
