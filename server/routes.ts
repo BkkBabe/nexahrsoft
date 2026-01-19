@@ -5142,17 +5142,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
             
             if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
-              // Get reference date from pay period (e.g., "JAN 2026" -> last day of month)
-              const payPeriod = record.payPeriod || '';
-              const monthMap: Record<string, number> = { 'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6, 'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12 };
-              const parts = payPeriod.split(' ');
-              const periodMonth = monthMap[parts[0]?.toUpperCase()] ?? (new Date().getMonth() + 1);
-              const periodYear = parseInt(parts[1]) || new Date().getFullYear();
+              // Use the numeric payPeriodYear and payPeriodMonth fields directly (more reliable than parsing string)
+              const periodMonth = record.payPeriodMonth ?? (new Date().getMonth() + 1);
+              const periodYear = record.payPeriodYear ?? new Date().getFullYear();
               
               // Format wage month for rate table selection
               const wageMonth = `${periodYear}-${String(periodMonth).padStart(2, '0')}`; // Format: "YYYY-MM"
               // Calculate age at END of wage month per CPF rules
               const wageMonthEndDate = new Date(periodYear, periodMonth, 0); // Last day of wage month
+              
+              console.log(`CPF recalc for ${record.employeeName}: payPeriodMonth=${periodMonth}, payPeriodYear=${periodYear}, wageMonth=${wageMonth}`);
               
               const age = employee.birthDate ? calculateAge(employee.birthDate, wageMonthEndDate) : 45;
               
