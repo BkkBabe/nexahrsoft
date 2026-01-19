@@ -4492,18 +4492,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let cpfResult: ReturnType<typeof calculateCPF>;
         
         if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
-          // Calculate age for CPF rates
-          const referenceDate = new Date(year, month - 1, 1); // First day of pay period
-          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 45; // Default to 45 if no birthdate (CPF 2026 rules)
+          // Calculate age for CPF rates - MUST use END of wage month per CPF rules
+          const wageMonth = `${year}-${String(month).padStart(2, '0')}`; // Format: "YYYY-MM"
+          const wageMonthEndDate = new Date(year, month, 0); // Last day of wage month
+          const age = employee.birthDate ? calculateAge(employee.birthDate, wageMonthEndDate) : 45; // Default to 45 if no birthdate
           
-          // Calculate SPR years if applicable
+          // Calculate SPR years if applicable (also at end of wage month)
           let sprYears: number | undefined;
           if (residencyStatus === 'SPR' && employee.sprStartDate) {
-            sprYears = calculateSPRYears(employee.sprStartDate, referenceDate);
+            sprYears = calculateSPRYears(employee.sprStartDate, wageMonthEndDate);
           }
 
-          // Calculate CPF contributions
-          cpfResult = calculateCPF(grossWages, age, residencyStatus, sprYears);
+          // Calculate CPF contributions (pass wageMonth to select correct rate table)
+          cpfResult = calculateCPF(grossWages, age, residencyStatus, sprYears, 0, wageMonth);
         } else {
           // Foreigner or no residency status - no CPF
           cpfResult = {
@@ -4832,15 +4833,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let cpfResult: ReturnType<typeof calculateCPF>;
         
         if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
-          const referenceDate = new Date(year, month - 1, 1);
-          const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 45; // Default to 45 if no birthdate (CPF 2026 rules)
+          // Calculate age for CPF rates - MUST use END of wage month per CPF rules
+          const wageMonth = `${year}-${String(month).padStart(2, '0')}`; // Format: "YYYY-MM"
+          const wageMonthEndDate = new Date(year, month, 0); // Last day of wage month
+          const age = employee.birthDate ? calculateAge(employee.birthDate, wageMonthEndDate) : 45; // Default to 45 if no birthdate
           
+          // Calculate SPR years if applicable (also at end of wage month)
           let sprYears: number | undefined;
           if (residencyStatus === 'SPR' && employee.sprStartDate) {
-            sprYears = calculateSPRYears(employee.sprStartDate, referenceDate);
+            sprYears = calculateSPRYears(employee.sprStartDate, wageMonthEndDate);
           }
 
-          cpfResult = calculateCPF(grossWages, age, residencyStatus, sprYears);
+          // Calculate CPF contributions (pass wageMonth to select correct rate table)
+          cpfResult = calculateCPF(grossWages, age, residencyStatus, sprYears, 0, wageMonth);
         } else {
           // Foreigner or no residency status - no CPF
           cpfResult = {
@@ -5137,22 +5142,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
             
             if (residencyStatus === 'SC' || residencyStatus === 'SPR') {
-              // Get reference date from pay period (e.g., "JAN 2026" -> 2026-01-01)
+              // Get reference date from pay period (e.g., "JAN 2026" -> last day of month)
               const payPeriod = record.payPeriod || '';
-              const monthMap: Record<string, number> = { 'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5, 'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11 };
+              const monthMap: Record<string, number> = { 'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6, 'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12 };
               const parts = payPeriod.split(' ');
-              const periodMonth = monthMap[parts[0]?.toUpperCase()] ?? new Date().getMonth();
+              const periodMonth = monthMap[parts[0]?.toUpperCase()] ?? (new Date().getMonth() + 1);
               const periodYear = parseInt(parts[1]) || new Date().getFullYear();
-              const referenceDate = new Date(periodYear, periodMonth, 1);
               
-              const age = employee.birthDate ? calculateAge(employee.birthDate, referenceDate) : 45;
+              // Format wage month for rate table selection
+              const wageMonth = `${periodYear}-${String(periodMonth).padStart(2, '0')}`; // Format: "YYYY-MM"
+              // Calculate age at END of wage month per CPF rules
+              const wageMonthEndDate = new Date(periodYear, periodMonth, 0); // Last day of wage month
+              
+              const age = employee.birthDate ? calculateAge(employee.birthDate, wageMonthEndDate) : 45;
               
               let sprYears: number | undefined;
               if (residencyStatus === 'SPR' && employee.sprStartDate) {
-                sprYears = calculateSPRYears(employee.sprStartDate, referenceDate);
+                sprYears = calculateSPRYears(employee.sprStartDate, wageMonthEndDate);
               }
               
-              const cpfResult = calculateCPF(cpfWages, age, residencyStatus, sprYears);
+              // Pass wageMonth to select correct rate table (2025 vs 2026)
+              const cpfResult = calculateCPF(cpfWages, age, residencyStatus, sprYears, 0, wageMonth);
               
               // Store employee CPF as negative (deduction from salary)
               employerCpf = cpfResult.employerCPF;

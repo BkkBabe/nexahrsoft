@@ -1,5 +1,5 @@
-// Singapore CPF Calculation Utility (From 1 Jan 2026)
-// Based on official CPF contribution rates
+// Singapore CPF Calculation Utility
+// Based on official CPF contribution rates (supports 2025 and 2026+ rates)
 
 export type ResidencyStatus = 'SC' | 'SPR' | 'FOREIGNER';
 
@@ -20,7 +20,7 @@ export interface CPFResult {
   reason?: string;
 }
 
-// Monthly Ordinary Wage Ceiling (from 2026)
+// Monthly Ordinary Wage Ceiling
 const MONTHLY_OW_CEILING = 8000; // $8,000
 
 // Annual Wage Ceiling
@@ -35,14 +35,26 @@ const EMPLOYEE_CONTRIB_THRESHOLD = 500; // $500
 // Phase-in threshold for employee contribution
 const PHASE_IN_THRESHOLD = 750; // $750
 
+// CPF contribution rates by age group for 2025 (wages earned up to Dec 2025) for Singapore Citizens
+const SC_CPF_RATES_2025: { maxAge: number; employerRate: number; employeeRate: number }[] = [
+  { maxAge: 55, employerRate: 0.17, employeeRate: 0.20 }, // 55 & below: 17% + 20% = 37%
+  { maxAge: 60, employerRate: 0.14, employeeRate: 0.15 }, // Above 55 to 60: 14% + 15% = 29%
+  { maxAge: 65, employerRate: 0.12, employeeRate: 0.115 }, // Above 60 to 65: 12% + 11.5% = 23.5%
+  { maxAge: 70, employerRate: 0.09, employeeRate: 0.085 }, // Above 65 to 70: 9% + 8.5% = 17.5%
+  { maxAge: 999, employerRate: 0.075, employeeRate: 0.075 }, // Above 70: 7.5% + 7.5% = 15%
+];
+
 // CPF contribution rates by age group (from 1 Jan 2026) for Singapore Citizens
-const SC_CPF_RATES: { maxAge: number; employerRate: number; employeeRate: number }[] = [
+const SC_CPF_RATES_2026: { maxAge: number; employerRate: number; employeeRate: number }[] = [
   { maxAge: 55, employerRate: 0.17, employeeRate: 0.20 }, // 55 & below: 17% + 20% = 37%
   { maxAge: 60, employerRate: 0.16, employeeRate: 0.18 }, // Above 55 to 60: 16% + 18% = 34%
   { maxAge: 65, employerRate: 0.125, employeeRate: 0.125 }, // Above 60 to 65: 12.5% + 12.5% = 25%
   { maxAge: 70, employerRate: 0.09, employeeRate: 0.075 }, // Above 65 to 70: 9% + 7.5% = 16.5%
   { maxAge: 999, employerRate: 0.075, employeeRate: 0.05 }, // Above 70: 7.5% + 5% = 12.5%
 ];
+
+// Alias for backward compatibility
+const SC_CPF_RATES = SC_CPF_RATES_2026;
 
 // SPR graduated rates (Year 1 - applicable to both employer and employee opting for graduated rates)
 const SPR_YEAR1_RATES: { maxAge: number; employerRate: number; employeeRate: number }[] = [
@@ -87,12 +99,43 @@ export function calculateSPRYears(sprStartDate: string, asOfDate: Date = new Dat
 }
 
 /**
- * Get CPF rates based on age, residency status, and SPR tenure
+ * Get the last day of a month for age calculation
+ */
+export function getWageMonthEndDate(wageMonth: string): Date {
+  // wageMonth format: "YYYY-MM"
+  const [year, month] = wageMonth.split('-').map(Number);
+  // Create date for first day of next month, then subtract 1 day to get last day of wage month
+  return new Date(year, month, 0); // month is 1-indexed here, so this gives last day of that month
+}
+
+/**
+ * Determine if wage month is before 2026 (uses 2025 rates)
+ */
+function isPreJan2026(wageMonth?: string): boolean {
+  if (!wageMonth) return false;
+  const [year, month] = wageMonth.split('-').map(Number);
+  // Before January 2026 means year < 2026
+  return year < 2026;
+}
+
+/**
+ * Get the correct SC CPF rate table based on wage month
+ */
+function getSCRateTable(wageMonth?: string): typeof SC_CPF_RATES_2026 {
+  if (isPreJan2026(wageMonth)) {
+    return SC_CPF_RATES_2025;
+  }
+  return SC_CPF_RATES_2026;
+}
+
+/**
+ * Get CPF rates based on age, residency status, SPR tenure, and wage month
  */
 export function getCPFRates(
   age: number,
   residencyStatus: ResidencyStatus,
-  sprYears?: number
+  sprYears?: number,
+  wageMonth?: string // Format: "YYYY-MM" - used to select correct rate table
 ): CPFRates {
   // Foreigners don't pay CPF
   if (residencyStatus === 'FOREIGNER') {
@@ -102,16 +145,16 @@ export function getCPFRates(
   let ratesTable: typeof SC_CPF_RATES;
   
   if (residencyStatus === 'SC') {
-    ratesTable = SC_CPF_RATES;
+    ratesTable = getSCRateTable(wageMonth);
   } else {
-    // SPR with graduated rates
+    // SPR with graduated rates (using same rates for both 2025 and 2026 for now)
     if (sprYears !== undefined && sprYears < 1) {
       ratesTable = SPR_YEAR1_RATES;
     } else if (sprYears !== undefined && sprYears < 2) {
       ratesTable = SPR_YEAR2_RATES;
     } else {
       // SPR Year 3+ uses full SC rates
-      ratesTable = SC_CPF_RATES;
+      ratesTable = getSCRateTable(wageMonth);
     }
   }
   
@@ -125,14 +168,31 @@ export function getCPFRates(
 }
 
 /**
- * Round to 2 decimal places for dollar amounts
+ * Round to 2 decimal places for dollar amounts (general rounding)
  */
 function roundToDollars(amount: number): number {
   return Math.round(amount * 100) / 100;
 }
 
 /**
+ * Floor to nearest dollar (for employee CPF per CPF Board rules)
+ * Employee CPF is always rounded DOWN to the nearest dollar
+ */
+function floorToDollars(amount: number): number {
+  return Math.floor(amount);
+}
+
+/**
+ * Ceil to nearest dollar (for employer CPF per CPF Board rules)
+ * Employer CPF is always rounded UP to the nearest dollar
+ */
+function ceilToDollars(amount: number): number {
+  return Math.ceil(amount);
+}
+
+/**
  * Calculate employee CPF contribution with phase-in for low wages
+ * Employee CPF is always rounded DOWN to the nearest dollar per CPF Board rules
  */
 function calculateEmployeeCPF(wages: number, employeeRate: number): number {
   // For wages < $500, employee doesn't contribute (only employer)
@@ -146,22 +206,39 @@ function calculateEmployeeCPF(wages: number, employeeRate: number): number {
     // Simplified: employee pays reduced rate
     const excessWages = wages - EMPLOYEE_CONTRIB_THRESHOLD;
     const phaseInRate = 0.6; // Approximate phase-in multiplier
-    return roundToDollars(excessWages * phaseInRate);
+    return floorToDollars(excessWages * phaseInRate);
   }
   
   // Full contribution for wages >= $750
-  return roundToDollars(wages * employeeRate);
+  // Employee CPF is floored to nearest dollar
+  return floorToDollars(wages * employeeRate);
+}
+
+/**
+ * Calculate employer CPF contribution
+ * Employer CPF is always rounded UP to the nearest dollar per CPF Board rules
+ */
+function calculateEmployerCPF(wages: number, employerRate: number): number {
+  return ceilToDollars(wages * employerRate);
 }
 
 /**
  * Calculate CPF contributions for a given monthly wage
+ * 
+ * @param totalWages - Total gross wages for the month in dollars
+ * @param age - Employee age at end of wage month (NOT payment date)
+ * @param residencyStatus - SC, SPR, or FOREIGNER
+ * @param sprYears - Years as SPR (for graduated rates)
+ * @param annualOrdinaryWagesToDate - For annual wage ceiling tracking
+ * @param wageMonth - Format "YYYY-MM" - determines which rate table to use
  */
 export function calculateCPF(
-  totalWages: number, // dollars (total gross wages for the month)
+  totalWages: number,
   age: number,
   residencyStatus: ResidencyStatus,
   sprYears?: number,
-  annualOrdinaryWagesToDate: number = 0 // For annual wage ceiling tracking
+  annualOrdinaryWagesToDate: number = 0,
+  wageMonth?: string // Format: "YYYY-MM" - determines rate table (2025 vs 2026)
 ): CPFResult {
   // Check eligibility
   if (residencyStatus === 'FOREIGNER') {
@@ -190,7 +267,8 @@ export function calculateCPF(
     };
   }
   
-  const rates = getCPFRates(age, residencyStatus, sprYears);
+  // Get CPF rates based on age, residency, and wage month (for correct year's rates)
+  const rates = getCPFRates(age, residencyStatus, sprYears, wageMonth);
   
   // Apply monthly ordinary wage ceiling
   let cpfWages = Math.min(totalWages, MONTHLY_OW_CEILING);
@@ -201,12 +279,13 @@ export function calculateCPF(
     cpfWages = Math.max(0, remainingAnnualCeiling);
   }
   
-  // Calculate employer CPF (always applies for eligible employees)
-  const employerCPF = roundToDollars(cpfWages * rates.employerRate);
+  // Calculate employer CPF (always rounded UP to nearest dollar per CPF Board rules)
+  const employerCPF = calculateEmployerCPF(cpfWages, rates.employerRate);
   
-  // Calculate employee CPF with phase-in
+  // Calculate employee CPF with phase-in (always rounded DOWN to nearest dollar)
   const employeeCPF = calculateEmployeeCPF(cpfWages, rates.employeeRate);
   
+  // Total CPF is sum of both (NOT separately calculated from total rate)
   const totalCPF = employerCPF + employeeCPF;
   const netPay = totalWages - employeeCPF;
   
