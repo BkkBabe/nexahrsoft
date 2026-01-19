@@ -139,6 +139,15 @@ function calculateCompletionPercentage(employee: EmployeePayrollSummary): number
   return Math.round((filledCount / fields.length) * 100);
 }
 
+function toTitleCase(str: string | null): string {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .split(" ")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function getFieldLabel(field: string): string {
   const labels: Record<string, string> = {
     residencyStatus: "Residency Status",
@@ -212,7 +221,7 @@ export default function AdminEmployeePayrollPage() {
     }
   };
 
-  const filteredEmployees = employeeList?.employees?.filter(emp => {
+  const filteredEmployees = (employeeList?.employees?.filter(emp => {
     const search = searchTerm.toLowerCase();
     return (
       (emp.name || "").toLowerCase().includes(search) ||
@@ -220,7 +229,11 @@ export default function AdminEmployeePayrollPage() {
       (emp.employeeCode || "").toLowerCase().includes(search) ||
       (emp.department || "").toLowerCase().includes(search)
     );
-  }) || [];
+  }) || []).sort((a, b) => {
+    const nameA = (a.name || "").toLowerCase();
+    const nameB = (b.name || "").toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
 
   const handleEditEmployee = (employeeId: string) => {
     setSelectedEmployeeId(employeeId);
@@ -297,6 +310,7 @@ export default function AdminEmployeePayrollPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">#</TableHead>
                     <TableHead>Employee</TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Department</TableHead>
@@ -307,11 +321,14 @@ export default function AdminEmployeePayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredEmployees.map((employee) => (
+                  {filteredEmployees.map((employee, index) => (
                     <TableRow key={employee.id} data-testid={`row-employee-${employee.id}`}>
+                      <TableCell className="text-muted-foreground font-mono text-sm">
+                        {index + 1}
+                      </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{employee.name}</div>
+                          <div className="font-medium">{toTitleCase(employee.name)}</div>
                           <div className="text-sm text-muted-foreground">{employee.email}</div>
                         </div>
                       </TableCell>
