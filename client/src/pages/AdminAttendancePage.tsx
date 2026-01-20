@@ -2440,7 +2440,7 @@ export default function AdminAttendancePage() {
                       <div className="w-6 flex-shrink-0 p-1 font-medium text-xs border-r text-center">
                         #
                       </div>
-                      <div className="w-40 flex-shrink-0 p-2 font-medium text-sm border-r">
+                      <div className="w-56 flex-shrink-0 p-2 font-medium text-sm border-r">
                         Employee
                       </div>
                       <div className={`flex ${heatmapViewType === 'week' ? 'flex-1' : ''}`}>
@@ -2494,11 +2494,11 @@ export default function AdminAttendancePage() {
                             <div className="w-6 flex-shrink-0 p-1 text-xs text-center text-muted-foreground border-r">
                               {userIndex + 1}
                             </div>
-                            <div className="w-40 flex-shrink-0 p-2 border-r">
-                              <div className="text-sm font-medium truncate" title={toTitleCase(user.name)}>
+                            <div className="w-56 flex-shrink-0 p-2 border-r">
+                              <div className="text-sm font-medium" title={toTitleCase(user.name)}>
                                 {toTitleCase(user.name)}
                               </div>
-                              <div className="text-xs text-muted-foreground truncate">
+                              <div className="text-xs text-muted-foreground">
                                 {user.department || 'No dept'}
                               </div>
                             </div>
