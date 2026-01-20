@@ -169,36 +169,6 @@ export default function PayslipView({
       const employeeName = record.employeeName?.replace(/[^a-zA-Z0-9]/g, '_') || 'Employee';
       const filename = `Payslip_${employeeName}_${record.payPeriod?.replace(/\s+/g, '_')}.pdf`;
       
-      // Clone the element to ensure clean export without modal backgrounds
-      const clone = element.cloneNode(true) as HTMLElement;
-      clone.style.backgroundColor = '#ffffff';
-      clone.style.color = '#000000';
-      clone.style.padding = '20px';
-      clone.style.position = 'absolute';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      document.body.appendChild(clone);
-      
-      // Remove any print:hidden elements and buttons from clone
-      clone.querySelectorAll('.print\\:hidden, button').forEach(el => el.remove());
-      
-      // Ensure all text is visible with proper colors
-      clone.querySelectorAll('*').forEach(el => {
-        const htmlEl = el as HTMLElement;
-        const computedStyle = window.getComputedStyle(htmlEl);
-        // Force dark text for readability
-        if (computedStyle.color.includes('rgba') || computedStyle.color.includes('rgb')) {
-          const colorMatch = computedStyle.color.match(/\d+/g);
-          if (colorMatch) {
-            const [r, g, b] = colorMatch.map(Number);
-            // If text is too light (likely meant for dark mode), make it dark
-            if (r > 200 && g > 200 && b > 200) {
-              htmlEl.style.color = '#1a1a1a';
-            }
-          }
-        }
-      });
-      
       const opt = {
         margin: [10, 10, 10, 10] as [number, number, number, number],
         filename,
@@ -207,8 +177,7 @@ export default function PayslipView({
           scale: 2,
           useCORS: true,
           logging: false,
-          backgroundColor: '#ffffff',
-          removeContainer: false
+          backgroundColor: '#ffffff'
         },
         jsPDF: { 
           unit: 'mm' as const, 
@@ -217,10 +186,7 @@ export default function PayslipView({
         }
       };
       
-      await html2pdf().set(opt).from(clone).save();
-      
-      // Clean up the cloned element
-      document.body.removeChild(clone);
+      await html2pdf().set(opt).from(element).save();
     } catch (error) {
       console.error('PDF export error:', error);
     } finally {
