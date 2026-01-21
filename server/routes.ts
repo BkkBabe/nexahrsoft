@@ -1795,39 +1795,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId;
       const now = new Date();
       
+      // Get company settings once for timezone and orphaned session handling
+      const companySettings = await storage.getCompanySettings();
+      const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
+      
+      // Get today's date in company timezone
+      const todayDate = now.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD
+      
       // Check if user already has an open attendance session (no clock-out)
       const openSession = await storage.getOpenAttendanceRecord(userId);
       if (openSession) {
         const clockInTime = new Date(openSession.clockInTime);
         const hoursAgo = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
         
-        // Check if we should ignore orphaned sessions (older than 16 hours)
-        const companySettings = await storage.getCompanySettings();
-        const isOrphaned = hoursAgo >= 16;
+        // Get the clock-in date in company timezone for calendar-day comparison
+        const clockInDate = clockInTime.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD
+        
+        // Session is orphaned if:
+        // 1. It's older than 24 hours, OR
+        // 2. It's from a previous calendar day (handles timezone edge cases)
+        const isOrphanedByHours = hoursAgo >= 24;
+        const isOrphanedByDate = clockInDate < todayDate;
+        const isOrphaned = isOrphanedByHours || isOrphanedByDate;
+        
+        // Production logging for debugging orphaned session checks
+        console.log(`[Orphaned Check] User: ${userId}, Clock-in: ${clockInTime.toISOString()}, ` +
+          `Clock-in Date: ${clockInDate}, Today: ${todayDate}, Hours Ago: ${hoursAgo.toFixed(2)}, ` +
+          `Orphaned by Hours (>=24h): ${isOrphanedByHours}, Orphaned by Date: ${isOrphanedByDate}, ` +
+          `Is Orphaned: ${isOrphaned}, Ignore Setting: ${companySettings?.ignoreOrphanedSessions}`);
         
         // If the session is orphaned and ignoreOrphanedSessions is enabled, allow clock-in
         if (isOrphaned && companySettings?.ignoreOrphanedSessions) {
           // Allow the clock-in to proceed - orphaned session will be ignored
-          console.log(`Ignoring orphaned session for user ${userId} from ${clockInTime.toISOString()}`);
+          console.log(`[Orphaned] Allowing new clock-in for user ${userId}, ignoring orphaned session from ${clockInTime.toISOString()}`);
         } else {
           // Block the clock-in - user must clock out first
           const formattedTime = clockInTime.toLocaleString('en-US', { 
-            timeZone: 'Asia/Singapore',
+            timeZone: timezone,
             hour: '2-digit',
             minute: '2-digit',
             month: 'short',
             day: 'numeric'
           });
+          console.log(`[Clock-in Blocked] User ${userId} blocked - active session from ${formattedTime}, orphaned: ${isOrphaned}, setting: ${companySettings?.ignoreOrphanedSessions}`);
           return res.status(409).json({ 
             message: `You already have an active clock-in from ${formattedTime}. Please clock out first before clocking in again.`,
             existingRecord: openSession
           });
         }
       }
-      
-      // Get company timezone to store the correct local date
-      const companySettings = await storage.getCompanySettings();
-      const timezone = companySettings?.defaultTimezone || 'Asia/Singapore';
       
       // Get date in company timezone (not UTC)
       const date = now.toLocaleDateString('en-CA', { timeZone: timezone }); // Returns YYYY-MM-DD
