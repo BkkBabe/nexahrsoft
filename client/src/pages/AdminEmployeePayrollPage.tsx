@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Users, DollarSign, Save, Loader2, History, User, Building, Calendar, X, Search, AlertCircle, CheckCircle2, Edit, Plus, Trash2, PlusCircle, MinusCircle } from "lucide-react";
+import { ArrowLeft, Users, DollarSign, Save, Loader2, History, User, Building, Calendar, X, Search, AlertCircle, CheckCircle2, Edit, Plus, Trash2, PlusCircle, MinusCircle, RefreshCw } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -579,6 +579,36 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
     saveMutation.mutate();
   };
 
+  const refreshPayslipsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/admin/employees/${employeeId}/refresh-payslips`, {
+        reason: "Bulk refresh from employee payroll settings",
+      });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.recordsUpdated === 0) {
+        toast({
+          title: "No Changes Needed",
+          description: data.message || "All payroll records already match current settings.",
+        });
+      } else {
+        toast({
+          title: "Payslips Refreshed",
+          description: data.message || `Updated ${data.recordsUpdated} payroll record(s).`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payroll/records"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Refresh Failed",
+        description: error.message || "Failed to refresh payroll records",
+        variant: "destructive",
+      });
+    },
+  });
+
   const getValue = <K extends keyof EmployeePayrollSettings>(field: K): EmployeePayrollSettings[K] | undefined => {
     if (field in formState) return formState[field] as EmployeePayrollSettings[K];
     return settings?.[field];
@@ -816,19 +846,34 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
               </ScrollArea>
             )}
 
-            <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-              <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save">
-                {saveMutation.isPending ? (
+            <div className="flex justify-between gap-2 mt-4 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                onClick={() => refreshPayslipsMutation.mutate()} 
+                disabled={refreshPayslipsMutation.isPending}
+                data-testid="button-refresh-payslips"
+              >
+                {refreshPayslipsMutation.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
-                  <Save className="h-4 w-4 mr-2" />
+                  <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                Save Changes
+                Refresh All Payslips
               </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save">
+                  {saveMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save Changes
+                </Button>
+              </div>
             </div>
           </TabsContent>
 
