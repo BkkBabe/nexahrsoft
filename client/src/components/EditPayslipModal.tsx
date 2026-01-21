@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Save, History, DollarSign, AlertCircle, Calculator } from "lucide-react";
+import { Loader2, Save, History, DollarSign, AlertCircle, Calculator, RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -245,6 +245,43 @@ export default function EditPayslipModal({
       setIsRecalculatingCpf(false);
       toast({
         title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const refreshFromSettingsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/admin/payroll/records/${record?.id}/refresh-from-settings`, {
+        reason: "Refreshed allowances from employee settings",
+      });
+    },
+    onSuccess: (response: any) => {
+      const changes = response?.changes || [];
+      if (changes.length === 0) {
+        toast({
+          title: "No Changes Needed",
+          description: "Payslip already matches employee settings.",
+        });
+      } else {
+        toast({
+          title: "Payslip Refreshed",
+          description: `Updated ${changes.length} field(s) from employee settings.`,
+        });
+      }
+      
+      // Always invalidate and close on success (even when no changes)
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/payroll/records"],
+        exact: false,
+      });
+      if (onSaved) onSaved();
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Refresh Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -495,6 +532,20 @@ export default function EditPayslipModal({
             </div>
           )}
           <div className="flex gap-2 ml-auto">
+            <Button
+              variant="secondary"
+              onClick={() => refreshFromSettingsMutation.mutate()}
+              disabled={refreshFromSettingsMutation.isPending || updateMutation.isPending || hasChanges}
+              title={hasChanges ? "Save or discard changes before refreshing" : "Update allowances from employee settings"}
+              data-testid="button-refresh-from-settings"
+            >
+              {refreshFromSettingsMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Refresh from Settings
+            </Button>
             <Button variant="outline" onClick={onClose} data-testid="button-cancel">
               Cancel
             </Button>

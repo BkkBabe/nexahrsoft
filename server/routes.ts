@@ -5269,6 +5269,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Refresh payroll record from employee settings (pulls latest allowances)
+  app.post("/api/admin/payroll/records/:id/refresh-from-settings", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adminUsername = (req.session as any)?.adminUsername || "admin";
+      const reason = req.body.reason || "Refreshed allowances from employee settings";
+      
+      const existingRecord = await storage.getPayrollRecordById(id);
+      if (!existingRecord) {
+        return res.status(404).json({ message: "Payroll record not found" });
+      }
+      
+      // Find the employee from the record
+      let employee = null;
+      if (existingRecord.userId) {
+        employee = await storage.getUser(existingRecord.userId);
+      }
+      if (!employee && existingRecord.employeeCode) {
+        employee = await storage.getUserByEmployeeCode(existingRecord.employeeCode);
+      }
+      
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found for this payroll record" });
+      }
+      
+      // Map employee default allowances to payslip fields
+      const allowanceMapping: Record<string, { from: string; to: string }> = {
+        defaultMobileAllowance: { from: 'defaultMobileAllowance', to: 'mobileAllowance' },
+        defaultTransportAllowance: { from: 'defaultTransportAllowance', to: 'transportAllowance' },
+        defaultShiftAllowance: { from: 'defaultShiftAllowance', to: 'shiftAllowance' },
+        defaultOtherAllowance: { from: 'defaultOtherAllowance', to: 'otherAllowance' },
+        defaultHouseRentalAllowance: { from: 'defaultHouseRentalAllowance', to: 'houseRentalAllowances' },
+      };
+      
+      const updates: Record<string, any> = {};
+      const changes: { field: string; oldValue: number; newValue: number }[] = [];
+      
+      // Collect all changes first (don't create audit logs yet)
+      for (const mapping of Object.values(allowanceMapping)) {
+        const employeeValue = parseNumeric((employee as any)[mapping.from]);
+        const currentValue = parseNumeric((existingRecord as any)[mapping.to]);
+        
+        if (employeeValue !== currentValue) {
+          updates[mapping.to] = employeeValue;
+          changes.push({
+            field: mapping.to,
+            oldValue: currentValue,
+            newValue: employeeValue,
+          });
+        }
+      }
+      
+      // Also check basic salary if it changed
+      const employeeBasicSalary = parseNumeric(employee.basicMonthlySalary);
+      const currentBasicSalary = parseNumeric(existingRecord.basicSalary);
+      if (employeeBasicSalary !== currentBasicSalary && employeeBasicSalary > 0) {
+        updates.basicSalary = employeeBasicSalary;
+        changes.push({
+          field: 'basicSalary',
+          oldValue: currentBasicSalary,
+          newValue: employeeBasicSalary,
+        });
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return res.json({ 
+          record: existingRecord, 
+          message: "No changes needed - payslip already matches employee settings",
+          changes: [] 
+        });
+      }
+      
+      // Recalculate totals after updating allowances
+      const mergedRecord = { ...existingRecord, ...updates };
+      
+      // Parse all numeric fields for recalculation
+      const basicSalary = parseNumeric(mergedRecord.basicSalary);
+      const monthlyVariablesComponent = parseNumeric(mergedRecord.monthlyVariablesComponent);
+      const flat = parseNumeric(mergedRecord.flat);
+      const ot10 = parseNumeric(mergedRecord.ot10);
+      const ot15 = parseNumeric(mergedRecord.ot15);
+      const ot20 = parseNumeric(mergedRecord.ot20);
+      const ot30 = parseNumeric(mergedRecord.ot30);
+      const shiftAllowance = parseNumeric(mergedRecord.shiftAllowance);
+      const totRestPhAmount = parseNumeric(mergedRecord.totRestPhAmount);
+      const mobileAllowance = parseNumeric(mergedRecord.mobileAllowance);
+      const transportAllowance = parseNumeric(mergedRecord.transportAllowance);
+      const annualLeaveEncashment = parseNumeric(mergedRecord.annualLeaveEncashment);
+      const serviceCallAllowances = parseNumeric(mergedRecord.serviceCallAllowances);
+      const otherAllowance = parseNumeric(mergedRecord.otherAllowance);
+      const houseRentalAllowances = parseNumeric(mergedRecord.houseRentalAllowances);
+      const bonus = parseNumeric(mergedRecord.bonus);
+      const employerCpf = parseNumeric(mergedRecord.employerCpf);
+      const employeeCpf = parseNumeric(mergedRecord.employeeCpf);
+      const cc = parseNumeric(mergedRecord.cc);
+      const cdac = parseNumeric(mergedRecord.cdac);
+      const ecf = parseNumeric(mergedRecord.ecf);
+      const mbmf = parseNumeric(mergedRecord.mbmf);
+      const sinda = parseNumeric(mergedRecord.sinda);
+      const loanRepaymentTotal = parseNumeric(mergedRecord.loanRepaymentTotal);
+      const noPayDay = parseNumeric(mergedRecord.noPayDay);
+      
+      const totSalary = roundToDollars(basicSalary + monthlyVariablesComponent);
+      const overtimeTotal = roundToDollars(flat + ot10 + ot15 + ot20 + ot30 + shiftAllowance + totRestPhAmount);
+      const allowancesWithCpf = roundToDollars(mobileAllowance + transportAllowance + annualLeaveEncashment + serviceCallAllowances);
+      const allowancesWithoutCpf = roundToDollars(otherAllowance + houseRentalAllowances);
+      const grossWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + allowancesWithoutCpf + bonus);
+      const cpfWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + bonus);
+      // Note: employeeCpf is stored as negative, use Math.abs for totals (consistent with existing update logic)
+      const totalCpf = roundToDollars(employerCpf + Math.abs(employeeCpf));
+      const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
+      const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(employeeCpf));
+      const nett = roundToDollars(grossWages - totalDeductions);
+      
+      const recalculated = {
+        totSalary: toNumericString(totSalary),
+        overtimeTotal: toNumericString(overtimeTotal),
+        allowancesWithCpf: toNumericString(allowancesWithCpf),
+        allowancesWithoutCpf: toNumericString(allowancesWithoutCpf),
+        grossWages: toNumericString(grossWages),
+        cpfWages: toNumericString(cpfWages),
+        totalCpf: toNumericString(totalCpf),
+        total: toNumericString(grossWages),
+        nett: toNumericString(nett),
+      };
+      
+      const finalUpdates = { ...updates, ...recalculated };
+      const updated = await storage.updatePayrollRecord(id, finalUpdates);
+      
+      // Create audit logs AFTER successful update to avoid partial logging
+      for (const change of changes) {
+        await storage.createPayrollAuditLog({
+          payrollRecordId: id,
+          fieldName: change.field,
+          oldValue: String(change.oldValue),
+          newValue: String(change.newValue),
+          changedBy: adminUsername,
+          reason,
+        });
+      }
+      
+      res.json({ 
+        record: updated, 
+        message: `Updated ${changes.length} field(s) from employee settings`,
+        changes
+      });
+    } catch (error) {
+      console.error("Refresh payroll from settings error:", error);
+      res.status(500).json({ message: "Failed to refresh payroll from settings" });
+    }
+  });
+
   // Search payroll records
   app.get("/api/admin/payroll/search", requireAdmin, async (req: Request, res: Response) => {
     try {
