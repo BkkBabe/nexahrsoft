@@ -115,6 +115,14 @@ function formatHours(hours: number): string {
   return hours.toFixed(2);
 }
 
+function toTitleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export default function AdminPayrollGeneratePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -379,7 +387,9 @@ export default function AdminPayrollGeneratePage() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {previewData.skipped.map((emp, idx) => (
+                  {[...previewData.skipped]
+                    .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
+                    .map((emp, idx) => (
                     <Button
                       key={idx}
                       variant="outline"
@@ -388,7 +398,7 @@ export default function AdminPayrollGeneratePage() {
                       onClick={() => setLocation(`/admin/payroll/employees?employeeId=${emp.id}&returnTo=generate&period=${selectedPeriod}`)}
                       data-testid={`button-skipped-employee-${emp.id}`}
                     >
-                      {emp.employeeCode}: {emp.employeeName}
+                      {emp.employeeCode}: {toTitleCase(emp.employeeName)}
                     </Button>
                   ))}
                 </div>
@@ -449,11 +459,13 @@ export default function AdminPayrollGeneratePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {previewData.preview.map((emp, idx) => (
+                      {[...previewData.preview]
+                        .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
+                        .map((emp, idx) => (
                         <TableRow key={idx}>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{emp.employeeName}</p>
+                              <p className="font-medium">{toTitleCase(emp.employeeName)}</p>
                               <p className="text-xs text-muted-foreground">{emp.employeeCode}</p>
                             </div>
                           </TableCell>
