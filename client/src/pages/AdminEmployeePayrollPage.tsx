@@ -123,11 +123,19 @@ function displayToDollars(display: string): number | null {
 function getResidencyLabel(status: string | null): string {
   if (!status) return "Not Set";
   switch (status) {
-    case "SC": return "Singapore Citizen";
-    case "SPR": return "Singapore PR";
-    case "FOREIGNER": return "Foreigner";
-    default: return status;
+    case "SC":
+    case "SPR":
+      return "Singaporean";
+    case "FOREIGNER":
+      return "Foreigner";
+    default:
+      return status;
   }
+}
+
+function normalizeResidencyStatus(status: string | null | undefined): string {
+  if (status === "SPR") return "SC";
+  return status || "";
 }
 
 function calculateCompletionPercentage(employee: EmployeePayrollSummary): number {
@@ -514,7 +522,8 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       const updates: Record<string, any> = {};
       
       if (formState.residencyStatus !== undefined) {
-        updates.residencyStatus = formState.residencyStatus || null;
+        const status = formState.residencyStatus;
+        updates.residencyStatus = status === "SPR" ? "SC" : (status || null);
       }
       if (formState.birthDate !== undefined) {
         updates.birthDate = formState.birthDate || null;
@@ -628,15 +637,14 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                         <div>
                           <Label>Residency Status</Label>
                           <Select
-                            value={getValue("residencyStatus") || ""}
+                            value={normalizeResidencyStatus(getValue("residencyStatus"))}
                             onValueChange={(v) => updateField("residencyStatus", v || null)}
                           >
                             <SelectTrigger data-testid="select-residency">
                               <SelectValue placeholder="Select status" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="SC" data-testid="option-residency-sc">Singapore Citizen</SelectItem>
-                              <SelectItem value="SPR" data-testid="option-residency-spr">Singapore PR</SelectItem>
+                              <SelectItem value="SC" data-testid="option-residency-singaporean">Singaporean</SelectItem>
                               <SelectItem value="FOREIGNER" data-testid="option-residency-foreigner">Foreigner</SelectItem>
                             </SelectContent>
                           </Select>
@@ -654,17 +662,6 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                           />
                         </div>
                       </div>
-                      {getValue("residencyStatus") === "SPR" && (
-                        <div>
-                          <Label>SPR Start Date (for graduated CPF rates)</Label>
-                          <Input
-                            type="date"
-                            value={getValue("sprStartDate") || ""}
-                            onChange={(e) => updateField("sprStartDate", e.target.value || null)}
-                            data-testid="input-spr-start"
-                          />
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
 

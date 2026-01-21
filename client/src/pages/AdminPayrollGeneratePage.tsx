@@ -123,6 +123,18 @@ function toTitleCase(str: string): string {
     .join(' ');
 }
 
+function getResidencyLabel(status: string): string {
+  switch (status) {
+    case 'SC':
+    case 'SPR':
+      return 'Singaporean';
+    case 'FOREIGNER':
+      return 'Foreigner';
+    default:
+      return status;
+  }
+}
+
 export default function AdminPayrollGeneratePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -481,7 +493,7 @@ export default function AdminPayrollGeneratePage() {
                           <TableCell className="text-right font-bold text-green-600">{formatCurrency(emp.netPay)}</TableCell>
                           <TableCell>
                             <Badge variant={emp.cpfEligible ? "default" : "secondary"}>
-                              {emp.residencyStatus}
+                              {getResidencyLabel(emp.residencyStatus)}
                             </Badge>
                           </TableCell>
                         </TableRow>
