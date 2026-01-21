@@ -27,6 +27,33 @@ interface SessionData {
   };
 }
 
+// Live current time display component
+function LiveCurrentTime({ subtitle }: { subtitle?: string }) {
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const updateTime = () => setCurrentTime(new Date());
+    updateTime();
+    const interval = setInterval(updateTime, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="text-center">
+      <p className="text-3xl font-bold text-primary">
+        {currentTime.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          timeZone: 'Asia/Singapore'
+        })}
+      </p>
+      {subtitle && (
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
 // Live elapsed time display component for active sessions
 function LiveElapsedTime({ clockInTime }: { clockInTime: Date | string }) {
   const [elapsed, setElapsed] = useState("");
@@ -134,6 +161,8 @@ export default function AttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [clockInLogoImage, setClockInLogoImage] = useState<HTMLImageElement | null>(null);
+  const [initialLocation, setInitialLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isLoadingInitialLocation, setIsLoadingInitialLocation] = useState(true);
 
   // Fetch user session
   const { data: sessionData, isLoading: sessionLoading } = useQuery<SessionData>({
@@ -165,6 +194,33 @@ export default function AttendancePage() {
 
   const userName = sessionData?.user?.name || "User";
   const isSessionReady = !sessionLoading && sessionData?.authenticated && sessionData?.user?.name;
+
+  // Fetch initial location on page load
+  useEffect(() => {
+    const fetchInitialLocation = async () => {
+      try {
+        if (!navigator.geolocation) {
+          setIsLoadingInitialLocation(false);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setInitialLocation({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            });
+            setIsLoadingInitialLocation(false);
+          },
+          () => {
+            setIsLoadingInitialLocation(false);
+          }
+        );
+      } catch {
+        setIsLoadingInitialLocation(false);
+      }
+    };
+    fetchInitialLocation();
+  }, []);
 
   // Location display component
   const LocationDisplay = ({ lat, lon }: { lat: string; lon: string }) => {
@@ -683,13 +739,26 @@ export default function AttendancePage() {
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-muted-foreground">Total Hours Today</p>
-                    <p className="text-3xl font-bold text-primary">
-                      {todayTotalHours.toFixed(1)} hrs
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {todayRecords.length} clock-in{todayRecords.length !== 1 ? 's' : ''}
-                    </p>
+                    <p className="text-xs text-muted-foreground text-center">Current Time</p>
+                    <LiveCurrentTime subtitle={todayRecords.length > 0 ? `${todayTotalHours.toFixed(1)} hrs today` : "Ready to clock in"} />
+                    {isLoadingInitialLocation ? (
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1 mt-2">
+                        <MapPin className="h-3 w-3" />
+                        Getting location...
+                      </p>
+                    ) : initialLocation ? (
+                      <div className="mt-2 pt-2 border-t">
+                        <LocationDisplay 
+                          lat={initialLocation.latitude.toString()} 
+                          lon={initialLocation.longitude.toString()} 
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1 mt-2">
+                        <MapPin className="h-3 w-3" />
+                        Location unavailable
+                      </p>
+                    )}
                   </>
                 )}
               </div>
