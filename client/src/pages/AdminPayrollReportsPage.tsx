@@ -728,8 +728,8 @@ export default function AdminPayrollReportsPage() {
                 : `No records for ${selectedYear}`
               }
             </p>
-            <Button onClick={() => setLocation("/admin/payroll/import")} data-testid="button-import-from-empty">
-              Import Payroll Data
+            <Button onClick={() => setLocation("/admin/payroll/generate")} data-testid="button-generate-from-empty">
+              Generate from Attendance
             </Button>
           </CardContent>
         </Card>
