@@ -27,6 +27,47 @@ interface SessionData {
   };
 }
 
+// Live elapsed time display component for active sessions
+function LiveElapsedTime({ clockInTime }: { clockInTime: Date | string }) {
+  const [elapsed, setElapsed] = useState("");
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const updateElapsed = () => {
+      const clockIn = new Date(clockInTime);
+      const now = new Date();
+      setCurrentTime(now);
+      const diffMs = now.getTime() - clockIn.getTime();
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      if (hours > 0) {
+        setElapsed(`${hours}h ${minutes}m`);
+      } else {
+        setElapsed(`${minutes}m`);
+      }
+    };
+    
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [clockInTime]);
+
+  return (
+    <div className="text-center">
+      <p className="text-3xl font-bold text-green-600">
+        {currentTime.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          timeZone: 'Asia/Singapore'
+        })}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Active for {elapsed}
+      </p>
+    </div>
+  );
+}
+
 // Helper function to calculate hours worked (to nearest 0.5 hour)
 function calculateHours(clockInTime: Date | string, clockOutTime: Date | string | null): number {
   if (!clockOutTime) return 0;
@@ -626,14 +667,31 @@ export default function AttendancePage() {
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : (
             <>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Total Hours Today</p>
-                <p className="text-3xl font-bold text-primary" data-testid="text-daily-hours">
-                  {todayTotalHours.toFixed(1)} hrs
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {todayRecords.length} clock-in{todayRecords.length !== 1 ? 's' : ''}
-                </p>
+              <div className="space-y-1" data-testid="text-daily-hours">
+                {activeRecord ? (
+                  <>
+                    <p className="text-xs text-muted-foreground text-center">Current Time</p>
+                    <LiveElapsedTime clockInTime={activeRecord.clockInTime} />
+                    <p className="text-xs text-green-600 font-medium text-center mt-1">
+                      Clocked in at {formatTime(activeRecord.clockInTime)}
+                    </p>
+                    {activeRecord.latitude && activeRecord.longitude && (
+                      <div className="mt-2 pt-2 border-t">
+                        <LocationDisplay lat={activeRecord.latitude} lon={activeRecord.longitude} />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">Total Hours Today</p>
+                    <p className="text-3xl font-bold text-primary">
+                      {todayTotalHours.toFixed(1)} hrs
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {todayRecords.length} clock-in{todayRecords.length !== 1 ? 's' : ''}
+                    </p>
+                  </>
+                )}
               </div>
 
               {/* Today's Records */}
@@ -655,11 +713,17 @@ export default function AttendancePage() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold">
-                            {calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs
-                          </p>
-                          {!record.clockOutTime && (
-                            <p className="text-xs text-green-600">Active</p>
+                          {!record.clockOutTime ? (
+                            <>
+                              <p className="text-sm font-semibold text-green-600">
+                                {formatTime(record.clockInTime)}
+                              </p>
+                              <p className="text-xs text-green-600">Active</p>
+                            </>
+                          ) : (
+                            <p className="text-sm font-semibold">
+                              {calculateHours(record.clockInTime, record.clockOutTime).toFixed(1)} hrs
+                            </p>
                           )}
                         </div>
                       </div>
