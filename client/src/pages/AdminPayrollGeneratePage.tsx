@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History } from "lucide-react";
+import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
@@ -398,20 +398,29 @@ export default function AdminPayrollGeneratePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-2">
                   {[...previewData.skipped]
                     .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
                     .map((emp, idx) => (
-                    <Button
+                    <div
                       key={idx}
-                      variant="outline"
-                      size="sm"
-                      className="border-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
-                      onClick={() => setLocation(`/admin/payroll/employees?employeeId=${emp.id}&returnTo=generate&period=${selectedPeriod}`)}
-                      data-testid={`button-skipped-employee-${emp.id}`}
+                      className="flex items-center justify-between gap-4 p-3 rounded-md bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700"
+                      data-testid={`row-skipped-employee-${emp.id}`}
                     >
-                      {emp.employeeCode}: {toTitleCase(emp.employeeName)}
-                    </Button>
+                      <span className="font-medium text-yellow-800 dark:text-yellow-300">
+                        {emp.employeeCode}: {toTitleCase(emp.employeeName)}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-yellow-400 bg-white dark:bg-yellow-900/50"
+                        onClick={() => setLocation(`/admin/payroll/employees?employeeId=${emp.id}&returnTo=generate&period=${selectedPeriod}`)}
+                        data-testid={`button-employee-settings-${emp.id}`}
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Employee Settings
+                      </Button>
+                    </div>
                   ))}
                 </div>
               </CardContent>
