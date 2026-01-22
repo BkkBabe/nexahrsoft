@@ -4821,6 +4821,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hourlyRate: number;
         basicPay: number;
         overtimePay: number;
+        mobileAllowance: number;
+        transportAllowance: number;
+        mealAllowance: number;
+        shiftAllowance: number;
+        otherAllowance: number;
+        houseRentalAllowance: number;
         grossWages: number;
         employeeCPF: number;
         employerCPF: number;
@@ -4829,7 +4835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cpfEligible: boolean;
       }[] = [];
 
-      const skipped: { employeeCode: string; employeeName: string; reason: string }[] = [];
+      const skipped: { id: string; employeeCode: string; employeeName: string; reason: string }[] = [];
 
       for (const employee of employees) {
         const empAttendance = attendanceData.filter(a => a.userId === employee.id);
@@ -4965,10 +4971,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get default allowances from employee profile
         const mobileAllowance = parseFloat(employee.defaultMobileAllowance || '0');
         const transportAllowance = parseFloat(employee.defaultTransportAllowance || '0');
+        const mealAllowance = parseFloat(employee.defaultMealAllowance || '0');
         const shiftAllowance = parseFloat(employee.defaultShiftAllowance || '0');
         const otherAllowance = parseFloat(employee.defaultOtherAllowance || '0');
         const houseRentalAllowance = parseFloat(employee.defaultHouseRentalAllowance || '0');
-        const totalAllowances = mobileAllowance + transportAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
+        const totalAllowances = mobileAllowance + transportAllowance + mealAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
         
         const grossWages = basicPay + finalOvertimePay + totalAllowances;
 
@@ -5018,6 +5025,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           hourlyRate,
           basicPay,
           overtimePay: finalOvertimePay,
+          mobileAllowance,
+          transportAllowance,
+          mealAllowance,
+          shiftAllowance,
+          otherAllowance,
+          houseRentalAllowance,
           grossWages,
           employeeCPF: cpfResult.employeeCPF,
           employerCPF: cpfResult.employerCPF,

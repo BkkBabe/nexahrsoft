@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History, Settings } from "lucide-react";
+import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History, Settings, Download, Printer } from "lucide-react";
 import { useLocation } from "wouter";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
@@ -80,6 +80,12 @@ interface PreviewEmployee {
   hourlyRate: number;
   basicPay: number;
   overtimePay: number;
+  mobileAllowance: number;
+  transportAllowance: number;
+  mealAllowance: number;
+  shiftAllowance: number;
+  otherAllowance: number;
+  houseRentalAllowance: number;
   grossWages: number;
   employeeCPF: number;
   employerCPF: number;
@@ -223,6 +229,135 @@ export default function AdminPayrollGeneratePage() {
 
   const confirmGenerate = () => {
     generateMutation.mutate();
+  };
+
+  const handleDownloadCSV = () => {
+    if (!previewData || previewData.preview.length === 0) return;
+    
+    const headers = [
+      'Employee Code',
+      'Employee Name',
+      'Hours',
+      'Regular Hours',
+      'OT Hours',
+      'Rate/hr',
+      'Mobile Allowance',
+      'Transport Allowance',
+      'Meal Allowance',
+      'Shift Allowance',
+      'Other Allowance',
+      'House Rental',
+      'Gross',
+      'Net Pay',
+      'Status'
+    ];
+    
+    const rows = [...previewData.preview]
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
+      .map(emp => [
+        emp.employeeCode,
+        toTitleCase(emp.employeeName),
+        emp.totalHoursWorked.toFixed(2),
+        emp.regularHours.toFixed(2),
+        emp.overtimeHours.toFixed(2),
+        emp.hourlyRate.toFixed(2),
+        (emp.mobileAllowance || 0).toFixed(2),
+        (emp.transportAllowance || 0).toFixed(2),
+        (emp.mealAllowance || 0).toFixed(2),
+        (emp.shiftAllowance || 0).toFixed(2),
+        (emp.otherAllowance || 0).toFixed(2),
+        (emp.houseRentalAllowance || 0).toFixed(2),
+        emp.grossWages.toFixed(2),
+        emp.netPay.toFixed(2),
+        getResidencyLabel(emp.residencyStatus)
+      ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payroll_preview_${previewData.period.replace(' ', '_')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = () => {
+    if (!previewData || previewData.preview.length === 0) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const tableRows = [...previewData.preview]
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
+      .map(emp => `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;">${emp.employeeCode}<br><small>${toTitleCase(emp.employeeName)}</small></td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${emp.totalHoursWorked.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${emp.regularHours.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${emp.overtimeHours.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.hourlyRate.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mobileAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.transportAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mealAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shiftAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.otherAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.houseRentalAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${emp.grossWages.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: green;">$${emp.netPay.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${getResidencyLabel(emp.residencyStatus)}</td>
+        </tr>
+      `).join('');
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Payroll Preview - ${previewData.period}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          table { border-collapse: collapse; width: 100%; font-size: 12px; }
+          th { background-color: #f5f5f5; padding: 8px; border: 1px solid #ddd; text-align: left; }
+          @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        </style>
+      </head>
+      <body>
+        <h1>Payroll Preview - ${previewData.period}</h1>
+        <p>Period: ${previewData.periodStart} to ${previewData.periodEnd}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th style="text-align: right;">Hours</th>
+              <th style="text-align: right;">Regular</th>
+              <th style="text-align: right;">OT</th>
+              <th style="text-align: right;">Rate/hr</th>
+              <th style="text-align: right;">Mobile</th>
+              <th style="text-align: right;">Transport</th>
+              <th style="text-align: right;">Meal</th>
+              <th style="text-align: right;">Shift</th>
+              <th style="text-align: right;">Other</th>
+              <th style="text-align: right;">House Rental</th>
+              <th style="text-align: right;">Gross</th>
+              <th style="text-align: right;">Net Pay</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const totalGrossWages = previewData?.preview.reduce((sum, emp) => sum + emp.grossWages, 0) || 0;
@@ -428,19 +563,42 @@ export default function AdminPayrollGeneratePage() {
           )}
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
               <div>
                 <CardTitle>Payroll Preview - {previewData.period}</CardTitle>
                 <CardDescription>
                   Period: {previewData.periodStart} to {previewData.periodEnd}
                 </CardDescription>
               </div>
-              {previewData.eligibleCount > 0 && (
-                <Button 
-                  onClick={handleGenerate}
-                  disabled={generateMutation.isPending}
-                  data-testid="button-generate"
-                >
+              <div className="flex items-center gap-2">
+                {previewData.preview.length > 0 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadCSV}
+                      data-testid="button-download-csv"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      CSV
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePrint}
+                      data-testid="button-print"
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Print
+                    </Button>
+                  </>
+                )}
+                {previewData.eligibleCount > 0 && (
+                  <Button 
+                    onClick={handleGenerate}
+                    disabled={generateMutation.isPending}
+                    data-testid="button-generate"
+                  >
                   {generateMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -453,7 +611,8 @@ export default function AdminPayrollGeneratePage() {
                     </>
                   )}
                 </Button>
-              )}
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {previewData.preview.length === 0 ? (
@@ -466,15 +625,17 @@ export default function AdminPayrollGeneratePage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Employee</TableHead>
-                        <TableHead>Department</TableHead>
-                        <TableHead className="text-right">Days</TableHead>
                         <TableHead className="text-right">Hours</TableHead>
                         <TableHead className="text-right">Regular</TableHead>
                         <TableHead className="text-right">OT</TableHead>
                         <TableHead className="text-right">Rate/hr</TableHead>
+                        <TableHead className="text-right">Mobile</TableHead>
+                        <TableHead className="text-right">Transport</TableHead>
+                        <TableHead className="text-right">Meal</TableHead>
+                        <TableHead className="text-right">Shift</TableHead>
+                        <TableHead className="text-right">Other</TableHead>
+                        <TableHead className="text-right">House Rental</TableHead>
                         <TableHead className="text-right">Gross</TableHead>
-                        <TableHead className="text-right">CPF (Emp)</TableHead>
-                        <TableHead className="text-right">CPF (Er)</TableHead>
                         <TableHead className="text-right">Net Pay</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
@@ -490,15 +651,17 @@ export default function AdminPayrollGeneratePage() {
                               <p className="text-xs text-muted-foreground">{emp.employeeCode}</p>
                             </div>
                           </TableCell>
-                          <TableCell>{emp.department || '-'}</TableCell>
-                          <TableCell className="text-right">{emp.daysWorked}</TableCell>
                           <TableCell className="text-right">{formatHours(emp.totalHoursWorked)}</TableCell>
                           <TableCell className="text-right">{formatHours(emp.regularHours)}</TableCell>
                           <TableCell className="text-right">{formatHours(emp.overtimeHours)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.hourlyRate)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.mobileAllowance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.transportAllowance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.mealAllowance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.shiftAllowance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.otherAllowance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.houseRentalAllowance || 0)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(emp.grossWages)}</TableCell>
-                          <TableCell className="text-right text-blue-600">{formatCurrency(emp.employeeCPF)}</TableCell>
-                          <TableCell className="text-right text-blue-600">{formatCurrency(emp.employerCPF)}</TableCell>
                           <TableCell className="text-right font-bold text-green-600">{formatCurrency(emp.netPay)}</TableCell>
                           <TableCell>
                             <Badge variant={emp.cpfEligible ? "default" : "secondary"}>
