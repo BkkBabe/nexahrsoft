@@ -86,6 +86,7 @@ interface PreviewEmployee {
   shiftAllowance: number;
   otherAllowance: number;
   houseRentalAllowance: number;
+  salaryAdjustments: number;
   grossWages: number;
   employeeCPF: number;
   employerCPF: number;
@@ -247,6 +248,7 @@ export default function AdminPayrollGeneratePage() {
       'Shift Allowance',
       'Other Allowance',
       'House Rental',
+      'Salary Adj',
       'Gross',
       'Net Pay',
       'Status'
@@ -267,6 +269,7 @@ export default function AdminPayrollGeneratePage() {
         (emp.shiftAllowance || 0).toFixed(2),
         (emp.otherAllowance || 0).toFixed(2),
         (emp.houseRentalAllowance || 0).toFixed(2),
+        (emp.salaryAdjustments || 0).toFixed(2),
         emp.grossWages.toFixed(2),
         emp.netPay.toFixed(2),
         getResidencyLabel(emp.residencyStatus)
@@ -309,6 +312,7 @@ export default function AdminPayrollGeneratePage() {
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shiftAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.otherAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.houseRentalAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right; ${(emp.salaryAdjustments || 0) < 0 ? 'color: red;' : (emp.salaryAdjustments || 0) > 0 ? 'color: green;' : ''}">$${(emp.salaryAdjustments || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${emp.grossWages.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: green;">$${emp.netPay.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd;">${getResidencyLabel(emp.residencyStatus)}</td>
@@ -344,6 +348,7 @@ export default function AdminPayrollGeneratePage() {
               <th style="text-align: right;">Shift</th>
               <th style="text-align: right;">Other</th>
               <th style="text-align: right;">House Rental</th>
+              <th style="text-align: right;">Salary Adj</th>
               <th style="text-align: right;">Gross</th>
               <th style="text-align: right;">Net Pay</th>
               <th>Status</th>
@@ -635,6 +640,7 @@ export default function AdminPayrollGeneratePage() {
                         <TableHead className="text-right">Shift</TableHead>
                         <TableHead className="text-right">Other</TableHead>
                         <TableHead className="text-right">House Rental</TableHead>
+                        <TableHead className="text-right">Salary Adj</TableHead>
                         <TableHead className="text-right">Gross</TableHead>
                         <TableHead className="text-right">Net Pay</TableHead>
                         <TableHead>Status</TableHead>
@@ -661,6 +667,9 @@ export default function AdminPayrollGeneratePage() {
                           <TableCell className="text-right">{formatCurrency(emp.shiftAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.otherAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.houseRentalAllowance || 0)}</TableCell>
+                          <TableCell className={`text-right ${(emp.salaryAdjustments || 0) < 0 ? 'text-red-600' : (emp.salaryAdjustments || 0) > 0 ? 'text-green-600' : ''}`}>
+                            {(emp.salaryAdjustments || 0) !== 0 ? formatCurrency(emp.salaryAdjustments || 0) : '-'}
+                          </TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(emp.grossWages)}</TableCell>
                           <TableCell className="text-right font-bold text-green-600">{formatCurrency(emp.netPay)}</TableCell>
                           <TableCell>

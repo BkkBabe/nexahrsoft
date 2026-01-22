@@ -4809,6 +4809,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Fetch all active salary adjustments for employees
+      const allSalaryAdjustments = await Promise.all(
+        employees.map(emp => storage.getEmployeeSalaryAdjustments(emp.id))
+      );
+      const salaryAdjustmentsMap = new Map<string, typeof allSalaryAdjustments[0]>();
+      employees.forEach((emp, idx) => {
+        salaryAdjustmentsMap.set(emp.id, allSalaryAdjustments[idx].filter(adj => adj.isActive));
+      });
+
       const preview: {
         employeeCode: string;
         employeeName: string;
@@ -4827,6 +4836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shiftAllowance: number;
         otherAllowance: number;
         houseRentalAllowance: number;
+        salaryAdjustments: number;
         grossWages: number;
         employeeCPF: number;
         employerCPF: number;
@@ -4977,7 +4987,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const houseRentalAllowance = parseFloat(employee.defaultHouseRentalAllowance || '0');
         const totalAllowances = mobileAllowance + transportAllowance + mealAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
         
-        const grossWages = basicPay + finalOvertimePay + totalAllowances;
+        // Calculate salary adjustments (additions/deductions from employee settings)
+        const employeeSalaryAdjustments = salaryAdjustmentsMap.get(employee.id) || [];
+        let salaryAdjustmentsTotal = 0;
+        for (const adj of employeeSalaryAdjustments) {
+          const amount = parseFloat(String(adj.amount));
+          if (adj.adjustmentType === 'addition') {
+            salaryAdjustmentsTotal += amount;
+          } else if (adj.adjustmentType === 'deduction') {
+            salaryAdjustmentsTotal -= amount;
+          }
+        }
+        
+        const grossWages = basicPay + finalOvertimePay + totalAllowances + salaryAdjustmentsTotal;
 
         // Determine residency status for CPF - only process CPF for explicitly configured SC/SPR
         const residencyStatus = employee.residencyStatus as 'SC' | 'SPR' | 'FOREIGNER' | null;
@@ -5031,6 +5053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           shiftAllowance,
           otherAllowance,
           houseRentalAllowance,
+          salaryAdjustments: salaryAdjustmentsTotal,
           grossWages,
           employeeCPF: cpfResult.employeeCPF,
           employerCPF: cpfResult.employerCPF,

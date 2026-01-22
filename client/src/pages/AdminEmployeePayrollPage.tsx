@@ -437,6 +437,130 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
     enabled: !!employeeId && open && activeTab === "history",
   });
 
+  const { data: adjustmentsData, isLoading: isLoadingAdjustments } = useQuery<{ adjustments: SalaryAdjustment[] }>({
+    queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`],
+    enabled: !!employeeId && open && activeTab === "adjustments",
+  });
+
+  const [newAdjustmentOpen, setNewAdjustmentOpen] = useState(false);
+  const [editingAdjustment, setEditingAdjustment] = useState<SalaryAdjustment | null>(null);
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    adjustmentType: "addition" as "addition" | "deduction",
+    amount: "",
+    description: "",
+    showForEmployee: true,
+  });
+
+  const resetAdjustmentForm = () => {
+    setAdjustmentForm({
+      adjustmentType: "addition",
+      amount: "",
+      description: "",
+      showForEmployee: true,
+    });
+    setEditingAdjustment(null);
+    setNewAdjustmentOpen(false);
+  };
+
+  const createAdjustmentMutation = useMutation({
+    mutationFn: async () => {
+      const amount = parseFloat(adjustmentForm.amount);
+      if (isNaN(amount) || amount <= 0) {
+        throw new Error("Amount must be a positive number");
+      }
+      if (!adjustmentForm.description.trim()) {
+        throw new Error("Description is required");
+      }
+      const response = await apiRequest("POST", `/api/admin/employees/${employeeId}/salary-adjustments`, {
+        adjustmentType: adjustmentForm.adjustmentType,
+        amount,
+        description: adjustmentForm.description.trim(),
+        showForEmployee: adjustmentForm.showForEmployee,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Salary adjustment created" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/audit-logs`] });
+      resetAdjustmentForm();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to create adjustment", variant: "destructive" });
+    },
+  });
+
+  const updateAdjustmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingAdjustment) throw new Error("No adjustment selected");
+      const amount = parseFloat(adjustmentForm.amount);
+      if (isNaN(amount) || amount <= 0) {
+        throw new Error("Amount must be a positive number");
+      }
+      if (!adjustmentForm.description.trim()) {
+        throw new Error("Description is required");
+      }
+      const response = await apiRequest("PATCH", `/api/admin/employees/${employeeId}/salary-adjustments/${editingAdjustment.id}`, {
+        adjustmentType: adjustmentForm.adjustmentType,
+        amount,
+        description: adjustmentForm.description.trim(),
+        showForEmployee: adjustmentForm.showForEmployee,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Salary adjustment updated" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/audit-logs`] });
+      resetAdjustmentForm();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update adjustment", variant: "destructive" });
+    },
+  });
+
+  const deleteAdjustmentMutation = useMutation({
+    mutationFn: async (adjustmentId: string) => {
+      const response = await apiRequest("DELETE", `/api/admin/employees/${employeeId}/salary-adjustments/${adjustmentId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Salary adjustment deleted" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/audit-logs`] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete adjustment", variant: "destructive" });
+    },
+  });
+
+  const toggleAdjustmentActiveMutation = useMutation({
+    mutationFn: async ({ adjustmentId, isActive }: { adjustmentId: string; isActive: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/admin/employees/${employeeId}/salary-adjustments/${adjustmentId}`, {
+        isActive,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Adjustment status updated" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/employees/${employeeId}/salary-adjustments`] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update adjustment", variant: "destructive" });
+    },
+  });
+
+  const handleEditAdjustment = (adjustment: SalaryAdjustment) => {
+    setEditingAdjustment(adjustment);
+    setAdjustmentForm({
+      adjustmentType: adjustment.adjustmentType,
+      amount: String(adjustment.amount),
+      description: adjustment.description || "",
+      showForEmployee: adjustment.showForEmployee,
+    });
+    setNewAdjustmentOpen(true);
+  };
+
   const [formState, setFormState] = useState<Partial<EmployeePayrollSettings>>({});
   const [salaryInputText, setSalaryInputText] = useState<string>("");
   const [salaryInputDirty, setSalaryInputDirty] = useState(false);
@@ -609,14 +733,18 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="settings" data-testid="tab-settings">
               <DollarSign className="h-4 w-4 mr-2" />
-              Payroll Settings
+              Settings
+            </TabsTrigger>
+            <TabsTrigger value="adjustments" data-testid="tab-adjustments">
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Adjustments
             </TabsTrigger>
             <TabsTrigger value="history" data-testid="tab-history">
               <History className="h-4 w-4 mr-2" />
-              Audit History
+              History
             </TabsTrigger>
           </TabsList>
 
@@ -826,6 +954,200 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                 )}
                 Save Changes
               </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="adjustments" className="mt-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Salary Adjustments</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Recurring additions or deductions applied to payroll
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    resetAdjustmentForm();
+                    setNewAdjustmentOpen(true);
+                  }}
+                  data-testid="button-add-adjustment"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Adjustment
+                </Button>
+              </div>
+
+              {newAdjustmentOpen && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">
+                      {editingAdjustment ? "Edit Adjustment" : "New Adjustment"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Type</Label>
+                        <Select
+                          value={adjustmentForm.adjustmentType}
+                          onValueChange={(v) => setAdjustmentForm(prev => ({ ...prev, adjustmentType: v as "addition" | "deduction" }))}
+                        >
+                          <SelectTrigger data-testid="select-adjustment-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="addition">
+                              <span className="flex items-center gap-2">
+                                <PlusCircle className="h-4 w-4 text-green-600" />
+                                Addition (Increase)
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="deduction">
+                              <span className="flex items-center gap-2">
+                                <MinusCircle className="h-4 w-4 text-red-600" />
+                                Deduction (Decrease)
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Amount ($)</Label>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={adjustmentForm.amount}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                              setAdjustmentForm(prev => ({ ...prev, amount: value }));
+                            }
+                          }}
+                          data-testid="input-adjustment-amount"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Description / Reason</Label>
+                      <Textarea
+                        placeholder="e.g., Annual increment, Performance bonus, Loan deduction..."
+                        value={adjustmentForm.description}
+                        onChange={(e) => setAdjustmentForm(prev => ({ ...prev, description: e.target.value }))}
+                        className="resize-none"
+                        rows={2}
+                        data-testid="input-adjustment-description"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="showForEmployee"
+                        checked={adjustmentForm.showForEmployee}
+                        onCheckedChange={(checked) => setAdjustmentForm(prev => ({ ...prev, showForEmployee: checked }))}
+                        data-testid="switch-show-employee"
+                      />
+                      <Label htmlFor="showForEmployee" className="text-sm">
+                        Show on employee payslip
+                      </Label>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={resetAdjustmentForm} data-testid="button-cancel-adjustment">
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => editingAdjustment ? updateAdjustmentMutation.mutate() : createAdjustmentMutation.mutate()}
+                        disabled={createAdjustmentMutation.isPending || updateAdjustmentMutation.isPending}
+                        data-testid="button-save-adjustment"
+                      >
+                        {(createAdjustmentMutation.isPending || updateAdjustmentMutation.isPending) && (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        )}
+                        {editingAdjustment ? "Update" : "Create"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {isLoadingAdjustments ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : adjustmentsData?.adjustments && adjustmentsData.adjustments.length > 0 ? (
+                <ScrollArea className="h-[50vh]">
+                  <div className="space-y-2">
+                    {adjustmentsData.adjustments.map((adj) => (
+                      <Card key={adj.id} className={!adj.isActive ? "opacity-50" : ""} data-testid={`card-adjustment-${adj.id}`}>
+                        <CardContent className="py-3 px-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 flex-1">
+                              {adj.adjustmentType === "addition" ? (
+                                <PlusCircle className="h-5 w-5 text-green-600 shrink-0" />
+                              ) : (
+                                <MinusCircle className="h-5 w-5 text-red-600 shrink-0" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`font-semibold ${adj.adjustmentType === "addition" ? "text-green-600" : "text-red-600"}`}>
+                                    {adj.adjustmentType === "addition" ? "+" : "-"}${Number(adj.amount).toFixed(2)}
+                                  </span>
+                                  {!adj.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
+                                  {!adj.showForEmployee && <Badge variant="secondary" className="text-xs">Hidden</Badge>}
+                                </div>
+                                <p className="text-sm text-muted-foreground truncate">{adj.description}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Added by {adj.createdBy} on {format(new Date(adj.createdAt), "dd/MM/yyyy")}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => toggleAdjustmentActiveMutation.mutate({ adjustmentId: adj.id, isActive: !adj.isActive })}
+                                title={adj.isActive ? "Deactivate" : "Activate"}
+                                data-testid={`button-toggle-${adj.id}`}
+                              >
+                                {adj.isActive ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditAdjustment(adj)}
+                                data-testid={`button-edit-adjustment-${adj.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteAdjustmentMutation.mutate(adj.id)}
+                                disabled={deleteAdjustmentMutation.isPending}
+                                data-testid={`button-delete-adjustment-${adj.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground border rounded-lg">
+                  <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No salary adjustments configured</p>
+                  <p className="text-sm mt-1">Add adjustments to increase or decrease payroll</p>
+                </div>
+              )}
             </div>
           </TabsContent>
 
