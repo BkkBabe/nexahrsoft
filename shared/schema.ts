@@ -791,3 +791,90 @@ export const insertPayrollImportBatchSchema = createInsertSchema(payrollImportBa
 
 export type InsertPayrollImportBatch = z.infer<typeof insertPayrollImportBatchSchema>;
 export type PayrollImportBatch = typeof payrollImportBatches.$inferSelect;
+
+// Manual Payslips - For admin-created payslips via Tools
+export const manualPayslips = pgTable("manual_payslips", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Employee Information
+  employeeName: text("employee_name").notNull(),
+  employeeCode: text("employee_code"),
+  nric: text("nric"),
+  department: text("department"),
+  designation: text("designation"),
+  
+  // Pay Period
+  payPeriodYear: integer("pay_period_year").notNull(),
+  payPeriodMonth: integer("pay_period_month").notNull(),
+  payPeriodStart: text("pay_period_start"),
+  payPeriodEnd: text("pay_period_end"),
+  
+  // Hours Worked
+  regularHours: numeric("regular_hours", { precision: 10, scale: 2 }).default("0"),
+  overtimeHours: numeric("overtime_hours", { precision: 10, scale: 2 }).default("0"),
+  
+  // Earnings
+  basicSalary: numeric("basic_salary", { precision: 12, scale: 2 }).default("0"),
+  hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }).default("0"),
+  regularPay: numeric("regular_pay", { precision: 12, scale: 2 }).default("0"),
+  overtimePay: numeric("overtime_pay", { precision: 12, scale: 2 }).default("0"),
+  
+  // Allowances
+  mobileAllowance: numeric("mobile_allowance", { precision: 12, scale: 2 }).default("0"),
+  transportAllowance: numeric("transport_allowance", { precision: 12, scale: 2 }).default("0"),
+  loanAllowance: numeric("loan_allowance", { precision: 12, scale: 2 }).default("0"),
+  shiftAllowance: numeric("shift_allowance", { precision: 12, scale: 2 }).default("0"),
+  otherAllowance: numeric("other_allowance", { precision: 12, scale: 2 }).default("0"),
+  houseRentalAllowance: numeric("house_rental_allowance", { precision: 12, scale: 2 }).default("0"),
+  bonuses: numeric("bonuses", { precision: 12, scale: 2 }).default("0"),
+  
+  // Deductions
+  employeeCpf: numeric("employee_cpf", { precision: 12, scale: 2 }).default("0"),
+  employerCpf: numeric("employer_cpf", { precision: 12, scale: 2 }).default("0"),
+  loanDeduction: numeric("loan_deduction", { precision: 12, scale: 2 }).default("0"),
+  otherDeductions: numeric("other_deductions", { precision: 12, scale: 2 }).default("0"),
+  
+  // Totals
+  grossPay: numeric("gross_pay", { precision: 12, scale: 2 }).default("0"),
+  totalDeductions: numeric("total_deductions", { precision: 12, scale: 2 }).default("0"),
+  netPay: numeric("net_pay", { precision: 12, scale: 2 }).default("0"),
+  
+  // Remarks
+  remarks: text("remarks"),
+  
+  // Audit
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedBy: text("updated_by"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertManualPayslipSchema = createInsertSchema(manualPayslips).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertManualPayslip = z.infer<typeof insertManualPayslipSchema>;
+export type ManualPayslip = typeof manualPayslips.$inferSelect;
+
+// Manual Payslip Audit Logs
+export const manualPayslipAuditLogs = pgTable("manual_payslip_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  payslipId: varchar("payslip_id").notNull().references(() => manualPayslips.id),
+  action: text("action").notNull(), // 'create', 'update', 'delete', 'pdf_export'
+  fieldName: text("field_name"),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  details: text("details"), // JSON for additional info
+  changedBy: text("changed_by").notNull(),
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+});
+
+export const insertManualPayslipAuditLogSchema = createInsertSchema(manualPayslipAuditLogs).omit({
+  id: true,
+  changedAt: true,
+});
+
+export type InsertManualPayslipAuditLog = z.infer<typeof insertManualPayslipAuditLogSchema>;
+export type ManualPayslipAuditLog = typeof manualPayslipAuditLogs.$inferSelect;

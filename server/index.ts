@@ -119,6 +119,90 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("allow_employee_view column already exists");
     }
     
+    // Create manual_payslips table if it doesn't exist
+    const manualPayslipsCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'manual_payslips'
+      )
+    `);
+    
+    if (!manualPayslipsCheck.rows[0]?.exists) {
+      console.log("Creating manual_payslips table...");
+      await pool.query(`
+        CREATE TABLE manual_payslips (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          employee_name text NOT NULL,
+          employee_code text,
+          nric text,
+          department text,
+          designation text,
+          pay_period_year integer NOT NULL,
+          pay_period_month integer NOT NULL,
+          pay_period_start text,
+          pay_period_end text,
+          regular_hours numeric(10,2) DEFAULT 0,
+          overtime_hours numeric(10,2) DEFAULT 0,
+          basic_salary numeric(12,2) DEFAULT 0,
+          hourly_rate numeric(10,2) DEFAULT 0,
+          regular_pay numeric(12,2) DEFAULT 0,
+          overtime_pay numeric(12,2) DEFAULT 0,
+          mobile_allowance numeric(12,2) DEFAULT 0,
+          transport_allowance numeric(12,2) DEFAULT 0,
+          loan_allowance numeric(12,2) DEFAULT 0,
+          shift_allowance numeric(12,2) DEFAULT 0,
+          other_allowance numeric(12,2) DEFAULT 0,
+          house_rental_allowance numeric(12,2) DEFAULT 0,
+          bonuses numeric(12,2) DEFAULT 0,
+          employee_cpf numeric(12,2) DEFAULT 0,
+          employer_cpf numeric(12,2) DEFAULT 0,
+          loan_deduction numeric(12,2) DEFAULT 0,
+          other_deductions numeric(12,2) DEFAULT 0,
+          gross_pay numeric(12,2) DEFAULT 0,
+          total_deductions numeric(12,2) DEFAULT 0,
+          net_pay numeric(12,2) DEFAULT 0,
+          remarks text,
+          created_by text NOT NULL,
+          created_at timestamp NOT NULL DEFAULT now(),
+          updated_by text,
+          updated_at timestamp
+        )
+      `);
+      console.log("manual_payslips table created");
+    } else {
+      console.log("manual_payslips table already exists");
+    }
+    
+    // Create manual_payslip_audit_logs table if it doesn't exist
+    const auditLogsCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'manual_payslip_audit_logs'
+      )
+    `);
+    
+    if (!auditLogsCheck.rows[0]?.exists) {
+      console.log("Creating manual_payslip_audit_logs table...");
+      await pool.query(`
+        CREATE TABLE manual_payslip_audit_logs (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          payslip_id varchar NOT NULL REFERENCES manual_payslips(id),
+          action text NOT NULL,
+          field_name text,
+          old_value text,
+          new_value text,
+          details text,
+          changed_by text NOT NULL,
+          changed_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+      console.log("manual_payslip_audit_logs table created");
+    } else {
+      console.log("manual_payslip_audit_logs table already exists");
+    }
+    
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production
