@@ -916,7 +916,7 @@ export default function AdminEmployeeDataPage() {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="new-employeeCode">Employee Code *</Label>
+                  <Label htmlFor="new-employeeCode">Employee Code</Label>
                   <Input
                     id="new-employeeCode"
                     value={newEmployeeData.employeeCode}
@@ -1017,7 +1017,7 @@ export default function AdminEmployeeDataPage() {
               </Button>
               <Button
                 onClick={() => createUserMutation.mutate(newEmployeeData)}
-                disabled={createUserMutation.isPending || !newEmployeeData.employeeCode || !newEmployeeData.name || !newEmployeeData.email}
+                disabled={createUserMutation.isPending || !newEmployeeData.name || !newEmployeeData.email}
                 data-testid="button-create-employee"
               >
                 {createUserMutation.isPending ? (
