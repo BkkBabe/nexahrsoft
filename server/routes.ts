@@ -10,6 +10,10 @@ import multer from "multer";
 import { registerUserSchema, loginUserSchema } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { Resend } from "resend";
+import { Pool } from "@neondatabase/serverless";
+
+// Create a pool for raw SQL queries (used by tools API)
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -6792,6 +6796,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching private object:", error);
       return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ========== TOOLS API (Manual Payslip Generator) ==========
+  
+  // Create a manual payslip
+  app.post("/api/admin/tools/payslip", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const adminSession = req.session as any;
+      const createdBy = adminSession.adminId || adminSession.userName || "admin";
+      
+      const data = req.body;
+      
+      if (!data.employeeName) {
+        return res.status(400).json({ message: "Employee name is required" });
+      }
+      
+      // Insert the payslip using raw SQL since tables were just created
+      const result = await pool.query(`
+        INSERT INTO manual_payslips (
+          employee_name, employee_code, nric, department, designation,
+          pay_period_year, pay_period_month, pay_period_start, pay_period_end,
+          regular_hours, overtime_hours, basic_salary, hourly_rate, regular_pay, overtime_pay,
+          mobile_allowance, transport_allowance, loan_allowance, shift_allowance,
+          other_allowance, house_rental_allowance, bonuses,
+          employee_cpf, employer_cpf, loan_deduction, other_deductions,
+          gross_pay, total_deductions, net_pay, remarks, created_by
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+          $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31
+        ) RETURNING id
+      `, [
+        data.employeeName,
+        data.employeeCode,
+        data.nric,
+        data.department,
+        data.designation,
+        data.payPeriodYear,
+        data.payPeriodMonth,
+        data.payPeriodStart,
+        data.payPeriodEnd,
+        data.regularHours || "0",
+        data.overtimeHours || "0",
+        data.basicSalary || "0",
+        data.hourlyRate || "0",
+        data.regularPay || "0",
+        data.overtimePay || "0",
+        data.mobileAllowance || "0",
+        data.transportAllowance || "0",
+        data.loanAllowance || "0",
+        data.shiftAllowance || "0",
+        data.otherAllowance || "0",
+        data.houseRentalAllowance || "0",
+        data.bonuses || "0",
+        data.employeeCpf || "0",
+        data.employerCpf || "0",
+        data.loanDeduction || "0",
+        data.otherDeductions || "0",
+        data.grossPay || "0",
+        data.totalDeductions || "0",
+        data.netPay || "0",
+        data.remarks,
+        createdBy
+      ]);
+      
+      const payslipId = result.rows[0]?.id;
+      
+      // Create audit log entry
+      await pool.query(`
+        INSERT INTO manual_payslip_audit_logs (payslip_id, action, details, changed_by)
+        VALUES ($1, $2, $3, $4)
+      `, [
+        payslipId,
+        'create',
+        JSON.stringify({ employeeName: data.employeeName, period: `${data.payPeriodMonth}/${data.payPeriodYear}`, netPay: data.netPay }),
+        createdBy
+      ]);
+      
+      res.json({ success: true, id: payslipId, message: "Payslip saved successfully" });
+    } catch (error) {
+      console.error("Create manual payslip error:", error);
+      res.status(500).json({ message: "Failed to save payslip" });
+    }
+  });
+  
+  // Get all manual payslips
+  app.get("/api/admin/tools/payslips", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const result = await pool.query(`
+        SELECT * FROM manual_payslips 
+        ORDER BY created_at DESC
+        LIMIT 100
+      `);
+      res.json({ payslips: result.rows });
+    } catch (error) {
+      console.error("Get manual payslips error:", error);
+      res.status(500).json({ message: "Failed to fetch payslips" });
+    }
+  });
+  
+  // Get manual payslip audit logs
+  app.get("/api/admin/tools/payslips/:id/audit", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await pool.query(`
+        SELECT * FROM manual_payslip_audit_logs 
+        WHERE payslip_id = $1 
+        ORDER BY changed_at DESC
+      `, [id]);
+      res.json({ logs: result.rows });
+    } catch (error) {
+      console.error("Get payslip audit logs error:", error);
+      res.status(500).json({ message: "Failed to fetch audit logs" });
     }
   });
 

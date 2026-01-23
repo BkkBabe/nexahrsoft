@@ -24,7 +24,7 @@ import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import AdminAttendancePage from "@/pages/AdminAttendancePage";
 import AdminPayslipPage from "@/pages/AdminPayslipPage";
 import AdminLeavePage from "@/pages/AdminLeavePage";
-import AdminReportsPage from "@/pages/AdminReportsPage";
+import AdminToolsPage from "@/pages/AdminToolsPage";
 import AdminEmailsPage from "@/pages/AdminEmailsPage";
 import AdminPayrollImportPage from "@/pages/AdminPayrollImportPage";
 import AdminPayrollReportsPage from "@/pages/AdminPayrollReportsPage";
@@ -224,7 +224,7 @@ function Router() {
         {() => <AdminProtected><AdminLeavePage /></AdminProtected>}
       </Route>
       <Route path="/admin/reports">
-        {() => <AdminProtected><AdminReportsPage /></AdminProtected>}
+        {() => <AdminProtected><AdminToolsPage /></AdminProtected>}
       </Route>
       <Route path="/admin/emails">
         {() => <AdminProtected><AdminEmailsPage /></AdminProtected>}
