@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Printer, Settings2, Download, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Settings2, Download, Loader2 } from "lucide-react";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
 import PayrollAdjustmentsDialog from "./PayrollAdjustmentsDialog";
 import html2pdf from "html2pdf.js";
@@ -32,7 +32,6 @@ interface PayslipViewProps {
   companySettings?: CompanySettings | null;
   defaultMode?: "employee" | "employer";
   showToggle?: boolean;
-  onPrint?: () => void;
 }
 
 function parseAmount(value: string | number | null | undefined): number {
@@ -152,7 +151,6 @@ export default function PayslipView({
   companySettings,
   defaultMode = "employee",
   showToggle = true,
-  onPrint,
 }: PayslipViewProps) {
   const [viewMode, setViewMode] = useState<"employee" | "employer">(defaultMode);
   const [adjustmentsDialogOpen, setAdjustmentsDialogOpen] = useState(false);
@@ -168,6 +166,12 @@ export default function PayslipView({
       const element = payslipRef.current;
       const employeeName = record.employeeName?.replace(/[^a-zA-Z0-9]/g, '_') || 'Employee';
       const filename = `Payslip_${employeeName}_${record.payPeriod?.replace(/\s+/g, '_')}.pdf`;
+      
+      // Hide controls during PDF export
+      const controlsElement = element.querySelector('[data-pdf-hide]') as HTMLElement;
+      if (controlsElement) {
+        controlsElement.style.display = 'none';
+      }
       
       const opt = {
         margin: [10, 10, 10, 10] as [number, number, number, number],
@@ -187,6 +191,11 @@ export default function PayslipView({
       };
       
       await html2pdf().set(opt).from(element).save();
+      
+      // Restore controls after PDF export
+      if (controlsElement) {
+        controlsElement.style.display = '';
+      }
     } catch (error) {
       console.error('PDF export error:', error);
     } finally {
@@ -284,7 +293,7 @@ export default function PayslipView({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4 print:hidden">
+          <div className="flex items-center gap-4 print:hidden" data-pdf-hide>
             {showToggle && (
               <div className="flex items-center gap-2">
                 <Switch
@@ -329,12 +338,6 @@ export default function PayslipView({
                 </>
               )}
             </Button>
-            {onPrint && (
-              <Button variant="outline" size="sm" onClick={onPrint} data-testid="button-print">
-                <Printer className="h-4 w-4 mr-2" />
-                Print
-              </Button>
-            )}
           </div>
         </div>
 
