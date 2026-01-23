@@ -277,7 +277,7 @@ export default function AdminEmployeeDataPage() {
       ot20Rate: "OT 2.0x Rate",
       defaultMobileAllowance: "Mobile Allowance",
       defaultTransportAllowance: "Transport Allowance",
-      defaultMealAllowance: "Meal Allowance",
+      defaultMealAllowance: "Loan",
       defaultShiftAllowance: "Shift Allowance",
       defaultOtherAllowance: "Other Allowance",
       defaultHouseRentalAllowance: "House Rental Allowance",
@@ -720,14 +720,14 @@ export default function AdminEmployeeDataPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-defaultMealAllowance">Meal Allowance ($)</Label>
+                    <Label htmlFor="edit-defaultMealAllowance">Loan ($)</Label>
                     <Input
                       id="edit-defaultMealAllowance"
                       type="number"
                       step="0.01"
                       value={editFormData.defaultMealAllowance}
                       onChange={(e) => setEditFormData(prev => ({ ...prev, defaultMealAllowance: e.target.value }))}
-                      data-testid="input-edit-defaultMealAllowance"
+                      data-testid="input-edit-loan"
                     />
                   </div>
                   <div className="space-y-2">

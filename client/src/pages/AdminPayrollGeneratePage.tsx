@@ -244,7 +244,7 @@ export default function AdminPayrollGeneratePage() {
       'Rate/hr',
       'Mobile Allowance',
       'Transport Allowance',
-      'Meal Allowance',
+      'Loan',
       'Shift Allowance',
       'Other Allowance',
       'House Rental',
@@ -344,7 +344,7 @@ export default function AdminPayrollGeneratePage() {
               <th style="text-align: right;">Rate/hr</th>
               <th style="text-align: right;">Mobile</th>
               <th style="text-align: right;">Transport</th>
-              <th style="text-align: right;">Meal</th>
+              <th style="text-align: right;">Loan</th>
               <th style="text-align: right;">Shift</th>
               <th style="text-align: right;">Other</th>
               <th style="text-align: right;">House Rental</th>
@@ -636,7 +636,7 @@ export default function AdminPayrollGeneratePage() {
                         <TableHead className="text-right">Rate/hr</TableHead>
                         <TableHead className="text-right">Mobile</TableHead>
                         <TableHead className="text-right">Transport</TableHead>
-                        <TableHead className="text-right">Meal</TableHead>
+                        <TableHead className="text-right">Loan</TableHead>
                         <TableHead className="text-right">Shift</TableHead>
                         <TableHead className="text-right">Other</TableHead>
                         <TableHead className="text-right">House Rental</TableHead>

@@ -169,7 +169,7 @@ function getFieldLabel(field: string): string {
     regularDaysPerWeek: "Regular Days/Week",
     defaultMobileAllowance: "Mobile Allowance",
     defaultTransportAllowance: "Transport Allowance",
-    defaultMealAllowance: "Meal Allowance",
+    defaultMealAllowance: "Loan",
     defaultShiftAllowance: "Shift Allowance",
     defaultOtherAllowance: "Other Allowance",
     defaultHouseRentalAllowance: "House Rental Allowance",
@@ -881,7 +881,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                           />
                         </div>
                         <div>
-                          <Label>Meal Allowance ($)</Label>
+                          <Label>Loan ($)</Label>
                           <Input
                             type="text"
                             inputMode="decimal"
@@ -890,7 +890,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                             onChange={(e) => handleAllowanceChange("meal", e.target.value)}
                             onKeyDown={allowanceKeyDownHandler}
                             onBlur={() => handleAllowanceBlur("meal", "defaultMealAllowance")}
-                            data-testid="input-meal-allowance"
+                            data-testid="input-loan"
                           />
                         </div>
                       </div>
