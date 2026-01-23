@@ -5,7 +5,7 @@ import {
   FileText,
   DollarSign,
   Users,
-  BarChart3,
+  Wrench,
   CheckSquare,
   Building2,
 } from "lucide-react";
@@ -45,7 +45,7 @@ export function AppSidebar({ userRole, companyName = "NexaHR", companyLogo }: Ap
   const hrAdminItems = [
     { title: "Employees", url: "/admin/employees", icon: Users },
     { title: "Payroll", url: "/admin/payroll", icon: DollarSign },
-    { title: "Reports", url: "/admin/reports", icon: BarChart3 },
+    { title: "Tools", url: "/admin/reports", icon: Wrench },
   ];
 
   return (

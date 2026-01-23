@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut, Users, Calendar, FileText, DollarSign, Receipt, Settings, BarChart3, Mail, UserCog } from "lucide-react";
+import { LogOut, Users, Calendar, FileText, DollarSign, Receipt, Settings, Wrench, Mail, UserCog } from "lucide-react";
 import { useLocation } from "wouter";
 import { MenuCard } from "@/components/MenuCard";
 
@@ -52,8 +52,8 @@ export default function AdminDashboardPage() {
       iconColor: "bg-orange-500/10",
     },
     {
-      title: "Reports",
-      icon: BarChart3,
+      title: "Tools",
+      icon: Wrench,
       href: "/admin/reports",
       iconColor: "bg-indigo-500/10",
     },
