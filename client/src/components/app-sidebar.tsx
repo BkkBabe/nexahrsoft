@@ -36,7 +36,6 @@ export function AppSidebar({ userRole, companyName = "NexaHR", companyLogo }: Ap
     { title: "Attendance", url: "/attendance", icon: Clock },
     { title: "Leave", url: "/leave", icon: Calendar },
     { title: "Claims", url: "/claims", icon: FileText },
-    { title: "My Payslips", url: "/my-payslips", icon: DollarSign },
   ];
 
   const managerItems = [

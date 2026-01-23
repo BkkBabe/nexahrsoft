@@ -11,7 +11,7 @@ export default function Dashboard() {
     { title: "Attendance", icon: Clock, path: "/attendance" },
     { title: "Leave", icon: Calendar, path: "/leave" },
     { title: "Claims", icon: FileText, path: "/claims" },
-    { title: "Payslip", icon: Mail, path: "/payslip" },
+    { title: "Payslip", icon: Mail, path: "/my-payslips" },
     { title: "Income Tax", icon: Calculator, path: "/income-tax" },
     { title: "Rewards", icon: Gift, path: "/rewards" },
   ];
