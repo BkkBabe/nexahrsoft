@@ -1,8 +1,8 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog, type PayrollImportBatch, type InsertPayrollImportBatch } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog, type PayrollImportBatch, type InsertPayrollImportBatch, type ManualPayslip, type InsertManualPayslip, type ManualPayslipAuditLog, type InsertManualPayslipAuditLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches } from "@shared/schema";
-import { eq, or, and, gte, lte, lt, desc, asc, isNull, not, like, sql } from "drizzle-orm";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches, manualPayslips, manualPayslipAuditLogs } from "@shared/schema";
+import { eq, or, and, gte, lte, lt, desc, asc, isNull, not, like, sql, inArray } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -1747,6 +1747,27 @@ export class PgStorage implements IStorage {
   }
   
   async deletePayrollRecordsByPeriod(year: number, month: number): Promise<void> {
+    // First, get all payroll record IDs for this period
+    const records = await db.select({ id: payrollRecords.id })
+      .from(payrollRecords)
+      .where(
+        and(
+          eq(payrollRecords.payPeriodYear, year),
+          eq(payrollRecords.payPeriodMonth, month)
+        )
+      );
+    
+    if (records.length === 0) {
+      return; // Nothing to delete
+    }
+    
+    const recordIds = records.map(r => r.id);
+    
+    // Delete related audit logs first (foreign key constraint)
+    await db.delete(payrollAuditLogs)
+      .where(inArray(payrollAuditLogs.payrollRecordId, recordIds));
+    
+    // Now delete the payroll records
     await db.delete(payrollRecords)
       .where(
         and(
