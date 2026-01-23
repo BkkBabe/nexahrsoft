@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator } from "lucide-react";
+import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useLocation } from "wouter";
@@ -54,8 +54,20 @@ export default function AdminEmployeeDataPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [viewingAuditUser, setViewingAuditUser] = useState<User | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [newEmployeeData, setNewEmployeeData] = useState({
+    employeeCode: "",
+    name: "",
+    email: "",
+    department: "",
+    designation: "",
+    mobileNumber: "",
+    gender: "",
+    joinDate: "",
+  });
   const [editFormData, setEditFormData] = useState<EditableFields>({
     name: "",
     email: "",
@@ -124,6 +136,42 @@ export default function AdminEmployeeDataPage() {
     },
   });
 
+  const createUserMutation = useMutation({
+    mutationFn: async (data: typeof newEmployeeData) => {
+      const response = await apiRequest("POST", "/api/admin/users/create", data);
+      return response.json() as Promise<{ initialPassword?: string; user?: { name?: string } }>;
+    },
+    onSuccess: async (response) => {
+      toast({
+        title: "Employee Created",
+        description: `${response.user?.name || "Employee"} created successfully. Initial password: ${response.initialPassword}`,
+      });
+      setIsAddDialogOpen(false);
+      setNewEmployeeData({
+        employeeCode: "",
+        name: "",
+        email: "",
+        department: "",
+        designation: "",
+        mobileNumber: "",
+        gender: "",
+        joinDate: "",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create employee",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isIncompleteRecord = (user: User): boolean => {
+    return !user.employeeCode || !user.department || !user.basicMonthlySalary;
+  };
+
   const users = usersData || [];
 
   const departments = useMemo(() => {
@@ -132,6 +180,10 @@ export default function AdminEmployeeDataPage() {
       if (u.department) deptSet.add(u.department);
     });
     return Array.from(deptSet).sort();
+  }, [users]);
+
+  const incompleteCount = useMemo(() => {
+    return users.filter(u => !u.isArchived && isIncompleteRecord(u)).length;
   }, [users]);
 
   const filteredUsers = useMemo(() => {
@@ -145,10 +197,12 @@ export default function AdminEmployeeDataPage() {
         
         const matchesDepartment = selectedDepartment === "all" || u.department === selectedDepartment;
         
-        return matchesSearch && matchesDepartment;
+        const matchesIncomplete = !showIncompleteOnly || isIncompleteRecord(u);
+        
+        return matchesSearch && matchesDepartment && matchesIncomplete;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, searchTerm, selectedDepartment]);
+  }, [users, searchTerm, selectedDepartment, showIncompleteOnly]);
 
   const handleEditClick = (user: User) => {
     setEditingUser(user);
@@ -281,14 +335,23 @@ export default function AdminEmployeeDataPage() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => refetchUsers()}
-            data-testid="button-refresh"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => refetchUsers()}
+              data-testid="button-refresh"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button
+              onClick={() => setIsAddDialogOpen(true)}
+              data-testid="button-add-employee"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Employee
+            </Button>
+          </div>
         </div>
 
         <Card>
@@ -320,6 +383,20 @@ export default function AdminEmployeeDataPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                variant={showIncompleteOnly ? "default" : "outline"}
+                onClick={() => setShowIncompleteOnly(!showIncompleteOnly)}
+                className="gap-2"
+                data-testid="button-show-incomplete"
+              >
+                <AlertCircle className="h-4 w-4" />
+                Incomplete
+                {incompleteCount > 0 && (
+                  <Badge variant="secondary" className="ml-1" data-testid="badge-incomplete-count">
+                    {incompleteCount}
+                  </Badge>
+                )}
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -349,10 +426,17 @@ export default function AdminEmployeeDataPage() {
                   <TableBody>
                     {filteredUsers.map((user, index) => (
                       <TableRow key={user.id} data-testid={`row-employee-${user.id}`}>
-                        <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>
+                        <TableCell className="font-mono text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            {index + 1}
+                            {isIncompleteRecord(user) && (
+                              <AlertCircle className="h-4 w-4 text-amber-500" />
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="font-mono">
-                            {user.employeeCode || "N/A"}
+                          <Badge variant={user.employeeCode ? "outline" : "destructive"} className="font-mono">
+                            {user.employeeCode || "Missing"}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-medium">{user.name}</TableCell>
@@ -816,6 +900,132 @@ export default function AdminEmployeeDataPage() {
               >
                 <X className="h-4 w-4 mr-2" />
                 Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5" />
+                Add New Employee
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-employeeCode">Employee Code *</Label>
+                  <Input
+                    id="new-employeeCode"
+                    value={newEmployeeData.employeeCode}
+                    onChange={(e) => setNewEmployeeData(prev => ({ ...prev, employeeCode: e.target.value }))}
+                    placeholder="e.g., EMP001"
+                    data-testid="input-new-employeeCode"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-name">Name *</Label>
+                  <Input
+                    id="new-name"
+                    value={newEmployeeData.name}
+                    onChange={(e) => setNewEmployeeData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Full name"
+                    data-testid="input-new-name"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="new-email">Email *</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    value={newEmployeeData.email}
+                    onChange={(e) => setNewEmployeeData(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="email@company.com"
+                    data-testid="input-new-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-department">Department</Label>
+                  <Input
+                    id="new-department"
+                    value={newEmployeeData.department}
+                    onChange={(e) => setNewEmployeeData(prev => ({ ...prev, department: e.target.value }))}
+                    placeholder="e.g., Operations"
+                    data-testid="input-new-department"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-designation">Designation</Label>
+                  <Input
+                    id="new-designation"
+                    value={newEmployeeData.designation}
+                    onChange={(e) => setNewEmployeeData(prev => ({ ...prev, designation: e.target.value }))}
+                    placeholder="e.g., Engineer"
+                    data-testid="input-new-designation"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-mobileNumber">Mobile Number</Label>
+                  <Input
+                    id="new-mobileNumber"
+                    value={newEmployeeData.mobileNumber}
+                    onChange={(e) => setNewEmployeeData(prev => ({ ...prev, mobileNumber: e.target.value }))}
+                    placeholder="e.g., 91234567"
+                    data-testid="input-new-mobileNumber"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-gender">Gender</Label>
+                  <Select 
+                    value={newEmployeeData.gender} 
+                    onValueChange={(value) => setNewEmployeeData(prev => ({ ...prev, gender: value }))}
+                  >
+                    <SelectTrigger data-testid="select-new-gender">
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="new-joinDate">Join Date</Label>
+                  <Input
+                    id="new-joinDate"
+                    type="date"
+                    value={newEmployeeData.joinDate}
+                    onChange={(e) => setNewEmployeeData(prev => ({ ...prev, joinDate: e.target.value }))}
+                    data-testid="input-new-joinDate"
+                  />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                * Required fields. An initial password will be generated automatically.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsAddDialogOpen(false)}
+                data-testid="button-cancel-add"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                onClick={() => createUserMutation.mutate(newEmployeeData)}
+                disabled={createUserMutation.isPending || !newEmployeeData.employeeCode || !newEmployeeData.name || !newEmployeeData.email}
+                data-testid="button-create-employee"
+              >
+                {createUserMutation.isPending ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-2" />
+                )}
+                Create Employee
               </Button>
             </DialogFooter>
           </DialogContent>
