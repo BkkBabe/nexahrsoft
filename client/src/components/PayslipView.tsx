@@ -1,14 +1,16 @@
-import { useState, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Settings2, Download, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Settings2, Download, Loader2, UserCheck } from "lucide-react";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
 import PayrollAdjustmentsDialog from "./PayrollAdjustmentsDialog";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import html2pdf from "html2pdf.js";
 
 interface PayrollAdjustment {
@@ -32,6 +34,7 @@ interface PayslipViewProps {
   companySettings?: CompanySettings | null;
   defaultMode?: "employee" | "employer";
   showToggle?: boolean;
+  isAdmin?: boolean;
 }
 
 function parseAmount(value: string | number | null | undefined): number {
@@ -151,12 +154,45 @@ export default function PayslipView({
   companySettings,
   defaultMode = "employee",
   showToggle = true,
+  isAdmin = false,
 }: PayslipViewProps) {
   const [viewMode, setViewMode] = useState<"employee" | "employer">(defaultMode);
   const [adjustmentsDialogOpen, setAdjustmentsDialogOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [allowEmployeeView, setAllowEmployeeView] = useState(record.allowEmployeeView ?? false);
   const payslipRef = useRef<HTMLDivElement>(null);
   const isEmployerView = viewMode === "employer";
+  const { toast } = useToast();
+
+  // Sync allowEmployeeView state when record changes
+  useEffect(() => {
+    setAllowEmployeeView(record.allowEmployeeView ?? false);
+  }, [record.id, record.allowEmployeeView]);
+
+  const toggleAllowEmployeeViewMutation = useMutation({
+    mutationFn: async (allow: boolean) => {
+      return apiRequest("PATCH", `/api/admin/payroll/${record.id}/allow-employee-view`, {
+        allowEmployeeView: allow,
+      });
+    },
+    onSuccess: (_, allow) => {
+      setAllowEmployeeView(allow);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll'] });
+      toast({
+        title: allow ? "Employee can now view this payslip" : "Payslip hidden from employee",
+        description: allow 
+          ? `${record.employeeName} can now access this payslip.`
+          : `${record.employeeName} can no longer view this payslip.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update employee view permission",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleExportPdf = async () => {
     if (!payslipRef.current) return;
@@ -340,6 +376,27 @@ export default function PayslipView({
             </Button>
           </div>
         </div>
+
+        {isAdmin && (
+          <div className="flex items-center gap-3 bg-muted/30 rounded-lg px-4 py-2">
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2">
+              <Switch
+                id="allow-employee-view"
+                checked={allowEmployeeView}
+                onCheckedChange={(checked) => toggleAllowEmployeeViewMutation.mutate(checked)}
+                disabled={toggleAllowEmployeeViewMutation.isPending}
+                data-testid="switch-allow-employee-view"
+              />
+              <Label htmlFor="allow-employee-view" className="text-sm">
+                {allowEmployeeView ? "Employee can view" : "Hidden from employee"}
+              </Label>
+            </div>
+            {toggleAllowEmployeeViewMutation.isPending && (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            )}
+          </div>
+        )}
 
         <div className="bg-muted/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">

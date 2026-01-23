@@ -3380,6 +3380,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Toggle allow employee view for a payroll record
+  app.patch("/api/admin/payroll/:id/allow-employee-view", requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { allowEmployeeView } = req.body;
+      
+      if (typeof allowEmployeeView !== 'boolean') {
+        return res.status(400).json({ message: "allowEmployeeView must be a boolean" });
+      }
+      
+      const record = await storage.updatePayrollRecord(id, { allowEmployeeView });
+      
+      if (!record) {
+        return res.status(404).json({ message: "Payroll record not found" });
+      }
+      
+      res.json({ success: true, record });
+    } catch (error) {
+      console.error("Toggle allow employee view error:", error);
+      res.status(500).json({ message: "Failed to update payroll record" });
+    }
+  });
+
+  // Employee: Get their own viewable payroll records (payslips)
+  app.get("/api/employee/payroll", async (req: Request, res: Response) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
+    // Admin users should not use this endpoint
+    if (req.session.isAdmin) {
+      return res.status(403).json({ message: "This endpoint is for employees only" });
+    }
+
+    try {
+      const userId = req.session.userId;
+      const records = await storage.getEmployeeViewablePayrollRecords(userId);
+      res.json({ records });
+    } catch (error) {
+      console.error("Get employee payroll records error:", error);
+      res.status(500).json({ message: "Failed to get payroll records" });
+    }
+  });
+
   // ==================== LEAVE MANAGEMENT ENDPOINTS ====================
 
   // Admin: Get all leave balances

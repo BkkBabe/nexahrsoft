@@ -122,6 +122,7 @@ export interface IStorage {
   getPayrollRecords(year?: number, month?: number): Promise<PayrollRecord[]>;
   getPayrollRecordsByEmployee(employeeCode: string): Promise<PayrollRecord[]>;
   getPayrollRecordsByUserId(userId: string): Promise<PayrollRecord[]>;
+  getEmployeeViewablePayrollRecords(userId: string): Promise<PayrollRecord[]>;
   getPayrollRecordById(id: string): Promise<PayrollRecord | undefined>;
   updatePayrollRecord(id: string, updates: Partial<PayrollRecord>): Promise<PayrollRecord | undefined>;
   deletePayrollRecordsByPeriod(year: number, month: number): Promise<void>;
@@ -666,6 +667,10 @@ export class MemStorage implements IStorage {
   
   async getPayrollRecordsByUserId(userId: string): Promise<PayrollRecord[]> {
     throw new Error("MemStorage getPayrollRecordsByUserId not implemented");
+  }
+  
+  async getEmployeeViewablePayrollRecords(userId: string): Promise<PayrollRecord[]> {
+    throw new Error("MemStorage getEmployeeViewablePayrollRecords not implemented");
   }
   
   async deletePayrollRecordsByPeriod(year: number, month: number): Promise<void> {
@@ -1726,6 +1731,18 @@ export class PgStorage implements IStorage {
     return await db.select()
       .from(payrollRecords)
       .where(eq(payrollRecords.userId, userId))
+      .orderBy(desc(payrollRecords.payPeriodYear), desc(payrollRecords.payPeriodMonth));
+  }
+  
+  async getEmployeeViewablePayrollRecords(userId: string): Promise<PayrollRecord[]> {
+    return await db.select()
+      .from(payrollRecords)
+      .where(
+        and(
+          eq(payrollRecords.userId, userId),
+          eq(payrollRecords.allowEmployeeView, true)
+        )
+      )
       .orderBy(desc(payrollRecords.payPeriodYear), desc(payrollRecords.payPeriodMonth));
   }
   

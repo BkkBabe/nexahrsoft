@@ -533,6 +533,9 @@ export const payrollRecords = pgTable("payroll_records", {
   importedBy: text("imported_by"), // Admin who imported
   importBatchId: varchar("import_batch_id"), // Link to import batch for historical imports
   isHistoricalImport: boolean("is_historical_import").notNull().default(false), // True for imported historical data
+  
+  // Employee View Permission
+  allowEmployeeView: boolean("allow_employee_view").notNull().default(false), // If true, employee can view their own payslip
 });
 
 export const insertPayrollRecordSchema = createInsertSchema(payrollRecords).omit({

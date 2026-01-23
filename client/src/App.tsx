@@ -33,6 +33,7 @@ import AdminPayrollGeneratePage from "@/pages/AdminPayrollGeneratePage";
 import AdminPayrollAdjustmentsPage from "@/pages/AdminPayrollAdjustmentsPage";
 import AdminEmployeePayrollPage from "@/pages/AdminEmployeePayrollPage";
 import AdminEmployeeDataPage from "@/pages/AdminEmployeeDataPage";
+import EmployeePayrollPage from "@/pages/EmployeePayrollPage";
 import AdminHistoricalPayrollImportPage from "@/pages/AdminHistoricalPayrollImportPage";
 import UserLoginPage from "@/pages/UserLoginPage";
 import PendingApprovalPage from "@/pages/PendingApprovalPage";
@@ -131,6 +132,7 @@ function AuthenticatedApp({ session }: { session: SessionData }) {
                 <Route path="/leave" component={LeavePage} />
                 <Route path="/claims" component={ClaimsPage} />
                 <Route path="/payslip" component={PayslipPage} />
+                <Route path="/my-payslips" component={EmployeePayrollPage} />
                 <Route path="/income-tax" component={IncomeTaxPage} />
                 <Route path="/rewards" component={RewardsPage} />
                 <Route path="/approvals" component={ApprovalsPage} />
