@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, FileText, Download, Save, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -40,6 +41,12 @@ interface PayslipFormData {
   employerCpf: string;
   loanDeduction: string;
   otherDeductions: string;
+  cdac: string;
+  mbmf: string;
+  sinda: string;
+  showCdac: boolean;
+  showMbmf: boolean;
+  showSinda: boolean;
   remarks: string;
 }
 
@@ -74,6 +81,12 @@ const defaultFormData: PayslipFormData = {
   employerCpf: "",
   loanDeduction: "",
   otherDeductions: "",
+  cdac: "",
+  mbmf: "",
+  sinda: "",
+  showCdac: true,
+  showMbmf: true,
+  showSinda: true,
   remarks: "",
 };
 
@@ -105,7 +118,7 @@ export default function AdminToolsPage() {
     queryKey: ["/api/company/settings"],
   });
 
-  const handleInputChange = (field: keyof PayslipFormData, value: string | number) => {
+  const handleInputChange = (field: keyof PayslipFormData, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -125,7 +138,10 @@ export default function AdminToolsPage() {
     const totalDeductions = 
       parseNumber(formData.employeeCpf) +
       parseNumber(formData.loanDeduction) +
-      parseNumber(formData.otherDeductions);
+      parseNumber(formData.otherDeductions) +
+      (formData.showCdac ? parseNumber(formData.cdac) : 0) +
+      (formData.showMbmf ? parseNumber(formData.mbmf) : 0) +
+      (formData.showSinda ? parseNumber(formData.sinda) : 0);
 
     const netPay = grossEarnings - totalDeductions;
 
@@ -205,9 +221,9 @@ export default function AdminToolsPage() {
     const opt = {
       margin: 10,
       filename: `payslip_${formData.employeeName || 'blank'}_${formData.payPeriodYear}_${formData.payPeriodMonth}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
     };
 
     try {
@@ -284,7 +300,7 @@ export default function AdminToolsPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>NRIC</Label>
+                      <Label>NRIC/FIN</Label>
                       <Input
                         value={formData.nric}
                         onChange={(e) => handleInputChange("nric", e.target.value)}
@@ -567,6 +583,63 @@ export default function AdminToolsPage() {
                         data-testid="input-other-deductions"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="showCdac"
+                          checked={formData.showCdac}
+                          onCheckedChange={(checked) => handleInputChange("showCdac", checked as boolean)}
+                          data-testid="checkbox-show-cdac"
+                        />
+                        <Label htmlFor="showCdac" className="flex-1">CDAC ($)</Label>
+                      </div>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.cdac}
+                        onChange={(e) => handleInputChange("cdac", e.target.value)}
+                        placeholder="0.00"
+                        data-testid="input-cdac"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="showMbmf"
+                          checked={formData.showMbmf}
+                          onCheckedChange={(checked) => handleInputChange("showMbmf", checked as boolean)}
+                          data-testid="checkbox-show-mbmf"
+                        />
+                        <Label htmlFor="showMbmf" className="flex-1">MBMF ($)</Label>
+                      </div>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.mbmf}
+                        onChange={(e) => handleInputChange("mbmf", e.target.value)}
+                        placeholder="0.00"
+                        data-testid="input-mbmf"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="showSinda"
+                          checked={formData.showSinda}
+                          onCheckedChange={(checked) => handleInputChange("showSinda", checked as boolean)}
+                          data-testid="checkbox-show-sinda"
+                        />
+                        <Label htmlFor="showSinda" className="flex-1">SINDA ($)</Label>
+                      </div>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.sinda}
+                        onChange={(e) => handleInputChange("sinda", e.target.value)}
+                        placeholder="0.00"
+                        data-testid="input-sinda"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -603,8 +676,8 @@ export default function AdminToolsPage() {
                 <div className="space-y-4">
                   {/* Company Header */}
                   <div className="text-center border-b pb-4">
-                    {companySettings?.logoUrl && (
-                      <img src={companySettings.logoUrl} alt="Company Logo" className="h-12 mx-auto mb-2" />
+                    {companySettings?.clockInLogoUrl && (
+                      <img src={companySettings.clockInLogoUrl} alt="Company Logo" className="h-12 mx-auto mb-2" />
                     )}
                     <h2 className="text-xl font-bold">{companySettings?.companyName || "Company Name"}</h2>
                     {companySettings?.companyAddress && (
@@ -639,7 +712,7 @@ export default function AdminToolsPage() {
                       <span className="ml-2 font-medium">{formData.employeeCode || "-"}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">NRIC:</span>
+                      <span className="text-muted-foreground">NRIC/FIN:</span>
                       <span className="ml-2 font-medium">{formData.nric || "-"}</span>
                     </div>
                     <div>
@@ -760,6 +833,24 @@ export default function AdminToolsPage() {
                         <div className="flex justify-between">
                           <span>Other Deductions</span>
                           <span className="text-red-600">-${formatCurrency(parseNumber(formData.otherDeductions))}</span>
+                        </div>
+                      )}
+                      {formData.showCdac && parseNumber(formData.cdac) > 0 && (
+                        <div className="flex justify-between">
+                          <span>CDAC</span>
+                          <span className="text-red-600">-${formatCurrency(parseNumber(formData.cdac))}</span>
+                        </div>
+                      )}
+                      {formData.showMbmf && parseNumber(formData.mbmf) > 0 && (
+                        <div className="flex justify-between">
+                          <span>MBMF</span>
+                          <span className="text-red-600">-${formatCurrency(parseNumber(formData.mbmf))}</span>
+                        </div>
+                      )}
+                      {formData.showSinda && parseNumber(formData.sinda) > 0 && (
+                        <div className="flex justify-between">
+                          <span>SINDA</span>
+                          <span className="text-red-600">-${formatCurrency(parseNumber(formData.sinda))}</span>
                         </div>
                       )}
                       <div className="flex justify-between font-semibold border-t pt-1">
