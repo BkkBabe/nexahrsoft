@@ -98,6 +98,27 @@ async function ensureSchemaMigrations(pool: Pool) {
     `);
     console.log("employee_monthly_remarks unique index ready");
     
+    // Add allow_employee_view column to payroll_records if it doesn't exist
+    const allowViewCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'payroll_records'
+        AND column_name = 'allow_employee_view'
+      )
+    `);
+    
+    if (!allowViewCheck.rows[0]?.exists) {
+      console.log("Adding allow_employee_view column to payroll_records...");
+      await pool.query(`
+        ALTER TABLE payroll_records 
+        ADD COLUMN allow_employee_view boolean NOT NULL DEFAULT false
+      `);
+      console.log("allow_employee_view column added");
+    } else {
+      console.log("allow_employee_view column already exists");
+    }
+    
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production
