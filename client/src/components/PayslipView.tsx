@@ -451,7 +451,7 @@ export default function PayslipView({
           sectionLetter="B"
           subtotal={{ label: "Total Earnings", value: totalEarnings }}
         >
-          <LineItem label="Basic Salary" value={record.basicSalary} showZero />
+          <LineItem label="Basic Salary" value={parseAmount(record.basicSalary) > 0 ? record.basicSalary : record.totSalary} showZero />
           <LineItem label="Monthly Variables" value={record.monthlyVariablesComponent} />
           {isEmployerView && (
             <>
