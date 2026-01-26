@@ -6912,6 +6912,196 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== CLAIMS ROUTES ====================
+  
+  // Employee: Submit a new claim
+  app.post("/api/claims", requireAuth, upload.single('receipt'), async (req: Request, res: Response) => {
+    try {
+      const user = req.session.user;
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const { claimType, amount, description, claimMonth, claimYear } = req.body;
+      
+      if (!claimType || !amount || !claimMonth || !claimYear) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      // Upload receipt to object storage if provided
+      let receiptUrl: string | null = null;
+      let receiptFileName: string | null = null;
+      
+      if (req.file) {
+        const objectStorage = new ObjectStorageService();
+        const timestamp = Date.now();
+        const ext = req.file.originalname.split('.').pop() || 'pdf';
+        const filePath = `claims/${user.id}/${timestamp}_receipt.${ext}`;
+        
+        receiptUrl = await objectStorage.uploadFile(
+          req.file.buffer,
+          filePath,
+          req.file.mimetype,
+          true // private file
+        );
+        receiptFileName = req.file.originalname;
+      }
+      
+      // Get employee details
+      const employee = await storage.getUser(user.id);
+      
+      const claim = await storage.createClaim({
+        userId: user.id,
+        employeeCode: employee?.employeeCode || null,
+        employeeName: employee?.name || user.name || 'Unknown',
+        claimType,
+        amount: amount.toString(),
+        description: description || null,
+        receiptUrl,
+        receiptFileName,
+        claimMonth: parseInt(claimMonth),
+        claimYear: parseInt(claimYear),
+        status: 'pending',
+      });
+      
+      res.json({ success: true, claim });
+    } catch (error) {
+      console.error("Submit claim error:", error);
+      res.status(500).json({ message: "Failed to submit claim" });
+    }
+  });
+  
+  // Employee: Get my claims
+  app.get("/api/claims", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = req.session.user;
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const claims = await storage.getClaimsByUser(user.id);
+      res.json({ claims });
+    } catch (error) {
+      console.error("Get claims error:", error);
+      res.status(500).json({ message: "Failed to fetch claims" });
+    }
+  });
+  
+  // Admin: Get all claims
+  app.get("/api/admin/claims", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { year, month } = req.query;
+      
+      let claimsData;
+      if (year && month) {
+        claimsData = await storage.getClaimsByPeriod(
+          parseInt(year as string),
+          parseInt(month as string)
+        );
+      } else {
+        claimsData = await storage.getAllClaims();
+      }
+      
+      res.json({ claims: claimsData });
+    } catch (error) {
+      console.error("Get all claims error:", error);
+      res.status(500).json({ message: "Failed to fetch claims" });
+    }
+  });
+  
+  // Admin: Get pending claims count
+  app.get("/api/admin/claims/pending-count", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const count = await storage.getPendingClaimsCount();
+      res.json({ count });
+    } catch (error) {
+      console.error("Get pending claims count error:", error);
+      res.status(500).json({ message: "Failed to fetch pending count" });
+    }
+  });
+  
+  // Admin: Get single claim
+  app.get("/api/admin/claims/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const claim = await storage.getClaim(id);
+      
+      if (!claim) {
+        return res.status(404).json({ message: "Claim not found" });
+      }
+      
+      res.json({ claim });
+    } catch (error) {
+      console.error("Get claim error:", error);
+      res.status(500).json({ message: "Failed to fetch claim" });
+    }
+  });
+  
+  // Admin: Update claim status (approve/reject)
+  app.patch("/api/admin/claims/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status, reviewComments } = req.body;
+      const adminUser = req.session.user;
+      
+      if (!status || !['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      
+      const updatedClaim = await storage.updateClaim(id, {
+        status,
+        reviewComments: reviewComments || null,
+        reviewedBy: adminUser?.id,
+        reviewedAt: new Date(),
+      });
+      
+      if (!updatedClaim) {
+        return res.status(404).json({ message: "Claim not found" });
+      }
+      
+      res.json({ success: true, claim: updatedClaim });
+    } catch (error) {
+      console.error("Update claim error:", error);
+      res.status(500).json({ message: "Failed to update claim" });
+    }
+  });
+  
+  // Get receipt file (signed URL for private files)
+  app.get("/api/claims/:id/receipt", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.session.user;
+      
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const claim = await storage.getClaim(id);
+      
+      if (!claim) {
+        return res.status(404).json({ message: "Claim not found" });
+      }
+      
+      // Check if user is admin or the claim owner
+      const isAdmin = user.role === 'admin' || user.role === 'super_admin' || user.role === 'viewonly_admin';
+      if (!isAdmin && claim.userId !== user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (!claim.receiptUrl) {
+        return res.status(404).json({ message: "No receipt attached" });
+      }
+      
+      const objectStorage = new ObjectStorageService();
+      const signedUrl = await objectStorage.getSignedUrl(claim.receiptUrl, 3600); // 1 hour expiry
+      
+      res.json({ url: signedUrl });
+    } catch (error) {
+      console.error("Get receipt error:", error);
+      res.status(500).json({ message: "Failed to get receipt" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

@@ -796,6 +796,29 @@ export class MemStorage implements IStorage {
   async getAllEmployeeDataAuditLogs(limit?: number): Promise<EmployeeDataAuditLog[]> {
     throw new Error("MemStorage getAllEmployeeDataAuditLogs not implemented");
   }
+  
+  // Claims stubs
+  async createClaim(claim: InsertClaim): Promise<Claim> {
+    throw new Error("MemStorage createClaim not implemented");
+  }
+  async updateClaim(id: string, updates: Partial<Claim>): Promise<Claim | undefined> {
+    throw new Error("MemStorage updateClaim not implemented");
+  }
+  async getClaim(id: string): Promise<Claim | undefined> {
+    throw new Error("MemStorage getClaim not implemented");
+  }
+  async getClaimsByUser(userId: string): Promise<Claim[]> {
+    throw new Error("MemStorage getClaimsByUser not implemented");
+  }
+  async getAllClaims(): Promise<Claim[]> {
+    throw new Error("MemStorage getAllClaims not implemented");
+  }
+  async getClaimsByPeriod(year: number, month: number): Promise<Claim[]> {
+    throw new Error("MemStorage getClaimsByPeriod not implemented");
+  }
+  async getPendingClaimsCount(): Promise<number> {
+    throw new Error("MemStorage getPendingClaimsCount not implemented");
+  }
 }
 
 // PostgreSQL-backed storage implementation
