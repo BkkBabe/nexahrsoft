@@ -35,6 +35,7 @@ import AdminEmployeePayrollPage from "@/pages/AdminEmployeePayrollPage";
 import AdminEmployeeDataPage from "@/pages/AdminEmployeeDataPage";
 import EmployeePayrollPage from "@/pages/EmployeePayrollPage";
 import AdminHistoricalPayrollImportPage from "@/pages/AdminHistoricalPayrollImportPage";
+import AdminClaimsPage from "@/pages/AdminClaimsPage";
 import UserLoginPage from "@/pages/UserLoginPage";
 import PendingApprovalPage from "@/pages/PendingApprovalPage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
@@ -222,6 +223,9 @@ function Router() {
       </Route>
       <Route path="/admin/leave">
         {() => <AdminProtected><AdminLeavePage /></AdminProtected>}
+      </Route>
+      <Route path="/admin/claims">
+        {() => <AdminProtected><AdminClaimsPage /></AdminProtected>}
       </Route>
       <Route path="/admin/reports">
         {() => <AdminProtected><AdminToolsPage /></AdminProtected>}
