@@ -94,25 +94,9 @@ export default function AdminClaimsPage() {
     },
   });
 
-  const viewReceiptMutation = useMutation({
-    mutationFn: async (claimId: string) => {
-      const res = await fetch(`/api/claims/${claimId}/receipt`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to get receipt");
-      return res.json();
-    },
-    onSuccess: (data: { url: string }) => {
-      window.open(data.url, "_blank");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const handleViewReceipt = (claimId: string) => {
+    window.open(`/api/claims/${claimId}/receipt`, "_blank");
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -208,7 +192,7 @@ export default function AdminClaimsPage() {
                     key={claim.id}
                     claim={claim}
                     onView={() => setSelectedClaim(claim)}
-                    onViewReceipt={() => viewReceiptMutation.mutate(claim.id)}
+                    onViewReceipt={() => handleViewReceipt(claim.id)}
                     getStatusBadge={getStatusBadge}
                   />
                 ))}
@@ -243,7 +227,7 @@ export default function AdminClaimsPage() {
                     key={claim.id}
                     claim={claim}
                     onView={() => setSelectedClaim(claim)}
-                    onViewReceipt={() => viewReceiptMutation.mutate(claim.id)}
+                    onViewReceipt={() => handleViewReceipt(claim.id)}
                     getStatusBadge={getStatusBadge}
                   />
                 ))}
@@ -301,8 +285,7 @@ export default function AdminClaimsPage() {
                     <Button
                       variant="outline"
                       className="w-full mt-1"
-                      onClick={() => viewReceiptMutation.mutate(selectedClaim.id)}
-                      disabled={viewReceiptMutation.isPending}
+                      onClick={() => handleViewReceipt(selectedClaim.id)}
                       data-testid="button-view-receipt"
                     >
                       <FileText className="h-4 w-4 mr-2" />

@@ -6915,45 +6915,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== CLAIMS ROUTES ====================
   
   // Employee: Submit a new claim
-  app.post("/api/claims", requireAuth, upload.single('receipt'), async (req: Request, res: Response) => {
+  app.post("/api/claims", upload.single('receipt'), async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+    
     try {
-      const user = req.session.user;
-      if (!user) {
-        return res.status(401).json({ message: "Not authenticated" });
+      const userId = req.session.userId;
+      
+      // Zod validation for claims
+      const claimSchema = z.object({
+        claimType: z.enum(["transport", "material_purchase", "other"]),
+        amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+          message: "Amount must be a positive number"
+        }),
+        description: z.string().optional(),
+        claimMonth: z.string().refine(val => {
+          const num = parseInt(val);
+          return num >= 1 && num <= 12;
+        }, { message: "Invalid month" }),
+        claimYear: z.string().refine(val => {
+          const num = parseInt(val);
+          return num >= 2020 && num <= 2100;
+        }, { message: "Invalid year" }),
+      });
+      
+      const validation = claimSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Validation failed", 
+          errors: validation.error.errors 
+        });
       }
       
-      const { claimType, amount, description, claimMonth, claimYear } = req.body;
-      
-      if (!claimType || !amount || !claimMonth || !claimYear) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
+      const { claimType, amount, description, claimMonth, claimYear } = validation.data;
       
       // Upload receipt to object storage if provided
       let receiptUrl: string | null = null;
       let receiptFileName: string | null = null;
       
       if (req.file) {
-        const objectStorage = new ObjectStorageService();
-        const timestamp = Date.now();
-        const ext = req.file.originalname.split('.').pop() || 'pdf';
-        const filePath = `claims/${user.id}/${timestamp}_receipt.${ext}`;
-        
-        receiptUrl = await objectStorage.uploadFile(
+        const objectStorageService = new ObjectStorageService();
+        receiptUrl = await objectStorageService.uploadPrivateFile(
           req.file.buffer,
-          filePath,
+          req.file.originalname,
           req.file.mimetype,
-          true // private file
+          `claims/${userId}`
         );
         receiptFileName = req.file.originalname;
       }
       
       // Get employee details
-      const employee = await storage.getUser(user.id);
+      const employee = await storage.getUser(userId);
       
       const claim = await storage.createClaim({
-        userId: user.id,
+        userId: userId,
         employeeCode: employee?.employeeCode || null,
-        employeeName: employee?.name || user.name || 'Unknown',
+        employeeName: employee?.name || 'Unknown',
         claimType,
         amount: amount.toString(),
         description: description || null,
@@ -6972,14 +6990,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Employee: Get my claims
-  app.get("/api/claims", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/claims", async (req: Request, res: Response) => {
+    if (!req.session?.userId || req.session.isAdmin) {
+      return res.status(401).json({ message: "User authentication required" });
+    }
+    
     try {
-      const user = req.session.user;
-      if (!user) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
-      
-      const claims = await storage.getClaimsByUser(user.id);
+      const claims = await storage.getClaimsByUser(req.session.userId);
       res.json({ claims });
     } catch (error) {
       console.error("Get claims error:", error);
@@ -7042,7 +7059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { status, reviewComments } = req.body;
-      const adminUser = req.session.user;
+      const adminUserId = req.session.userId;
       
       if (!status || !['approved', 'rejected'].includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
@@ -7051,7 +7068,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedClaim = await storage.updateClaim(id, {
         status,
         reviewComments: reviewComments || null,
-        reviewedBy: adminUser?.id,
+        reviewedBy: adminUserId,
         reviewedAt: new Date(),
       });
       
@@ -7066,15 +7083,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get receipt file (signed URL for private files)
-  app.get("/api/claims/:id/receipt", requireAuth, async (req: Request, res: Response) => {
+  // Get receipt file (stream private file) - accessible by employee owner or admin
+  app.get("/api/claims/:id/receipt", async (req: Request, res: Response) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
     try {
       const { id } = req.params;
-      const user = req.session.user;
-      
-      if (!user) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
+      const userId = req.session.userId;
+      const isAdmin = req.session.isAdmin;
       
       const claim = await storage.getClaim(id);
       
@@ -7083,8 +7101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is admin or the claim owner
-      const isAdmin = user.role === 'admin' || user.role === 'super_admin' || user.role === 'viewonly_admin';
-      if (!isAdmin && claim.userId !== user.id) {
+      if (!isAdmin && claim.userId !== userId) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -7092,10 +7109,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No receipt attached" });
       }
       
-      const objectStorage = new ObjectStorageService();
-      const signedUrl = await objectStorage.getSignedUrl(claim.receiptUrl, 3600); // 1 hour expiry
+      const objectStorageService = new ObjectStorageService();
+      const file = await objectStorageService.getPrivateFile(claim.receiptUrl);
       
-      res.json({ url: signedUrl });
+      if (!file) {
+        return res.status(404).json({ message: "Receipt file not found" });
+      }
+      
+      await objectStorageService.downloadObject(file, res);
     } catch (error) {
       console.error("Get receipt error:", error);
       res.status(500).json({ message: "Failed to get receipt" });

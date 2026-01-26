@@ -41,6 +41,11 @@ Preferred communication style: Simple, everyday language.
     - **Approval Workflow**: Admin approve/reject functionality that automatically updates leave balances when approved.
     - **Leave History Import**: Excel import for historical leave data with validation and error handling.
     - **Audit Logs**: Change tracking for all leave balance modifications.
+- **Claims Management**:
+    - **Employee Claims**: Submit expense claims with three types (Transport, Material Purchase, Other), amount, description, and optional receipt upload (PDF, JPEG, PNG up to 10MB).
+    - **Receipt Storage**: Receipts stored securely in Object Storage as private files with access control.
+    - **Admin Review**: View all claims filtered by month/year, pending claims highlighted, approve/reject with optional comments.
+    - **Claim Status Tracking**: Pending, Approved, Rejected statuses with full audit trail (reviewer, timestamp, comments).
 - **Admin Payroll Management**:
     - **Employee Payroll Settings**: Configuration of individual employee profiles including residency status, DOB, salary, and recurring salary adjustments with full CRUD and audit trails.
     - **Payroll Generation**: Automatic payroll generation from attendance records, supporting CPF calculations (Singapore-specific), overtime, and various pay types. Features idempotency checks and handles special cases for CPF.
