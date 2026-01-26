@@ -878,3 +878,40 @@ export const insertManualPayslipAuditLogSchema = createInsertSchema(manualPaysli
 
 export type InsertManualPayslipAuditLog = z.infer<typeof insertManualPayslipAuditLogSchema>;
 export type ManualPayslipAuditLog = typeof manualPayslipAuditLogs.$inferSelect;
+
+// Claims System
+export const claimTypes = ["transport", "material_purchase", "other"] as const;
+export type ClaimType = typeof claimTypes[number];
+
+export const claimTypeLabels: Record<ClaimType, string> = {
+  transport: "Transport",
+  material_purchase: "Material Purchase",
+  other: "Other",
+};
+
+export const claims = pgTable("claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  employeeCode: text("employee_code"), // Denormalized for quick reference
+  employeeName: text("employee_name"), // Denormalized for quick reference
+  claimType: text("claim_type").notNull(), // 'transport', 'material_purchase', 'other'
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description"), // Optional description of the claim
+  receiptUrl: text("receipt_url"), // URL to uploaded receipt file
+  receiptFileName: text("receipt_file_name"), // Original file name
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected'
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewComments: text("review_comments"),
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+  claimMonth: integer("claim_month").notNull(), // Month the claim is for (1-12)
+  claimYear: integer("claim_year").notNull(), // Year the claim is for
+});
+
+export const insertClaimSchema = createInsertSchema(claims).omit({
+  id: true,
+  submittedAt: true,
+});
+
+export type InsertClaim = z.infer<typeof insertClaimSchema>;
+export type Claim = typeof claims.$inferSelect;

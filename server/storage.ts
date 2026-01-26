@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog, type PayrollImportBatch, type InsertPayrollImportBatch, type ManualPayslip, type InsertManualPayslip, type ManualPayslipAuditLog, type InsertManualPayslipAuditLog } from "@shared/schema";
+import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog, type PayrollImportBatch, type InsertPayrollImportBatch, type ManualPayslip, type InsertManualPayslip, type ManualPayslipAuditLog, type InsertManualPayslipAuditLog, type Claim, type InsertClaim } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches, manualPayslips, manualPayslipAuditLogs } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches, manualPayslips, manualPayslipAuditLogs, claims } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, asc, isNull, not, like, sql, inArray } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -195,6 +195,15 @@ export interface IStorage {
   getPayrollImportBatches(): Promise<PayrollImportBatch[]>;
   getPayrollImportBatchByPeriod(year: number, month: number): Promise<PayrollImportBatch | undefined>;
   checkDuplicatePayrollRecord(employeeCode: string, year: number, month: number): Promise<boolean>;
+  
+  // Claims methods
+  createClaim(claim: InsertClaim): Promise<Claim>;
+  updateClaim(id: string, updates: Partial<Claim>): Promise<Claim | undefined>;
+  getClaim(id: string): Promise<Claim | undefined>;
+  getClaimsByUser(userId: string): Promise<Claim[]>;
+  getAllClaims(): Promise<Claim[]>;
+  getClaimsByPeriod(year: number, month: number): Promise<Claim[]>;
+  getPendingClaimsCount(): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -2225,6 +2234,58 @@ export class PgStorage implements IStorage {
       ))
       .limit(1);
     return !!existing;
+  }
+  
+  // Claims methods
+  async createClaim(claim: InsertClaim): Promise<Claim> {
+    const [created] = await db.insert(claims).values(claim).returning();
+    return created;
+  }
+  
+  async updateClaim(id: string, updates: Partial<Claim>): Promise<Claim | undefined> {
+    const [updated] = await db.update(claims)
+      .set(updates)
+      .where(eq(claims.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async getClaim(id: string): Promise<Claim | undefined> {
+    const [claim] = await db.select()
+      .from(claims)
+      .where(eq(claims.id, id))
+      .limit(1);
+    return claim;
+  }
+  
+  async getClaimsByUser(userId: string): Promise<Claim[]> {
+    return await db.select()
+      .from(claims)
+      .where(eq(claims.userId, userId))
+      .orderBy(desc(claims.submittedAt));
+  }
+  
+  async getAllClaims(): Promise<Claim[]> {
+    return await db.select()
+      .from(claims)
+      .orderBy(desc(claims.submittedAt));
+  }
+  
+  async getClaimsByPeriod(year: number, month: number): Promise<Claim[]> {
+    return await db.select()
+      .from(claims)
+      .where(and(
+        eq(claims.claimYear, year),
+        eq(claims.claimMonth, month)
+      ))
+      .orderBy(desc(claims.submittedAt));
+  }
+  
+  async getPendingClaimsCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(claims)
+      .where(eq(claims.status, 'pending'));
+    return Number(result[0]?.count || 0);
   }
 }
 
