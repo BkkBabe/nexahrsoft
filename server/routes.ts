@@ -7083,6 +7083,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get approved claims for payslip (accessible by admin or employee viewing own payslip)
+  app.get("/api/payslip/claims", async (req: Request, res: Response) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
+    try {
+      const { userId, year, month } = req.query;
+      const isAdmin = req.session.isAdmin;
+      const sessionUserId = req.session.userId;
+      
+      if (!userId || !year || !month) {
+        return res.status(400).json({ message: "userId, year, and month are required" });
+      }
+      
+      // Employees can only view their own claims
+      if (!isAdmin && userId !== sessionUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const approvedClaims = await storage.getApprovedClaimsForPayslip(
+        userId as string,
+        parseInt(year as string),
+        parseInt(month as string)
+      );
+      
+      res.json({ claims: approvedClaims });
+    } catch (error) {
+      console.error("Get payslip claims error:", error);
+      res.status(500).json({ message: "Failed to fetch claims" });
+    }
+  });
+
   // Get receipt file (stream private file) - accessible by employee owner or admin
   app.get("/api/claims/:id/receipt", async (req: Request, res: Response) => {
     if (!req.session?.userId) {

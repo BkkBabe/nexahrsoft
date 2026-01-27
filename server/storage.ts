@@ -204,6 +204,7 @@ export interface IStorage {
   getAllClaims(): Promise<Claim[]>;
   getClaimsByPeriod(year: number, month: number): Promise<Claim[]>;
   getPendingClaimsCount(): Promise<number>;
+  getApprovedClaimsForPayslip(userId: string, year: number, month: number): Promise<Claim[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -818,6 +819,9 @@ export class MemStorage implements IStorage {
   }
   async getPendingClaimsCount(): Promise<number> {
     throw new Error("MemStorage getPendingClaimsCount not implemented");
+  }
+  async getApprovedClaimsForPayslip(userId: string, year: number, month: number): Promise<Claim[]> {
+    throw new Error("MemStorage getApprovedClaimsForPayslip not implemented");
   }
 }
 
@@ -2309,6 +2313,18 @@ export class PgStorage implements IStorage {
       .from(claims)
       .where(eq(claims.status, 'pending'));
     return Number(result[0]?.count || 0);
+  }
+  
+  async getApprovedClaimsForPayslip(userId: string, year: number, month: number): Promise<Claim[]> {
+    return await db.select()
+      .from(claims)
+      .where(and(
+        eq(claims.userId, userId),
+        eq(claims.claimYear, year),
+        eq(claims.claimMonth, month),
+        eq(claims.status, 'approved')
+      ))
+      .orderBy(desc(claims.submittedAt));
   }
 }
 

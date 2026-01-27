@@ -524,6 +524,9 @@ export const payrollRecords = pgTable("payroll_records", {
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"), // total before deductions
   nett: numeric("nett", { precision: 12, scale: 2 }).notNull().default("0"), // final take-home pay
   
+  // Claims Reimbursement (approved claims added to payslip)
+  claimsReimbursement: numeric("claims_reimbursement", { precision: 12, scale: 2 }).notNull().default("0"), // Total approved claims
+  
   // Payment Info
   payMode: text("pay_mode"), // 'BANK DISK', 'CASH', 'CHEQUE'
   chequeNo: text("cheque_no"),
