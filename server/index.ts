@@ -253,6 +253,36 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("claims_audit_log FK constraints dropped (if existed)");
     }
     
+    // Drop FK constraints from claims table if they exist (allows flexibility with user references)
+    const claimsTableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'claims'
+      )
+    `);
+    
+    if (claimsTableCheck.rows[0]?.exists) {
+      console.log("Dropping claims table FK constraints...");
+      await pool.query(`
+        ALTER TABLE claims 
+        DROP CONSTRAINT IF EXISTS claims_user_id_users_id_fk
+      `);
+      await pool.query(`
+        ALTER TABLE claims 
+        DROP CONSTRAINT IF EXISTS claims_user_id_fkey
+      `);
+      await pool.query(`
+        ALTER TABLE claims 
+        DROP CONSTRAINT IF EXISTS claims_reviewed_by_users_id_fk
+      `);
+      await pool.query(`
+        ALTER TABLE claims 
+        DROP CONSTRAINT IF EXISTS claims_reviewed_by_fkey
+      `);
+      console.log("claims table FK constraints dropped (if existed)");
+    }
+    
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production

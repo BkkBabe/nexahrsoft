@@ -894,7 +894,7 @@ export const claimTypeLabels: Record<ClaimType, string> = {
 
 export const claims = pgTable("claims", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull(), // Employee who submitted the claim
   employeeCode: text("employee_code"), // Denormalized for quick reference
   employeeName: text("employee_name"), // Denormalized for quick reference
   claimType: text("claim_type").notNull(), // 'transport', 'material_purchase', 'other'
@@ -903,7 +903,7 @@ export const claims = pgTable("claims", {
   receiptUrl: text("receipt_url"), // URL to uploaded receipt file
   receiptFileName: text("receipt_file_name"), // Original file name
   status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected'
-  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedBy: varchar("reviewed_by"), // Admin who reviewed (no FK for flexibility)
   reviewedAt: timestamp("reviewed_at"),
   reviewComments: text("review_comments"),
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
