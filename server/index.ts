@@ -203,6 +203,48 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("manual_payslip_audit_logs table already exists");
     }
     
+    // Create claims_audit_log table if it doesn't exist
+    const claimsAuditLogCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'claims_audit_log'
+      )
+    `);
+    
+    if (!claimsAuditLogCheck.rows[0]?.exists) {
+      console.log("Creating claims_audit_log table...");
+      await pool.query(`
+        CREATE TABLE claims_audit_log (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          claim_id varchar NOT NULL,
+          user_id varchar NOT NULL,
+          employee_code text,
+          employee_name text,
+          claim_type text NOT NULL,
+          amount numeric(10,2) NOT NULL,
+          description text,
+          claim_month integer NOT NULL,
+          claim_year integer NOT NULL,
+          action text NOT NULL,
+          previous_status text,
+          performed_by varchar NOT NULL,
+          performed_by_name text,
+          comments text,
+          performed_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+      console.log("claims_audit_log table created");
+    } else {
+      console.log("claims_audit_log table already exists");
+      // Drop foreign key constraint if it exists (allows master admin to log actions)
+      await pool.query(`
+        ALTER TABLE claims_audit_log 
+        DROP CONSTRAINT IF EXISTS claims_audit_log_performed_by_users_id_fk
+      `);
+      console.log("claims_audit_log FK constraint dropped (if existed)");
+    }
+    
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production
