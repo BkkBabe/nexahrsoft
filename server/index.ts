@@ -237,12 +237,20 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("claims_audit_log table created");
     } else {
       console.log("claims_audit_log table already exists");
-      // Drop foreign key constraint if it exists (allows master admin to log actions)
+      // Drop foreign key constraints if they exist (allows master admin to log actions)
       await pool.query(`
         ALTER TABLE claims_audit_log 
         DROP CONSTRAINT IF EXISTS claims_audit_log_performed_by_users_id_fk
       `);
-      console.log("claims_audit_log FK constraint dropped (if existed)");
+      await pool.query(`
+        ALTER TABLE claims_audit_log 
+        DROP CONSTRAINT IF EXISTS claims_audit_log_performed_by_fkey
+      `);
+      await pool.query(`
+        ALTER TABLE claims_audit_log 
+        DROP CONSTRAINT IF EXISTS claims_audit_log_user_id_fkey
+      `);
+      console.log("claims_audit_log FK constraints dropped (if existed)");
     }
     
     log("Schema migrations verified successfully");
