@@ -28,6 +28,19 @@ interface PayrollAdjustment {
   status: string;
 }
 
+interface ApprovedClaim {
+  id: string;
+  userId: string;
+  employeeCode: string | null;
+  employeeName: string | null;
+  claimType: string;
+  amount: string;
+  description: string | null;
+  status: string;
+  claimMonth: number;
+  claimYear: number;
+}
+
 
 interface PayslipViewProps {
   record: PayrollRecord;
@@ -253,11 +266,30 @@ export default function PayslipView({
     enabled: !!record?.userId,
   });
 
+  const { data: claimsData } = useQuery<{ claims: ApprovedClaim[] }>({
+    queryKey: ['/api/payslip/claims', record?.userId, record?.payPeriodYear, record?.payPeriodMonth],
+    queryFn: async () => {
+      if (!record?.userId) return { claims: [] };
+      const res = await fetch(
+        `/api/payslip/claims?userId=${record.userId}&year=${record.payPeriodYear}&month=${record.payPeriodMonth}`,
+        { credentials: 'include' }
+      );
+      if (!res.ok) return { claims: [] };
+      return res.json();
+    },
+    enabled: !!record?.userId,
+  });
+
   const adjustments = adjustmentsData?.adjustments || [];
   const totalAdjustments = adjustments.reduce((sum, adj) => {
     const amount = parseAmount(adj.amount);
     const isDeduction = adj.adjustmentType === 'deduction';
     return sum + (isDeduction ? -amount : amount);
+  }, 0);
+
+  const approvedClaims = claimsData?.claims || [];
+  const totalClaimsReimbursement = approvedClaims.reduce((sum, claim) => {
+    return sum + parseAmount(claim.amount);
   }, 0);
 
   const totalOvertimeAllowances =
@@ -598,6 +630,31 @@ export default function PayslipView({
           </div>
         </Section>
 
+        {/* Section F: Claims Reimbursement */}
+        {approvedClaims.length > 0 && (
+          <Section 
+            title="Claims Reimbursement" 
+            sectionLetter="F"
+            subtotal={{ label: "Total Claims", value: totalClaimsReimbursement }}
+          >
+            {approvedClaims.map((claim) => {
+              const claimTypeLabel = claim.claimType === 'transport' ? 'Transport' 
+                : claim.claimType === 'material_purchase' ? 'Material Purchase' 
+                : 'Other';
+              const label = claim.description 
+                ? `${claimTypeLabel}: ${claim.description}` 
+                : claimTypeLabel;
+              return (
+                <LineItem
+                  key={claim.id}
+                  label={label}
+                  value={claim.amount}
+                />
+              );
+            })}
+          </Section>
+        )}
+
         {/* Employer Contributions (shown only in employer view) */}
         {isEmployerView && totalEmployerContributions > 0 && (
           <>
@@ -620,8 +677,8 @@ export default function PayslipView({
 
         <Separator className="print:my-1" />
 
-        {/* Section F: Payment Summary */}
-        <Section title="Payment Summary" sectionLetter="F">
+        {/* Section G: Payment Summary */}
+        <Section title="Payment Summary" sectionLetter="G">
           <div className="space-y-2 print:space-y-1">
             <div className="flex justify-between items-center">
               <span className="text-sm print:text-xs">Gross Wages</span>
@@ -645,6 +702,14 @@ export default function PayslipView({
                 </span>
               </div>
             )}
+            {totalClaimsReimbursement > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm print:text-xs">Add: Claims Reimbursement</span>
+                <span className="font-mono text-green-600 print:text-xs">
+                  +${formatCurrency(totalClaimsReimbursement)}
+                </span>
+              </div>
+            )}
             <Separator className="print:my-0.5" />
             <div className="flex justify-between items-center pt-1 print:pt-0.5">
               <span className="text-lg font-bold print:text-sm">Net Pay</span>
@@ -652,7 +717,7 @@ export default function PayslipView({
                 className="font-mono text-2xl font-bold text-primary print:text-base"
                 data-testid="text-net-pay"
               >
-                ${formatCurrency(parseAmount(record.nett) + totalAdjustments)}
+                ${formatCurrency(parseAmount(record.nett) + totalAdjustments + totalClaimsReimbursement)}
               </span>
             </div>
 
@@ -666,11 +731,11 @@ export default function PayslipView({
                     className="font-mono text-lg font-semibold print:text-sm"
                     data-testid="text-total-cost"
                   >
-                    ${formatCurrency(parseAmount(record.grossWages) + totalEmployerContributions + totalAdjustments)}
+                    ${formatCurrency(parseAmount(record.grossWages) + totalEmployerContributions + totalAdjustments + totalClaimsReimbursement)}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 print:text-[10px] print:mt-0.5">
-                  (Gross Wages + Employer CPF)
+                  (Gross Wages + Employer CPF + Claims)
                 </p>
               </div>
             )}
