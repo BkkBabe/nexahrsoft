@@ -7070,6 +7070,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid status" });
       }
       
+      // Get claim before updating for audit log
+      const existingClaim = await storage.getClaim(id);
+      if (!existingClaim) {
+        return res.status(404).json({ message: "Claim not found" });
+      }
+      
       const updatedClaim = await storage.updateClaim(id, {
         status,
         reviewComments: reviewComments || null,
@@ -7077,14 +7083,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviewedAt: new Date(),
       });
       
-      if (!updatedClaim) {
-        return res.status(404).json({ message: "Claim not found" });
-      }
+      // Log the action
+      const admin = await storage.getUser(adminUserId!);
+      await storage.createClaimsAuditLog({
+        claimId: id,
+        userId: existingClaim.userId,
+        employeeCode: existingClaim.employeeCode || null,
+        employeeName: existingClaim.employeeName || null,
+        claimType: existingClaim.claimType,
+        amount: existingClaim.amount,
+        description: existingClaim.description || null,
+        claimMonth: existingClaim.claimMonth,
+        claimYear: existingClaim.claimYear,
+        action: status,
+        previousStatus: existingClaim.status,
+        performedBy: adminUserId!,
+        performedByName: admin?.name || null,
+        comments: reviewComments || null,
+      });
       
       res.json({ success: true, claim: updatedClaim });
     } catch (error) {
       console.error("Update claim error:", error);
       res.status(500).json({ message: "Failed to update claim" });
+    }
+  });
+  
+  // Admin: Delete claim with audit trail
+  app.delete("/api/admin/claims/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminUserId = req.session.userId;
+      
+      // Get claim before deleting for audit log
+      const claim = await storage.getClaim(id);
+      if (!claim) {
+        return res.status(404).json({ message: "Claim not found" });
+      }
+      
+      // Log the deletion first
+      const admin = await storage.getUser(adminUserId!);
+      await storage.createClaimsAuditLog({
+        claimId: id,
+        userId: claim.userId,
+        employeeCode: claim.employeeCode || null,
+        employeeName: claim.employeeName || null,
+        claimType: claim.claimType,
+        amount: claim.amount,
+        description: claim.description || null,
+        claimMonth: claim.claimMonth,
+        claimYear: claim.claimYear,
+        action: 'deleted',
+        previousStatus: claim.status,
+        performedBy: adminUserId!,
+        performedByName: admin?.name || null,
+        comments: reason || null,
+      });
+      
+      // Delete the claim
+      await storage.deleteClaim(id);
+      
+      res.json({ success: true, message: "Claim deleted successfully" });
+    } catch (error) {
+      console.error("Delete claim error:", error);
+      res.status(500).json({ message: "Failed to delete claim" });
+    }
+  });
+  
+  // Admin: Get claims audit log
+  app.get("/api/admin/claims/audit-log", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { month, year } = req.query;
+      
+      const auditLogs = await storage.getClaimsAuditLogs(
+        month ? parseInt(month as string) : undefined,
+        year ? parseInt(year as string) : undefined
+      );
+      
+      res.json(auditLogs);
+    } catch (error) {
+      console.error("Get claims audit log error:", error);
+      res.status(500).json({ message: "Failed to fetch audit log" });
     }
   });
   

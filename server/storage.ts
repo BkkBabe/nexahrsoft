@@ -1,7 +1,7 @@
 import { type User, type InsertUser, type CompanySettings, type AttendanceRecord, type InsertAttendanceRecord, type UserSession, type InsertUserSession, type LoginChallenge, type InsertLoginChallenge, type PayslipRecord, type InsertPayslipRecord, type LeaveBalance, type InsertLeaveBalance, type LeaveApplication, type InsertLeaveApplication, type EmailLog, type InsertEmailLog, type AuditLog, type InsertAuditLog, type PasswordOverrideLog, type InsertPasswordOverrideLog, type PayrollRecord, type InsertPayrollRecord, type LeaveHistory, type InsertLeaveHistory, type LeaveAuditLog, type InsertLeaveAuditLog, type PayrollLoanAccount, type InsertPayrollLoanAccount, type PayrollLoanRepayment, type InsertPayrollLoanRepayment, type PayrollAuditLog, type InsertPayrollAuditLog, type DailyAttendanceSummary, type InsertDailyAttendanceSummary, type PayrollAdjustment, type InsertPayrollAdjustment, type PayrollAdjustmentAuditLog, type InsertPayrollAdjustmentAuditLog, type EmployeeSalaryAdjustment, type InsertEmployeeSalaryAdjustment, type AttendanceAdjustment, type InsertAttendanceAdjustment, type EmployeeMonthlyRemark, type InsertEmployeeMonthlyRemark, type EmployeeDataAuditLog, type InsertEmployeeDataAuditLog, type PayrollImportBatch, type InsertPayrollImportBatch, type ManualPayslip, type InsertManualPayslip, type ManualPayslipAuditLog, type InsertManualPayslipAuditLog, type Claim, type InsertClaim } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches, manualPayslips, manualPayslipAuditLogs, claims } from "@shared/schema";
+import { users, companySettings, attendanceRecords, userSessions, loginChallenges, payslipRecords, leaveBalances, leaveApplications, emailLogs, auditLogs, passwordOverrideLogs, payrollRecords, leaveHistory, leaveAuditLogs, payrollLoanAccounts, payrollLoanRepayments, payrollAuditLogs, dailyAttendanceSummary, payrollAdjustments, payrollAdjustmentAuditLogs, employeeSalaryAdjustments, attendanceAdjustments, employeeMonthlyRemarks, employeeDataAuditLogs, payrollImportBatches, manualPayslips, manualPayslipAuditLogs, claims, claimsAuditLog } from "@shared/schema";
 import { eq, or, and, gte, lte, lt, desc, asc, isNull, not, like, sql, inArray } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -205,6 +205,24 @@ export interface IStorage {
   getClaimsByPeriod(year: number, month: number): Promise<Claim[]>;
   getPendingClaimsCount(): Promise<number>;
   getApprovedClaimsForPayslip(userId: string, year: number, month: number): Promise<Claim[]>;
+  deleteClaim(id: string): Promise<void>;
+  createClaimsAuditLog(log: {
+    claimId: string;
+    userId: string;
+    employeeCode: string | null;
+    employeeName: string | null;
+    claimType: string;
+    amount: string;
+    description: string | null;
+    claimMonth: number;
+    claimYear: number;
+    action: string;
+    previousStatus: string | null;
+    performedBy: string;
+    performedByName: string | null;
+    comments: string | null;
+  }): Promise<void>;
+  getClaimsAuditLogs(month?: number, year?: number): Promise<any[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -2325,6 +2343,44 @@ export class PgStorage implements IStorage {
         eq(claims.status, 'approved')
       ))
       .orderBy(desc(claims.submittedAt));
+  }
+  
+  async deleteClaim(id: string): Promise<void> {
+    await db.delete(claims).where(eq(claims.id, id));
+  }
+  
+  async createClaimsAuditLog(log: {
+    claimId: string;
+    userId: string;
+    employeeCode: string | null;
+    employeeName: string | null;
+    claimType: string;
+    amount: string;
+    description: string | null;
+    claimMonth: number;
+    claimYear: number;
+    action: string;
+    previousStatus: string | null;
+    performedBy: string;
+    performedByName: string | null;
+    comments: string | null;
+  }): Promise<void> {
+    await db.insert(claimsAuditLog).values(log);
+  }
+  
+  async getClaimsAuditLogs(month?: number, year?: number): Promise<any[]> {
+    if (month && year) {
+      return await db.select()
+        .from(claimsAuditLog)
+        .where(and(
+          eq(claimsAuditLog.claimMonth, month),
+          eq(claimsAuditLog.claimYear, year)
+        ))
+        .orderBy(desc(claimsAuditLog.performedAt));
+    }
+    return await db.select()
+      .from(claimsAuditLog)
+      .orderBy(desc(claimsAuditLog.performedAt));
   }
 }
 

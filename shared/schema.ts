@@ -918,3 +918,25 @@ export const insertClaimSchema = createInsertSchema(claims).omit({
 
 export type InsertClaim = z.infer<typeof insertClaimSchema>;
 export type Claim = typeof claims.$inferSelect;
+
+// Claims Audit Log - tracks all changes to claims (approvals, rejections, deletions)
+export const claimsAuditLog = pgTable("claims_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  claimId: varchar("claim_id").notNull(), // Original claim ID (may not exist if deleted)
+  userId: varchar("user_id").notNull(), // Employee who submitted the claim
+  employeeCode: text("employee_code"),
+  employeeName: text("employee_name"),
+  claimType: text("claim_type").notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description"),
+  claimMonth: integer("claim_month").notNull(),
+  claimYear: integer("claim_year").notNull(),
+  action: text("action").notNull(), // 'approved', 'rejected', 'deleted'
+  previousStatus: text("previous_status"), // Status before the action
+  performedBy: varchar("performed_by").notNull().references(() => users.id),
+  performedByName: text("performed_by_name"),
+  comments: text("comments"), // Optional reason/comments for the action
+  performedAt: timestamp("performed_at").notNull().defaultNow(),
+});
+
+export type ClaimsAuditLog = typeof claimsAuditLog.$inferSelect;
