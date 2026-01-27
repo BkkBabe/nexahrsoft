@@ -7083,8 +7083,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviewedAt: new Date(),
       });
       
-      // Log the action
-      const admin = await storage.getUser(adminUserId!);
+      // Log the action - handle master admin case
+      let performedByName = "Master Admin";
+      if (adminUserId !== "admin") {
+        const admin = await storage.getUser(adminUserId!);
+        performedByName = admin?.name || "Unknown Admin";
+      }
+      
       await storage.createClaimsAuditLog({
         claimId: id,
         userId: existingClaim.userId,
@@ -7098,7 +7103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: status,
         previousStatus: existingClaim.status,
         performedBy: adminUserId!,
-        performedByName: admin?.name || null,
+        performedByName,
         comments: reviewComments || null,
       });
       
@@ -7153,9 +7158,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log("Creating audit log:", auditLogData);
       
-      await storage.createClaimsAuditLog(auditLogData);
-      
-      console.log("Audit log created successfully");
+      try {
+        await storage.createClaimsAuditLog(auditLogData);
+        console.log("Audit log created successfully");
+      } catch (auditError) {
+        console.error("Failed to create audit log:", auditError);
+        throw new Error("Failed to create audit log for deletion");
+      }
       
       // Delete the claim
       await storage.deleteClaim(id);
