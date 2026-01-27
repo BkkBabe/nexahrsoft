@@ -7116,15 +7116,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { reason } = req.body;
       const adminUserId = req.session.userId;
       
+      console.log("Delete claim request:", { id, reason, adminUserId });
+      
       // Get claim before deleting for audit log
       const claim = await storage.getClaim(id);
       if (!claim) {
         return res.status(404).json({ message: "Claim not found" });
       }
       
+      console.log("Found claim to delete:", claim);
+      
+      // For master admin, use "Master Admin" as the name
+      let performedByName = "Master Admin";
+      if (adminUserId !== "admin") {
+        const admin = await storage.getUser(adminUserId!);
+        performedByName = admin?.name || "Unknown Admin";
+      }
+      
       // Log the deletion first
-      const admin = await storage.getUser(adminUserId!);
-      await storage.createClaimsAuditLog({
+      const auditLogData = {
         claimId: id,
         userId: claim.userId,
         employeeCode: claim.employeeCode || null,
@@ -7137,12 +7147,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: 'deleted',
         previousStatus: claim.status,
         performedBy: adminUserId!,
-        performedByName: admin?.name || null,
+        performedByName,
         comments: reason || null,
-      });
+      };
+      
+      console.log("Creating audit log:", auditLogData);
+      
+      await storage.createClaimsAuditLog(auditLogData);
+      
+      console.log("Audit log created successfully");
       
       // Delete the claim
       await storage.deleteClaim(id);
+      
+      console.log("Claim deleted successfully");
       
       res.json({ success: true, message: "Claim deleted successfully" });
     } catch (error) {
