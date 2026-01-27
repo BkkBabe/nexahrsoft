@@ -1070,7 +1070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/users/create", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        employeeCode: z.string().min(1, "Employee code is required"),
+        employeeCode: z.string().optional(),
         name: z.string().min(1, "Name is required"),
         email: z.string().email("Valid email is required"),
         department: z.string().optional(),
@@ -1085,23 +1085,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const data = schema.parse(req.body);
       
-      // Check if user already exists by email or employee code
+      // Check if user already exists by email
       const existingByEmail = await storage.getUserByEmail(data.email);
       if (existingByEmail) {
         return res.status(400).json({ message: "User with this email already exists" });
       }
       
-      const existingByCode = await storage.getUserByEmployeeCode(data.employeeCode);
-      if (existingByCode) {
-        return res.status(400).json({ message: "User with this employee code already exists" });
+      // Check if employee code exists (only if provided)
+      if (data.employeeCode && data.employeeCode.trim()) {
+        const existingByCode = await storage.getUserByEmployeeCode(data.employeeCode);
+        if (existingByCode) {
+          return res.status(400).json({ message: "User with this employee code already exists" });
+        }
       }
 
-      // Generate username from employee code
-      const username = data.employeeCode.toLowerCase();
+      // Generate username from employee code or email prefix
+      const employeeCode = data.employeeCode?.trim() || null;
+      const username = employeeCode ? employeeCode.toLowerCase() : data.email.split('@')[0].toLowerCase();
       
-      // Generate initial password (employee code + 4 random chars)
+      // Generate initial password (employee code or email prefix + 4 random chars)
       const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const initialPassword = `${data.employeeCode}${randomSuffix}`;
+      const passwordBase = employeeCode || data.email.split('@')[0];
+      const initialPassword = `${passwordBase}${randomSuffix}`;
       const passwordHash = await bcrypt.hash(initialPassword, 10);
 
       const user = await storage.createUser({
@@ -1111,7 +1116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         passwordHash,
         role: data.role || "user",
         isApproved: true,
-        employeeCode: data.employeeCode,
+        employeeCode: employeeCode,
         department: data.department || null,
         designation: data.designation || null,
         section: data.section || null,
