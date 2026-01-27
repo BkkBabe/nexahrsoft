@@ -933,7 +933,7 @@ export const claimsAuditLog = pgTable("claims_audit_log", {
   claimYear: integer("claim_year").notNull(),
   action: text("action").notNull(), // 'approved', 'rejected', 'deleted'
   previousStatus: text("previous_status"), // Status before the action
-  performedBy: varchar("performed_by").notNull().references(() => users.id),
+  performedBy: varchar("performed_by").notNull(), // Can be user ID or "admin" for master admin
   performedByName: text("performed_by_name"),
   comments: text("comments"), // Optional reason/comments for the action
   performedAt: timestamp("performed_at").notNull().defaultNow(),
