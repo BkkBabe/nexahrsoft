@@ -204,24 +204,26 @@ export default function AdminClaimsPage() {
   return (
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold" data-testid="text-page-title">All Claims</h1>
+              <p className="text-muted-foreground">Review and manage employee expense claims</p>
+            </div>
+            {pendingCount > 0 && (
+              <Badge variant="destructive" className="text-sm">
+                {pendingCount} Pending
+              </Badge>
+            )}
+          </div>
           <Button 
-            variant="ghost" 
-            size="icon"
+            variant="outline"
             onClick={() => setLocation("/admin")}
             data-testid="button-back"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Dashboard
           </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">All Claims</h1>
-            <p className="text-muted-foreground">Review and manage employee expense claims</p>
-          </div>
-          {pendingCount > 0 && (
-            <Badge variant="destructive" className="text-sm">
-              {pendingCount} Pending
-            </Badge>
-          )}
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
