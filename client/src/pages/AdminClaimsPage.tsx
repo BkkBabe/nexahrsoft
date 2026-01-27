@@ -1,8 +1,20 @@
 import { useState } from "react";
-import { Receipt, Clock, CheckCircle, XCircle, Eye, Filter, ArrowLeft, FileText, ExternalLink } from "lucide-react";
+import { Receipt, Clock, CheckCircle, XCircle, Eye, Filter, ArrowLeft, FileText, ExternalLink, Trash2, History, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +54,25 @@ const MONTHS = [
   { value: "12", label: "December" },
 ];
 
+interface ClaimsAuditLog {
+  id: string;
+  claimId: string;
+  userId: string;
+  employeeCode: string | null;
+  employeeName: string | null;
+  claimType: string;
+  amount: string;
+  description: string | null;
+  claimMonth: number;
+  claimYear: number;
+  action: string;
+  previousStatus: string | null;
+  performedBy: string;
+  performedByName: string | null;
+  comments: string | null;
+  performedAt: string;
+}
+
 export default function AdminClaimsPage() {
   const [, setLocation] = useLocation();
   const currentDate = new Date();
@@ -49,6 +80,10 @@ export default function AdminClaimsPage() {
   const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
   const [reviewComments, setReviewComments] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [claimToDelete, setClaimToDelete] = useState<Claim | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [activeTab, setActiveTab] = useState("claims");
   const { toast } = useToast();
 
   const years = Array.from({ length: 5 }, (_, i) => String(currentDate.getFullYear() - i));
@@ -67,6 +102,55 @@ export default function AdminClaimsPage() {
   const { data: pendingCountData } = useQuery<{ count: number }>({
     queryKey: ["/api/admin/claims/pending-count"],
   });
+
+  const { data: auditLogsData, isLoading: auditLogsLoading } = useQuery<ClaimsAuditLog[]>({
+    queryKey: ["/api/admin/claims/audit-log", selectedYear, selectedMonth],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/claims/audit-log?year=${selectedYear}&month=${selectedMonth}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch audit logs");
+      return res.json();
+    },
+    enabled: activeTab === "audit",
+  });
+
+  const deleteClaimMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return apiRequest("DELETE", `/api/admin/claims/${id}`, { reason });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Claim Deleted",
+        description: "The claim has been permanently deleted.",
+      });
+      setDeleteConfirmOpen(false);
+      setClaimToDelete(null);
+      setDeleteReason("");
+      setSelectedClaim(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/claims"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/claims/pending-count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/claims/audit-log"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteClick = (claim: Claim) => {
+    setClaimToDelete(claim);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (claimToDelete) {
+      deleteClaimMutation.mutate({ id: claimToDelete.id, reason: deleteReason });
+    }
+  };
 
   const updateClaimMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -140,13 +224,26 @@ export default function AdminClaimsPage() {
           )}
         </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="h-5 w-5" />
-                Filter by Period
-              </CardTitle>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="claims" data-testid="tab-claims">
+              <Receipt className="h-4 w-4 mr-2" />
+              Claims
+            </TabsTrigger>
+            <TabsTrigger value="audit" data-testid="tab-audit">
+              <History className="h-4 w-4 mr-2" />
+              Audit Trail
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="claims" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <Filter className="h-5 w-5" />
+                    Filter by Period
+                  </CardTitle>
               <div className="flex items-center gap-2">
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                   <SelectTrigger className="w-36" data-testid="select-month">
@@ -325,7 +422,8 @@ export default function AdminClaimsPage() {
                         Reject
                       </Button>
                       <Button
-                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        variant="default"
+                        className="flex-1"
                         onClick={() => updateClaimMutation.mutate({ id: selectedClaim.id, status: "approved" })}
                         disabled={updateClaimMutation.isPending}
                         data-testid="button-approve-claim"
@@ -336,10 +434,158 @@ export default function AdminClaimsPage() {
                     </div>
                   </>
                 )}
+                
+                {/* Delete Button - always visible */}
+                <div className="border-t pt-4 mt-4">
+                  <Button
+                    variant="ghost"
+                    className="w-full text-destructive"
+                    onClick={() => handleDeleteClick(selectedClaim)}
+                    data-testid="button-delete-claim"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Claim
+                  </Button>
+                </div>
               </div>
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Delete Claim
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the claim
+                {claimToDelete && ` from ${claimToDelete.employeeName} for $${parseFloat(claimToDelete.amount).toFixed(2)}`}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-4">
+              <Label htmlFor="delete-reason">Reason for deletion (optional)</Label>
+              <Input
+                id="delete-reason"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Enter reason for deleting this claim..."
+                className="mt-2"
+                data-testid="input-delete-reason"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDelete}
+                className="bg-destructive text-destructive-foreground"
+                disabled={deleteClaimMutation.isPending}
+                data-testid="button-confirm-delete"
+              >
+                {deleteClaimMutation.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+          </TabsContent>
+
+          <TabsContent value="audit" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Claims Activity Log
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                      <SelectTrigger className="w-36" data-testid="select-audit-month">
+                        <SelectValue placeholder="Month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MONTHS.map((month) => (
+                          <SelectItem key={month.value} value={month.value}>
+                            {month.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                      <SelectTrigger className="w-24" data-testid="select-audit-year">
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {years.map((year) => (
+                          <SelectItem key={year} value={year}>
+                            {year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {auditLogsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : !auditLogsData || auditLogsData.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No audit logs for this period</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {auditLogsData.map((log) => (
+                      <div
+                        key={log.id}
+                        className="p-4 border rounded-lg"
+                        data-testid={`audit-log-${log.id}`}
+                      >
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            {log.action === "approved" && (
+                              <Badge className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /> Approved</Badge>
+                            )}
+                            {log.action === "rejected" && (
+                              <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Rejected</Badge>
+                            )}
+                            {log.action === "deleted" && (
+                              <Badge variant="outline" className="text-destructive border-destructive"><Trash2 className="h-3 w-3 mr-1" /> Deleted</Badge>
+                            )}
+                            <span className="font-medium">{log.employeeName}</span>
+                            {log.employeeCode && (
+                              <span className="text-sm text-muted-foreground">({log.employeeCode})</span>
+                            )}
+                          </div>
+                          <span className="text-lg font-semibold">${parseFloat(log.amount).toFixed(2)}</span>
+                        </div>
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          <span>{claimTypeLabels[log.claimType as keyof typeof claimTypeLabels] || log.claimType}</span>
+                          {log.description && <span> - {log.description}</span>}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>By: {log.performedByName || "Admin"}</span>
+                          <span>{format(new Date(log.performedAt), "MMM dd, yyyy HH:mm")}</span>
+                        </div>
+                        {log.comments && (
+                          <div className="mt-2 text-sm bg-muted p-2 rounded">
+                            <span className="font-medium">Comments:</span> {log.comments}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

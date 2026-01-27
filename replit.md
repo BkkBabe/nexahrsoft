@@ -47,6 +47,8 @@ Preferred communication style: Simple, everyday language.
     - **Admin Review**: View all claims filtered by month/year, pending claims highlighted, approve/reject with optional comments.
     - **Claim Status Tracking**: Pending, Approved, Rejected statuses with full audit trail (reviewer, timestamp, comments).
     - **Payslip Integration**: Approved claims automatically appear as reimbursements in employee payslips for the corresponding pay period, with itemized breakdown and totals included in net pay calculation.
+    - **Admin Delete**: Admin can delete claims with optional reason, logged in audit trail.
+    - **Audit Trail**: Dedicated "Audit Trail" tab showing all claim actions (approved, rejected, deleted) with performer name, timestamp, and comments.
 - **Admin Payroll Management**:
     - **Employee Payroll Settings**: Configuration of individual employee profiles including residency status, DOB, salary, and recurring salary adjustments with full CRUD and audit trails.
     - **Payroll Generation**: Automatic payroll generation from attendance records, supporting CPF calculations (Singapore-specific), overtime, and various pay types. Features idempotency checks and handles special cases for CPF.
