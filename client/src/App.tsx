@@ -260,6 +260,12 @@ function Router() {
       <Route path="/admin/payroll/historical-import">
         {() => <AdminProtected><AdminHistoricalPayrollImportPage /></AdminProtected>}
       </Route>
+      <Route path="/admin/:rest*">
+        {() => {
+          window.location.href = "/admin/dashboard";
+          return null;
+        }}
+      </Route>
       <Route path="/change-password">
         {() => session?.authenticated ? <ChangePasswordPage /> : <UserLoginPage />}
       </Route>
