@@ -459,8 +459,8 @@ export default function AdminClaimsPage() {
                   </>
                 )}
                 
-                {/* Delete Button - always visible */}
-                <div className="border-t pt-4 mt-4">
+                {/* Delete Button - hidden */}
+                <div className="border-t pt-4 mt-4 hidden">
                   <Button
                     variant="ghost"
                     className="w-full text-destructive"
@@ -657,7 +657,7 @@ function ClaimRow({ claim, onView, onViewReceipt, onDelete, getStatusBadge }: Cl
         <Button
           variant="ghost"
           size="icon"
-          className="text-destructive"
+          className="text-destructive hidden"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
