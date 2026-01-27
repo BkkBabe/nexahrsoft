@@ -39,20 +39,38 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 
-const MONTHS = [
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ];
+
+// Generate period options for the last 2 years
+function generatePeriodOptions() {
+  const options: { value: string; label: string; month: number; year: number }[] = [];
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth(); // 0-indexed
+  
+  // Generate periods from current month going back 24 months
+  for (let i = 0; i < 24; i++) {
+    let month = currentMonth - i;
+    let year = currentYear;
+    
+    while (month < 0) {
+      month += 12;
+      year -= 1;
+    }
+    
+    options.push({
+      value: `${month + 1}-${year}`,
+      label: `${MONTH_NAMES[month]} ${year}`,
+      month: month + 1,
+      year: year,
+    });
+  }
+  
+  return options;
+}
 
 interface ClaimsAuditLog {
   id: string;
@@ -76,8 +94,8 @@ interface ClaimsAuditLog {
 export default function AdminClaimsPage() {
   const [, setLocation] = useLocation();
   const currentDate = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1));
-  const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
+  const periodOptions = generatePeriodOptions();
+  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[0]?.value || "1-2026");
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
   const [reviewComments, setReviewComments] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -86,12 +104,15 @@ export default function AdminClaimsPage() {
   const [activeTab, setActiveTab] = useState("claims");
   const { toast } = useToast();
 
-  const years = Array.from({ length: 5 }, (_, i) => String(currentDate.getFullYear() - i));
+  // Parse selected period
+  const [selectedMonth, selectedYear] = selectedPeriod.split("-").map(Number);
+  const selectedMonthStr = String(selectedMonth);
+  const selectedYearStr = String(selectedYear);
 
   const { data: claimsData, isLoading } = useQuery<{ claims: Claim[] }>({
-    queryKey: ["/api/admin/claims", selectedYear, selectedMonth],
+    queryKey: ["/api/admin/claims", selectedYearStr, selectedMonthStr],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/claims?year=${selectedYear}&month=${selectedMonth}`, {
+      const res = await fetch(`/api/admin/claims?year=${selectedYearStr}&month=${selectedMonthStr}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch claims");
@@ -104,9 +125,9 @@ export default function AdminClaimsPage() {
   });
 
   const { data: auditLogsData, isLoading: auditLogsLoading } = useQuery<ClaimsAuditLog[]>({
-    queryKey: ["/api/admin/claims/audit-log", selectedYear, selectedMonth],
+    queryKey: ["/api/admin/claims/audit-log", selectedYearStr, selectedMonthStr],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/claims/audit-log?year=${selectedYear}&month=${selectedMonth}`, {
+      const res = await fetch(`/api/admin/claims/audit-log?year=${selectedYearStr}&month=${selectedMonthStr}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch audit logs");
@@ -247,26 +268,14 @@ export default function AdminClaimsPage() {
                     Filter by Period
                   </CardTitle>
               <div className="flex items-center gap-2">
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger className="w-36" data-testid="select-month">
-                    <SelectValue placeholder="Month" />
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                  <SelectTrigger className="w-40" data-testid="select-period">
+                    <SelectValue placeholder="Select period" />
                   </SelectTrigger>
                   <SelectContent>
-                    {MONTHS.map((month) => (
-                      <SelectItem key={month.value} value={month.value}>
-                        {month.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
-                  <SelectTrigger className="w-24" data-testid="select-year">
-                    <SelectValue placeholder="Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {years.map((year) => (
-                      <SelectItem key={year} value={year}>
-                        {year}
+                    {periodOptions.map((period) => (
+                      <SelectItem key={period.value} value={period.value}>
+                        {period.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -365,7 +374,7 @@ export default function AdminClaimsPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Period</Label>
-                    <p className="font-medium">{MONTHS[selectedClaim.claimMonth - 1]?.label} {selectedClaim.claimYear}</p>
+                    <p className="font-medium">{MONTH_NAMES[selectedClaim.claimMonth - 1]} {selectedClaim.claimYear}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Submitted</Label>
@@ -504,26 +513,14 @@ export default function AdminClaimsPage() {
                     Claims Activity Log
                   </CardTitle>
                   <div className="flex items-center gap-2">
-                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                      <SelectTrigger className="w-36" data-testid="select-audit-month">
-                        <SelectValue placeholder="Month" />
+                    <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                      <SelectTrigger className="w-40" data-testid="select-audit-period">
+                        <SelectValue placeholder="Select period" />
                       </SelectTrigger>
                       <SelectContent>
-                        {MONTHS.map((month) => (
-                          <SelectItem key={month.value} value={month.value}>
-                            {month.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={selectedYear} onValueChange={setSelectedYear}>
-                      <SelectTrigger className="w-24" data-testid="select-audit-year">
-                        <SelectValue placeholder="Year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {years.map((year) => (
-                          <SelectItem key={year} value={year}>
-                            {year}
+                        {periodOptions.map((period) => (
+                          <SelectItem key={period.value} value={period.value}>
+                            {period.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
