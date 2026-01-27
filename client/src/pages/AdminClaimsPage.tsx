@@ -292,6 +292,7 @@ export default function AdminClaimsPage() {
                     claim={claim}
                     onView={() => setSelectedClaim(claim)}
                     onViewReceipt={() => handleViewReceipt(claim.id)}
+                    onDelete={() => handleDeleteClick(claim)}
                     getStatusBadge={getStatusBadge}
                   />
                 ))}
@@ -327,6 +328,7 @@ export default function AdminClaimsPage() {
                     claim={claim}
                     onView={() => setSelectedClaim(claim)}
                     onViewReceipt={() => handleViewReceipt(claim.id)}
+                    onDelete={() => handleDeleteClick(claim)}
                     getStatusBadge={getStatusBadge}
                   />
                 ))}
@@ -597,10 +599,11 @@ interface ClaimRowProps {
   claim: Claim;
   onView: () => void;
   onViewReceipt: () => void;
+  onDelete: () => void;
   getStatusBadge: (status: string) => JSX.Element;
 }
 
-function ClaimRow({ claim, onView, onViewReceipt, getStatusBadge }: ClaimRowProps) {
+function ClaimRow({ claim, onView, onViewReceipt, onDelete, getStatusBadge }: ClaimRowProps) {
   return (
     <div
       className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
@@ -643,6 +646,18 @@ function ClaimRow({ claim, onView, onViewReceipt, getStatusBadge }: ClaimRowProp
             <FileText className="h-4 w-4" />
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          data-testid={`button-delete-row-${claim.id}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
         <Button
           variant="outline"
           size="sm"
