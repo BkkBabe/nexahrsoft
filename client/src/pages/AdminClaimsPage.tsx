@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Receipt, Clock, CheckCircle, XCircle, Eye, Filter, ArrowLeft, FileText, ExternalLink, Trash2, History, AlertTriangle } from "lucide-react";
+import { Receipt, Clock, CheckCircle, XCircle, Eye, Filter, ArrowLeft, FileText, ExternalLink, Trash2, History, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -280,6 +280,17 @@ export default function AdminClaimsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    queryClient.invalidateQueries({ queryKey: ["/api/admin/claims"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/admin/claims/pending-count"] });
+                  }}
+                  data-testid="button-refresh-claims"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </CardHeader>
