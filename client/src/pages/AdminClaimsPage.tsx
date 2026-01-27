@@ -218,7 +218,7 @@ export default function AdminClaimsPage() {
           </div>
           <Button 
             variant="outline"
-            onClick={() => setLocation("/admin")}
+            onClick={() => setLocation("/admin/dashboard")}
             data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
