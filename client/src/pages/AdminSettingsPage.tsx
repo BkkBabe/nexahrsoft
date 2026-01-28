@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus, Globe, KeyRound, Eye, Plus } from "lucide-react";
+import { Upload, Building2, Image as ImageIcon, Clock, Mail, QrCode, Users, FileSpreadsheet, X, Check, AlertCircle, ArrowLeft, Camera, Shield, ShieldOff, UserPlus, Globe, KeyRound, Eye, Plus, UserCog, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -86,6 +86,11 @@ export default function AdminSettingsPage() {
   const [attendanceAdminSearchQuery, setAttendanceAdminSearchQuery] = useState<string>("");
   const [selectedAttendanceAdminUserId, setSelectedAttendanceAdminUserId] = useState<string>("");
 
+  // Employee Data Admin management state
+  const [showAddEmployeeDataAdminDialog, setShowAddEmployeeDataAdminDialog] = useState(false);
+  const [employeeDataAdminSearchQuery, setEmployeeDataAdminSearchQuery] = useState<string>("");
+  const [selectedEmployeeDataAdminUserId, setSelectedEmployeeDataAdminUserId] = useState<string>("");
+
   const { data: settings, isLoading } = useQuery<CompanySettings>({
     queryKey: ["/api/company/settings"],
   });
@@ -152,6 +157,12 @@ export default function AdminSettingsPage() {
     queryKey: ['/api/admin/users/attendance-view-admins'],
     enabled: isSuperAdmin,
   });
+
+  // Fetch employee data admins (super admin only)
+  const { data: employeeDataAdmins = [], isLoading: employeeDataAdminsLoading } = useQuery<User[]>({
+    queryKey: ['/api/admin/users/employee-data-admins'],
+    enabled: isSuperAdmin,
+  });
   
   // Filter users eligible for attendance view admin (regular users and attendance_view_admin, not full admin or viewonly_admin)
   const eligibleForAttendanceAdmin = allUsers.filter(u => u.role === "user");
@@ -163,6 +174,18 @@ export default function AdminSettingsPage() {
     u.email.toLowerCase().includes(attendanceAdminSearchQuery.toLowerCase()) ||
     (u.employeeCode && u.employeeCode.toLowerCase().includes(attendanceAdminSearchQuery.toLowerCase())) ||
     (u.username && u.username.toLowerCase().includes(attendanceAdminSearchQuery.toLowerCase()))
+  );
+
+  // Filter users eligible for employee data admin
+  const eligibleForEmployeeDataAdmin = allUsers.filter(u => u.role === "user");
+  
+  // Filter eligible users by search query for employee data admin dialog
+  const filteredEligibleForEmployeeDataAdmin = eligibleForEmployeeDataAdmin.filter(u =>
+    employeeDataAdminSearchQuery.trim() === "" ? false :
+    u.name.toLowerCase().includes(employeeDataAdminSearchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(employeeDataAdminSearchQuery.toLowerCase()) ||
+    (u.employeeCode && u.employeeCode.toLowerCase().includes(employeeDataAdminSearchQuery.toLowerCase())) ||
+    (u.username && u.username.toLowerCase().includes(employeeDataAdminSearchQuery.toLowerCase()))
   );
 
   // Mutation to update user role
@@ -249,6 +272,53 @@ export default function AdminSettingsPage() {
       toast({
         title: "Success",
         description: "User is no longer an Attendance View-Only Admin",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation to promote user to employee data admin (super admin only)
+  const promoteToEmployeeDataAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("POST", `/api/admin/users/${userId}/set-employee-data-admin`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/employee-data-admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Success",
+        description: "User is now an Employee Data Admin",
+      });
+      setShowAddEmployeeDataAdminDialog(false);
+      setSelectedEmployeeDataAdminUserId("");
+      setEmployeeDataAdminSearchQuery("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Mutation to remove employee data admin role (super admin only)
+  const removeEmployeeDataAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("POST", `/api/admin/users/${userId}/remove-employee-data-admin`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/employee-data-admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Success",
+        description: "User is no longer an Employee Data Admin",
       });
     },
     onError: (error: Error) => {
@@ -1661,6 +1731,83 @@ export default function AdminSettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Employee Data Admins Card - Super Admin Only */}
+        {isSuperAdmin && (
+          <Card data-testid="card-employee-data-admins">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="flex items-center gap-2">
+                <UserCog className="h-5 w-5" />
+                Employee Data Admins
+              </CardTitle>
+              <Button 
+                onClick={() => setShowAddEmployeeDataAdminDialog(true)}
+                size="sm"
+                data-testid="button-add-employee-data-admin"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Employee Data Admin
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {employeeDataAdminsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : employeeDataAdmins.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No employee data admins configured</p>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Username</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {employeeDataAdmins.map((admin) => (
+                        <TableRow key={admin.id} data-testid={`row-employee-data-admin-${admin.id}`}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <UserCog className="h-4 w-4 text-teal-500" />
+                              {admin.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>{admin.email}</TableCell>
+                          <TableCell className="font-mono text-sm">{admin.username}</TableCell>
+                          <TableCell>{admin.department || "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removeEmployeeDataAdminMutation.mutate(admin.id)}
+                              disabled={removeEmployeeDataAdminMutation.isPending}
+                              data-testid={`button-remove-employee-data-admin-${admin.id}`}
+                            >
+                              <ShieldOff className="h-4 w-4 mr-1" />
+                              Remove
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Employee data admins can only access the Employee Data Management page. They cannot access attendance, payroll, settings, or other admin features.
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Add Admin Dialog */}
@@ -1931,6 +2078,94 @@ export default function AdminSettingsPage() {
               data-testid="button-confirm-attendance-admin"
             >
               {promoteToAttendanceViewAdminMutation.isPending ? "Adding..." : "Add Attendance View Admin"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Employee Data Admin Dialog (super admin only) */}
+      <Dialog open={showAddEmployeeDataAdminDialog} onOpenChange={(open) => {
+        setShowAddEmployeeDataAdminDialog(open);
+        if (!open) {
+          setEmployeeDataAdminSearchQuery("");
+          setSelectedEmployeeDataAdminUserId("");
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Employee Data Admin</DialogTitle>
+            <DialogDescription>
+              Search for an employee to grant employee data management access. They will only be able to view and manage employee data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Search Employee</Label>
+              <Input
+                placeholder="Type name, email, or employee code..."
+                value={employeeDataAdminSearchQuery}
+                onChange={(e) => {
+                  setEmployeeDataAdminSearchQuery(e.target.value);
+                  setSelectedEmployeeDataAdminUserId("");
+                }}
+                data-testid="input-search-employee-data-admin"
+              />
+            </div>
+            
+            {employeeDataAdminSearchQuery.trim() !== "" && (
+              <div className="border rounded-lg max-h-48 overflow-auto">
+                {filteredEligibleForEmployeeDataAdmin.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground text-center">
+                    No matching employees found
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {filteredEligibleForEmployeeDataAdmin.slice(0, 10).map((user) => (
+                      <div
+                        key={user.id}
+                        className={`p-3 cursor-pointer hover-elevate ${selectedEmployeeDataAdminUserId === user.id ? "bg-primary/10" : ""}`}
+                        onClick={() => setSelectedEmployeeDataAdminUserId(user.id)}
+                        data-testid={`option-employee-data-admin-${user.id}`}
+                      >
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {user.email} {user.employeeCode && `· ${user.employeeCode}`}
+                        </div>
+                      </div>
+                    ))}
+                    {filteredEligibleForEmployeeDataAdmin.length > 10 && (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        +{filteredEligibleForEmployeeDataAdmin.length - 10} more results. Refine your search.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {selectedEmployeeDataAdminUserId && (
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="text-sm text-muted-foreground">Selected:</div>
+                <div className="font-medium">
+                  {eligibleForEmployeeDataAdmin.find(u => u.id === selectedEmployeeDataAdminUserId)?.name}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddEmployeeDataAdminDialog(false)} data-testid="button-cancel-employee-data-admin">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedEmployeeDataAdminUserId) {
+                  promoteToEmployeeDataAdminMutation.mutate(selectedEmployeeDataAdminUserId);
+                }
+              }}
+              disabled={!selectedEmployeeDataAdminUserId || promoteToEmployeeDataAdminMutation.isPending}
+              data-testid="button-confirm-employee-data-admin"
+            >
+              {promoteToEmployeeDataAdminMutation.isPending ? "Adding..." : "Add Employee Data Admin"}
             </Button>
           </DialogFooter>
         </DialogContent>

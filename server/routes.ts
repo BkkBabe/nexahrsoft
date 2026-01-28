@@ -270,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserByUsername(username);
       
       // Define admin roles that can log in via admin portal
-      const adminRoles = ["admin", "viewonly_admin", "attendance_view_admin"];
+      const adminRoles = ["admin", "viewonly_admin", "attendance_view_admin", "employee_data_admin"];
       
       // If user exists but is not an admin role, reject with helpful message
       if (user && !adminRoles.includes(user.role)) {
@@ -289,6 +289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.session.isAdmin = true;
           req.session.isViewOnlyAdmin = user.role === "viewonly_admin";
           req.session.isAttendanceViewAdmin = user.role === "attendance_view_admin";
+          req.session.isEmployeeDataAdmin = user.role === "employee_data_admin";
           return res.json({ success: true, message: "Admin login successful" });
         }
       }
@@ -338,6 +339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isAdmin: true,
             isViewOnlyAdmin: req.session.isViewOnlyAdmin || false,
             isAttendanceViewAdmin: req.session.isAttendanceViewAdmin || false,
+            isEmployeeDataAdmin: req.session.isEmployeeDataAdmin || false,
             user: {
               id: adminUser.id,
               name: adminUser.name,
@@ -574,7 +576,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (req.session.isAttendanceViewAdmin) {
       return res.status(403).json({ message: "Attendance view-only admins cannot access this feature" });
     }
+    if (req.session.isEmployeeDataAdmin) {
+      return res.status(403).json({ message: "Employee data admins cannot access this feature" });
+    }
     next();
+  };
+  
+  // Middleware to allow only employee data admins and full admins for employee data routes
+  const requireEmployeeDataAccess = (req: Request, res: Response, next: any) => {
+    // Full admins and employee data admins can access
+    if (req.session.isEmployeeDataAdmin || 
+        (!req.session.isViewOnlyAdmin && !req.session.isAttendanceViewAdmin)) {
+      return next();
+    }
+    return res.status(403).json({ message: "You do not have access to employee data management" });
   };
   
   // Middleware for master admin (nexaadmin) only operations
@@ -741,6 +756,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get attendance view admins error:", error);
       res.status(500).json({ message: "Failed to fetch attendance view admins" });
+    }
+  });
+
+  // Set user role to employee_data_admin (super admin only)
+  app.post("/api/admin/users/:id/set-employee-data-admin", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
+    try {
+      const isSuper = await isSuperAdmin(req.session, storage);
+      if (!isSuper) {
+        return res.status(403).json({ message: "Only super admins can manage admin roles" });
+      }
+      
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (user.role === "admin") {
+        return res.status(400).json({ message: "Cannot modify full admin users" });
+      }
+      
+      await storage.updateUser(id, { role: "employee_data_admin" });
+      
+      res.json({ success: true, message: `${user.name} is now an Employee Data Admin` });
+    } catch (error) {
+      console.error("Set employee data admin error:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+  
+  // Remove employee_data_admin role (demote back to user) (super admin only)
+  app.post("/api/admin/users/:id/remove-employee-data-admin", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
+    try {
+      const isSuper = await isSuperAdmin(req.session, storage);
+      if (!isSuper) {
+        return res.status(403).json({ message: "Only super admins can manage admin roles" });
+      }
+      
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (user.role !== "employee_data_admin") {
+        return res.status(400).json({ message: "User is not an Employee Data Admin" });
+      }
+      
+      await storage.updateUser(id, { role: "user" });
+      
+      res.json({ success: true, message: `${user.name} is no longer an Employee Data Admin` });
+    } catch (error) {
+      console.error("Remove employee data admin error:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+  
+  // Get all employee data admins (full admins can view)
+  app.get("/api/admin/users/employee-data-admins", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const employeeDataAdmins = allUsers.filter(u => u.role === "employee_data_admin");
+      res.json(employeeDataAdmins);
+    } catch (error) {
+      console.error("Get employee data admins error:", error);
+      res.status(500).json({ message: "Failed to fetch employee data admins" });
     }
   });
 
@@ -2129,10 +2212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get all users' attendance records
-  app.get("/api/admin/attendance/records", async (req: Request, res: Response) => {
-    if (!req.session?.isAdmin) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
+  app.get("/api/admin/attendance/records", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
 
     try {
       const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
@@ -2160,10 +2240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get orphaned attendance sessions (clocked in > 24 hours ago without clock-out)
-  app.get("/api/admin/attendance/orphaned", async (req: Request, res: Response) => {
-    if (!req.session?.isAdmin) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
+  app.get("/api/admin/attendance/orphaned", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
 
     try {
       const records = await storage.getOrphanedAttendanceSessions();
@@ -2175,10 +2252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get pre-calculated daily attendance summaries for heatmap
-  app.get("/api/admin/attendance/summaries", async (req: Request, res: Response) => {
-    if (!req.session?.isAdmin) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
+  app.get("/api/admin/attendance/summaries", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
 
     try {
       const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
@@ -2204,14 +2278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Recalculate attendance summaries for a date range (e.g., populate December data)
-  app.post("/api/admin/attendance/recalculate-summaries", async (req: Request, res: Response) => {
-    if (!req.session?.isAdmin) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-    
-    if (req.session.isViewOnlyAdmin) {
-      return res.status(403).json({ message: "View-only admins cannot recalculate summaries" });
-    }
+  app.post("/api/admin/attendance/recalculate-summaries", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
 
     try {
       const { startDate, endDate } = req.body as { startDate: string; endDate: string };
@@ -2262,7 +2329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get attendance adjustments for a date range
-  app.get("/api/admin/attendance/adjustments", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/attendance/adjustments", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
       
@@ -2282,7 +2349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get single attendance adjustment
-  app.get("/api/admin/attendance/adjustments/:userId/:date", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/attendance/adjustments/:userId/:date", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { userId, date } = req.params;
       const adjustment = await storage.getAttendanceAdjustment(userId, date);
@@ -2294,7 +2361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Create or update attendance adjustment (leave or hours override)
-  app.post("/api/admin/attendance/adjustments", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/adjustments", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         userId: z.string().uuid(),
@@ -2380,7 +2447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Delete attendance adjustment (revert to actual clock-in data)
-  app.delete("/api/admin/attendance/adjustments/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.delete("/api/admin/attendance/adjustments/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -2398,7 +2465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get employee monthly remarks for a specific month
-  app.get("/api/admin/attendance/remarks", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/attendance/remarks", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { year, month } = req.query;
       
@@ -2418,7 +2485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Save employee monthly remark
-  app.post("/api/admin/attendance/remarks", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/remarks", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         userId: z.string().uuid(),
@@ -2456,7 +2523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Bulk close orphaned attendance sessions
-  app.post("/api/admin/attendance/bulk-close-orphaned", async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/bulk-close-orphaned", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -2540,7 +2607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Backfill location text for records that have coordinates but no address
-  app.post("/api/admin/attendance/backfill-locations", async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/backfill-locations", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -2614,7 +2681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Resolve location for a single attendance record (on-demand geocoding)
-  app.post("/api/admin/attendance/resolve-location", async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/resolve-location", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -2671,7 +2738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Add attendance record for an employee (any date) - write access required
-  app.post("/api/admin/attendance/add", async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/add", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -2816,7 +2883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: End clock-in for an employee (nexaadmin only)
-  app.post("/api/admin/attendance/end-clockin", async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/end-clockin", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -2955,7 +3022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Delete attendance record (nexaadmin only)
-  app.delete("/api/admin/attendance/:recordId", async (req: Request, res: Response) => {
+  app.delete("/api/admin/attendance/:recordId", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3006,7 +3073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get attendance audit logs
-  app.get("/api/admin/attendance/audit-logs", async (req: Request, res: Response) => {
+  app.get("/api/admin/attendance/audit-logs", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3033,7 +3100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Import attendance data from Excel
-  app.post("/api/admin/attendance/import", async (req: Request, res: Response) => {
+  app.post("/api/admin/attendance/import", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3221,7 +3288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Update attendance buffer settings
-  app.put("/api/admin/attendance/buffer", async (req: Request, res: Response) => {
+  app.put("/api/admin/attendance/buffer", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3390,7 +3457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Toggle allow employee view for a payroll record
-  app.patch("/api/admin/payroll/:id/allow-employee-view", requireWriteAccess, async (req: Request, res: Response) => {
+  app.patch("/api/admin/payroll/:id/allow-employee-view", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { allowEmployeeView } = req.body;
@@ -3436,7 +3503,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== LEAVE MANAGEMENT ENDPOINTS ====================
 
   // Admin: Get all leave balances
-  app.get("/api/admin/leave/balances", async (req: Request, res: Response) => {
+  app.get("/api/admin/leave/balances", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3476,7 +3543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Create or update leave balance
-  app.post("/api/admin/leave/balances", async (req: Request, res: Response) => {
+  app.post("/api/admin/leave/balances", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3519,7 +3586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get all leave applications
-  app.get("/api/admin/leave/applications", async (req: Request, res: Response) => {
+  app.get("/api/admin/leave/applications", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3534,7 +3601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Review leave application (approve/reject)
-  app.patch("/api/admin/leave/applications/:id", async (req: Request, res: Response) => {
+  app.patch("/api/admin/leave/applications/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3593,7 +3660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Import leave history from CSV
-  app.post("/api/admin/leave/history/import", async (req: Request, res: Response) => {
+  app.post("/api/admin/leave/history/import", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3652,7 +3719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Parse Excel leave history file (3SI format)
-  app.post("/api/admin/leave/history/parse-excel", async (req: Request, res: Response) => {
+  app.post("/api/admin/leave/history/parse-excel", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3773,7 +3840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get leave history
-  app.get("/api/admin/leave/history", async (req: Request, res: Response) => {
+  app.get("/api/admin/leave/history", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3790,7 +3857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get leave analytics/statistics
-  app.get("/api/admin/leave/analytics", async (req: Request, res: Response) => {
+  app.get("/api/admin/leave/analytics", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3855,7 +3922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Update leave history record
-  app.patch("/api/admin/leave/history/:id", async (req: Request, res: Response) => {
+  app.patch("/api/admin/leave/history/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3904,7 +3971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Delete leave history record
-  app.delete("/api/admin/leave/history/:id", async (req: Request, res: Response) => {
+  app.delete("/api/admin/leave/history/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -3939,7 +4006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get leave audit logs
-  app.get("/api/admin/leave/audit-logs", async (req: Request, res: Response) => {
+  app.get("/api/admin/leave/audit-logs", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -4437,7 +4504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== PAYROLL IMPORT API ====================
 
   // Import payroll records (admin only)
-  app.post("/api/admin/payroll/import", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/import", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         records: z.array(z.object({
@@ -4557,7 +4624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate payroll from attendance data (admin only)
-  app.post("/api/admin/payroll/generate", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/generate", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { calculateCPF, calculateAge, calculateSPRYears, splitHours, calculatePayFromHours, monthlyToHourlyRate, dailyToHourlyRate } = await import("./cpf-calculator");
       
@@ -4949,7 +5016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Preview payroll generation (shows what would be generated without saving)
-  app.post("/api/admin/payroll/generate/preview", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/generate/preview", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { calculateCPF, calculateAge, calculateSPRYears, splitHours, calculatePayFromHours, monthlyToHourlyRate, dailyToHourlyRate } = await import("./cpf-calculator");
       
@@ -5282,7 +5349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get payroll records with optional year/month filter (admin only)
-  app.get("/api/admin/payroll/records", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/records", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const year = req.query.year ? parseInt(req.query.year as string) : undefined;
       const month = req.query.month ? parseInt(req.query.month as string) : undefined;
@@ -5296,7 +5363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get payroll-leave summary (annual leave encashment and no-pay day deductions linked with leave balances)
-  app.get("/api/admin/payroll/leave-summary", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/leave-summary", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
       const records = await storage.getPayrollRecords(year);
@@ -5385,7 +5452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete payroll records for a specific period (admin only)
-  app.delete("/api/admin/payroll/records/:year/:month", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.delete("/api/admin/payroll/records/:year/:month", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const year = parseInt(req.params.year);
       const month = parseInt(req.params.month);
@@ -5406,7 +5473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get a specific payroll record with its audit history
-  app.get("/api/admin/payroll/records/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/records/:id", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const record = await storage.getPayrollRecordById(id);
@@ -5422,7 +5489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a payroll record with audit logging
-  app.patch("/api/admin/payroll/records/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.patch("/api/admin/payroll/records/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const adminUsername = (req.session as any)?.adminUsername || "admin";
@@ -5634,7 +5701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Refresh payroll record from employee settings (pulls latest allowances)
-  app.post("/api/admin/payroll/records/:id/refresh-from-settings", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/records/:id/refresh-from-settings", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const adminUsername = (req.session as any)?.adminUsername || "admin";
@@ -5788,7 +5855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Search payroll records
-  app.get("/api/admin/payroll/search", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/search", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const year = req.query.year ? parseInt(req.query.year as string) : undefined;
       const month = req.query.month ? parseInt(req.query.month as string) : undefined;
@@ -5805,7 +5872,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // === Payroll Loan Management ===
   
   // Get all loan accounts (admin only)
-  app.get("/api/admin/payroll/loans", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/loans", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const loans = await storage.getAllPayrollLoanAccounts();
       res.json({ loans });
@@ -5816,7 +5883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get active loans (admin only)
-  app.get("/api/admin/payroll/loans/active", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/loans/active", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const loans = await storage.getActivePayrollLoans();
       res.json({ loans });
@@ -5827,7 +5894,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get loans for a specific employee (admin only)
-  app.get("/api/admin/payroll/loans/employee/:employeeCode", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/loans/employee/:employeeCode", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { employeeCode } = req.params;
       const loans = await storage.getPayrollLoanAccountsByEmployee(employeeCode);
@@ -5839,7 +5906,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Create a new loan (admin only)
-  app.post("/api/admin/payroll/loans", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/loans", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         userId: z.string().nullable().optional(),
@@ -5878,7 +5945,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Update a loan (admin only)
-  app.patch("/api/admin/payroll/loans/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.patch("/api/admin/payroll/loans/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const schema = z.object({
@@ -5911,7 +5978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Record a loan repayment (admin only)
-  app.post("/api/admin/payroll/loans/:loanId/repayments", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/loans/:loanId/repayments", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { loanId } = req.params;
       const schema = z.object({
@@ -5957,7 +6024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get repayments for a loan (admin only)
-  app.get("/api/admin/payroll/loans/:loanId/repayments", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/loans/:loanId/repayments", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { loanId } = req.params;
       const repayments = await storage.getLoanRepaymentsByLoan(loanId);
@@ -5969,7 +6036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get loan repayments for an employee for a specific pay period (for payslip)
-  app.get("/api/admin/payroll/loans/repayments/:employeeCode/:year/:month", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/loans/repayments/:employeeCode/:year/:month", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { employeeCode, year, month } = req.params;
       const repayments = await storage.getEmployeeLoanRepaymentsForPeriod(
@@ -5987,7 +6054,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============= PAYROLL ADJUSTMENTS =============
   
   // Get all payroll adjustments for a period
-  app.get("/api/admin/payroll/adjustments", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/adjustments", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { year, month, userId } = req.query;
       
@@ -6016,7 +6083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get single adjustment with audit logs
-  app.get("/api/admin/payroll/adjustments/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/adjustments/:id", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const adjustment = await storage.getPayrollAdjustment(id);
@@ -6035,7 +6102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Create payroll adjustment
-  app.post("/api/admin/payroll/adjustments", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.post("/api/admin/payroll/adjustments", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         userId: z.string().min(1),
@@ -6176,7 +6243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Update payroll adjustment
-  app.patch("/api/admin/payroll/adjustments/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.patch("/api/admin/payroll/adjustments/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -6281,7 +6348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Delete payroll adjustment
-  app.delete("/api/admin/payroll/adjustments/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.delete("/api/admin/payroll/adjustments/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -6303,7 +6370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get running payroll summary for an employee (to-date earnings)
-  app.get("/api/admin/payroll/summary/:userId/:year/:month", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payroll/summary/:userId/:year/:month", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { userId, year, month } = req.params;
       const yearNum = parseInt(year);
@@ -7154,7 +7221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Admin: Get all claims
-  app.get("/api/admin/claims", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/claims", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { year, month } = req.query;
       
@@ -7176,7 +7243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Admin: Get pending claims count
-  app.get("/api/admin/claims/pending-count", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/claims/pending-count", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const count = await storage.getPendingClaimsCount();
       res.json({ count });
@@ -7187,7 +7254,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Admin: Get single claim
-  app.get("/api/admin/claims/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/claims/:id", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const claim = await storage.getClaim(id);
@@ -7204,7 +7271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Admin: Update claim status (approve/reject/reverse)
-  app.patch("/api/admin/claims/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/admin/claims/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { status, reviewComments } = req.body;
@@ -7273,7 +7340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Admin: Delete claim with audit trail
-  app.delete("/api/admin/claims/:id", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+  app.delete("/api/admin/claims/:id", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { reason } = req.body;
@@ -7337,7 +7404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Admin: Get claims audit log
-  app.get("/api/admin/claims/audit-log", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/claims/audit-log", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     try {
       const { month, year } = req.query;
       

@@ -48,6 +48,7 @@ interface SessionData {
   isAdmin?: boolean;
   isViewOnlyAdmin?: boolean;
   isMasterAdmin?: boolean;
+  isEmployeeDataAdmin?: boolean;
   user?: {
     id: string;
     name: string;
@@ -181,6 +182,43 @@ function AdminProtected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Protected component for routes that require full admin access (blocks employee_data_admin)
+function FullAdminProtected({ children }: { children: React.ReactNode }) {
+  const { data: session, isLoading } = useQuery<SessionData>({
+    queryKey: ["/api/auth/session"],
+  });
+  const [, setLocation] = useLocation();
+
+  // Immediate redirect if not authorized
+  if (!isLoading && (!session?.authenticated || !session?.isAdmin)) {
+    setLocation("/admin/login");
+    return null;
+  }
+
+  // Redirect employee_data_admin to their allowed page
+  if (!isLoading && session?.isEmployeeDataAdmin) {
+    setLocation("/admin/employee-data");
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session?.authenticated || !session?.isAdmin || session?.isEmployeeDataAdmin) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
 function Router() {
   const { data: session, isLoading } = useQuery<SessionData>({
     queryKey: ["/api/auth/session"],
@@ -213,52 +251,52 @@ function Router() {
         {() => <AdminProtected><AdminDashboardPage /></AdminProtected>}
       </Route>
       <Route path="/admin/settings">
-        {() => <AdminProtected><AdminSettingsPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminSettingsPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/attendance">
-        {() => <AdminProtected><AdminAttendancePage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminAttendancePage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payslip">
-        {() => <AdminProtected><AdminPayslipPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminPayslipPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/leave">
-        {() => <AdminProtected><AdminLeavePage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminLeavePage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/claims">
-        {() => <AdminProtected><AdminClaimsPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminClaimsPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/reports">
-        {() => <AdminProtected><AdminToolsPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminToolsPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/emails">
-        {() => <AdminProtected><AdminEmailsPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminEmailsPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payroll/import">
-        {() => <AdminProtected><AdminPayrollImportPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminPayrollImportPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payroll/reports">
-        {() => <AdminProtected><AdminPayrollReportsPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminPayrollReportsPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payroll/loans">
-        {() => <AdminProtected><AdminPayrollLoansPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminPayrollLoansPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payroll/generate">
-        {() => <AdminProtected><AdminPayrollGeneratePage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminPayrollGeneratePage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payroll/adjustments">
-        {() => <AdminProtected><AdminPayrollAdjustmentsPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminPayrollAdjustmentsPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payroll/employees">
-        {() => <AdminProtected><AdminEmployeePayrollPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminEmployeePayrollPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/payroll">
-        {() => <AdminProtected><AdminPayrollReportsPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminPayrollReportsPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/employee-data">
         {() => <AdminProtected><AdminEmployeeDataPage /></AdminProtected>}
       </Route>
       <Route path="/admin/payroll/historical-import">
-        {() => <AdminProtected><AdminHistoricalPayrollImportPage /></AdminProtected>}
+        {() => <FullAdminProtected><AdminHistoricalPayrollImportPage /></FullAdminProtected>}
       </Route>
       <Route path="/admin/:rest*">
         {() => {

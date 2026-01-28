@@ -1,14 +1,28 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { LogOut, Users, Calendar, FileText, DollarSign, Receipt, Settings, Wrench, Mail, UserCog } from "lucide-react";
 import { useLocation } from "wouter";
 import { MenuCard } from "@/components/MenuCard";
+import { useMemo, useEffect } from "react";
+
+interface SessionData {
+  authenticated: boolean;
+  isAdmin: boolean;
+  isViewOnlyAdmin?: boolean;
+  isAttendanceViewAdmin?: boolean;
+  isEmployeeDataAdmin?: boolean;
+  user?: { id: string; name: string; email: string };
+}
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+
+  const { data: sessionData } = useQuery<SessionData>({
+    queryKey: ["/api/auth/session"],
+  });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -20,62 +34,89 @@ export default function AdminDashboardPage() {
     },
   });
 
-  const menuItems = [
-    {
-      title: "All Attendance",
-      icon: Users,
-      href: "/admin/attendance",
-      iconColor: "bg-blue-500/10",
-    },
-    {
-      title: "All Leave",
-      icon: Calendar,
-      href: "/admin/leave",
-      iconColor: "bg-green-500/10",
-    },
-    {
-      title: "All Claims",
-      icon: Receipt,
-      href: "/admin/claims",
-      iconColor: "bg-purple-500/10",
-    },
-    {
-      title: "Payroll Management",
-      icon: DollarSign,
-      href: "/admin/payroll",
-      iconColor: "bg-emerald-500/10",
-    },
-    {
-      title: "All Income Tax",
-      icon: FileText,
-      href: "/admin/income-tax",
-      iconColor: "bg-orange-500/10",
-    },
-    {
-      title: "Tools",
-      icon: Wrench,
-      href: "/admin/reports",
-      iconColor: "bg-indigo-500/10",
-    },
-    {
-      title: "Employee Data",
-      icon: UserCog,
-      href: "/admin/employee-data",
-      iconColor: "bg-teal-500/10",
-    },
-    {
-      title: "Send Emails",
-      icon: Mail,
-      href: "/admin/emails",
-      iconColor: "bg-cyan-500/10",
-    },
-    {
-      title: "Settings",
-      icon: Settings,
-      href: "/admin/settings",
-      iconColor: "bg-gray-500/10",
-    },
-  ];
+  const isEmployeeDataAdmin = sessionData?.isEmployeeDataAdmin || false;
+
+  // Redirect employee_data_admin directly to Employee Data page
+  useEffect(() => {
+    if (isEmployeeDataAdmin) {
+      setLocation("/admin/employee-data");
+    }
+  }, [isEmployeeDataAdmin, setLocation]);
+
+  const menuItems = useMemo(() => {
+    const allMenuItems = [
+      {
+        title: "All Attendance",
+        icon: Users,
+        href: "/admin/attendance",
+        iconColor: "bg-blue-500/10",
+        restrictedRoles: [] as string[],
+      },
+      {
+        title: "All Leave",
+        icon: Calendar,
+        href: "/admin/leave",
+        iconColor: "bg-green-500/10",
+        restrictedRoles: [],
+      },
+      {
+        title: "All Claims",
+        icon: Receipt,
+        href: "/admin/claims",
+        iconColor: "bg-purple-500/10",
+        restrictedRoles: [],
+      },
+      {
+        title: "Payroll Management",
+        icon: DollarSign,
+        href: "/admin/payroll",
+        iconColor: "bg-emerald-500/10",
+        restrictedRoles: [],
+      },
+      {
+        title: "All Income Tax",
+        icon: FileText,
+        href: "/admin/income-tax",
+        iconColor: "bg-orange-500/10",
+        restrictedRoles: [],
+      },
+      {
+        title: "Tools",
+        icon: Wrench,
+        href: "/admin/reports",
+        iconColor: "bg-indigo-500/10",
+        restrictedRoles: [],
+      },
+      {
+        title: "Employee Data",
+        icon: UserCog,
+        href: "/admin/employee-data",
+        iconColor: "bg-teal-500/10",
+        restrictedRoles: ["employee_data_admin"],
+      },
+      {
+        title: "Send Emails",
+        icon: Mail,
+        href: "/admin/emails",
+        iconColor: "bg-cyan-500/10",
+        restrictedRoles: [],
+      },
+      {
+        title: "Settings",
+        icon: Settings,
+        href: "/admin/settings",
+        iconColor: "bg-gray-500/10",
+        restrictedRoles: [],
+      },
+    ];
+
+    // If user is employee_data_admin, only show Employee Data menu
+    if (isEmployeeDataAdmin) {
+      return allMenuItems.filter(item => item.restrictedRoles.includes("employee_data_admin"));
+    }
+
+    return allMenuItems;
+  }, [isEmployeeDataAdmin]);
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
