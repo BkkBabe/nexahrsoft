@@ -19,7 +19,7 @@ Preferred communication style: Simple, everyday language.
 ### Backend Architecture
 
 - **Server**: Express.js with TypeScript, using `express-session` for session management and a RESTful API design.
-- **Authentication & Authorization**: Dual admin system (master admin + database users with 'admin'/'viewonly_admin' roles). Session-based authentication with secure HTTP-only cookies, bcrypt-hashed passwords, and role-based access control. Features include user approval workflow, forced password change on first login, and distinct login paths for admins and employees. Super admin roles have specific privileges (e.g., archiving employees).
+- **Authentication & Authorization**: Dual admin system (master admin + database users with 'admin'/'viewonly_admin'/'attendance_view_admin'/'employee_data_admin' roles). Session-based authentication with secure HTTP-only cookies, bcrypt-hashed passwords, and role-based access control. Features include user approval workflow, forced password change on first login, and distinct login paths for admins and employees. Super admin roles have specific privileges (e.g., archiving employees). Role hierarchy: full admin > viewonly_admin, attendance_view_admin, employee_data_admin > user. Employee data admins can only access the Employee Data Management page and are blocked from all other admin pages via FullAdminProtected route guards and requireFullAdmin middleware.
 - **Data Layer**: Drizzle ORM for type-safe queries and Zod for validation, backed by PostgreSQL (Neon serverless database). Monetary fields are stored as `numeric(12,2)` and processed with helper functions for precision.
 - **API Structure**: RESTful conventions with Zod schema validation for `/api/admin/*` and `/api/auth/*` endpoints.
 
