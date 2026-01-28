@@ -3444,7 +3444,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { year } = req.query as { year?: string };
       const currentYear = year ? parseInt(year) : new Date().getFullYear();
-      const balances = await storage.getAllLeaveBalances(currentYear);
+      let balances = await storage.getAllLeaveBalances(currentYear);
+      
+      // Auto-fill missing employee names from users table
+      const balancesWithMissingNames = balances.filter(b => !b.employeeName);
+      if (balancesWithMissingNames.length > 0) {
+        const allUsers = await storage.getAllUsers();
+        const userMap = new Map(allUsers.map(u => [u.id, u]));
+        
+        for (const balance of balancesWithMissingNames) {
+          const user = userMap.get(balance.userId);
+          if (user) {
+            // Update directly in database
+            await db.update(leaveBalances)
+              .set({
+                employeeName: user.name,
+                employeeCode: balance.employeeCode || user.employeeCode || undefined,
+              })
+              .where(eq(leaveBalances.id, balance.id));
+          }
+        }
+        // Refetch after update
+        balances = await storage.getAllLeaveBalances(currentYear);
+      }
+      
       res.json({ balances });
     } catch (error) {
       console.error("Get all leave balances error:", error);
