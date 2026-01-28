@@ -324,31 +324,74 @@ export default function AdminLeavePage() {
     return records;
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
     setCsvFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const records = parseCSV(text);
-      setParsedRecords(records);
-      
-      if (records.length === 0) {
-        toast({
-          title: "No Records Found",
-          description: "Could not parse any leave records from the file. Please check the format.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "File Parsed",
-          description: `Found ${records.length} leave records ready to import`,
-        });
-      }
-    };
-    reader.readAsText(file);
+    const fileExt = file.name.toLowerCase().split('.').pop();
+    
+    // For Excel files, use server-side parsing
+    if (fileExt === 'xls' || fileExt === 'xlsx') {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        const base64 = btoa(
+          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        );
+        
+        try {
+          const res = await apiRequest('POST', '/api/admin/leave/history/parse-excel', { 
+            fileBase64: base64, 
+            fileName: file.name 
+          });
+          const response = await res.json();
+          
+          if (response.success && response.records) {
+            setParsedRecords(response.records);
+            toast({
+              title: "Excel File Parsed",
+              description: `Found ${response.records.length} leave records from ${response.summary?.uniqueEmployees || 0} employees`,
+            });
+          } else {
+            toast({
+              title: "Parse Error",
+              description: response.message || "Could not parse leave records from the file",
+              variant: "destructive",
+            });
+          }
+        } catch (error: any) {
+          toast({
+            title: "Parse Error",
+            description: error.message || "Failed to parse Excel file",
+            variant: "destructive",
+          });
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // For CSV files, use client-side parsing
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        const records = parseCSV(text);
+        setParsedRecords(records);
+        
+        if (records.length === 0) {
+          toast({
+            title: "No Records Found",
+            description: "Could not parse any leave records from the file. Please check the format.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "File Parsed",
+            description: `Found ${records.length} leave records ready to import`,
+          });
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleImport = () => {
@@ -1234,21 +1277,21 @@ export default function AdminLeavePage() {
                 Import Leave History
               </CardTitle>
               <CardDescription>
-                Upload a CSV file with historical leave records from your previous system
+                Upload an Excel (.xls, .xlsx) or CSV file with historical leave records
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
                   <div className="space-y-2 flex-1">
-                    <Label htmlFor="csv-file">CSV File</Label>
+                    <Label htmlFor="leave-file">Leave History File</Label>
                     <Input
                       ref={fileInputRef}
-                      id="csv-file"
+                      id="leave-file"
                       type="file"
-                      accept=".csv,.txt"
+                      accept=".xls,.xlsx,.csv,.txt"
                       onChange={handleFileUpload}
-                      data-testid="input-csv-file"
+                      data-testid="input-leave-file"
                     />
                     {csvFileName && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -1260,18 +1303,18 @@ export default function AdminLeavePage() {
                   <Button 
                     onClick={handleImport}
                     disabled={parsedRecords.length === 0 || importMutation.isPending || isViewOnlyAdmin}
-                    data-testid="button-import-csv"
+                    data-testid="button-import-leave"
                   >
                     {importMutation.isPending ? "Importing..." : "Import Records"}
                   </Button>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  <p className="font-medium mb-2">Expected CSV Format:</p>
+                  <p className="font-medium mb-2">Supported Formats:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Employee code and name in header row format</li>
-                    <li>Leave type headers (e.g., AL - ANNUAL LEAVE)</li>
-                    <li>Date in DD-MM-YYYY format</li>
-                    <li>Duration in days (e.g., 1.00 day)</li>
+                    <li><strong>Excel (.xls, .xlsx)</strong> - 3SI Leave History Report format</li>
+                    <li><strong>CSV</strong> - Custom leave data with employee code, name, leave type, date</li>
+                    <li>Leave types: AL, ML, OIL, UL, CL, and variants (ALFH, ALSH, etc.)</li>
+                    <li>Dates in DD-MM-YYYY format</li>
                   </ul>
                 </div>
               </div>

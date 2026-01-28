@@ -3628,6 +3628,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Parse Excel leave history file (3SI format)
+  app.post("/api/admin/leave/history/parse-excel", async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { fileBase64, fileName } = req.body;
+      
+      if (!fileBase64) {
+        return res.status(400).json({ message: "No file data provided" });
+      }
+
+      console.log(`[Leave Import] Parsing file: ${fileName}, base64 length: ${fileBase64?.length || 0}`);
+      
+      // Decode base64 file
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(fileBase64, "base64");
+        console.log(`[Leave Import] Buffer created, size: ${buffer.length} bytes`);
+      } catch (bufferError) {
+        console.error("[Leave Import] Buffer creation failed:", bufferError);
+        return res.status(400).json({ message: "Invalid file data encoding" });
+      }
+      
+      let workbook;
+      try {
+        workbook = XLSX.read(buffer, { type: "buffer" });
+        console.log(`[Leave Import] Workbook read successfully, sheets: ${workbook.SheetNames.join(", ")}`);
+      } catch (xlsxError: any) {
+        console.error("[Leave Import] XLSX parse failed:", xlsxError);
+        return res.status(400).json({ message: `Failed to parse Excel file: ${xlsxError.message || "Unknown error"}` });
+      }
+      
+      // Read first sheet
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+      
+      console.log(`[Leave Import] Raw data rows: ${data.length}`);
+      
+      // Parse leave records from 3SI format
+      const records: any[] = [];
+      let currentEmployee: { code: string; name: string } | null = null;
+      let currentLeaveType: string | null = null;
+      
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row || row.length === 0) continue;
+        
+        // Check for employee header: "Emp Code: XXXXX   Employee: NAME   Leave Calculation Date: DD-MM-YYYY"
+        if (row[1] && typeof row[1] === 'string' && row[1].includes('Emp Code:')) {
+          const match = row[1].match(/Emp Code:\s*(\w+)\s+Employee:\s*(.+?)\s+Leave Calculation Date/);
+          if (match) {
+            currentEmployee = { code: match[1], name: match[2].trim() };
+          }
+        }
+        
+        // Check for leave type: row[1] = "Leave Type: ", row[7] = "XX - DESCRIPTION"
+        if (row[1] === 'Leave Type: ' && row[7]) {
+          const leaveTypeStr = row[7].toString();
+          currentLeaveType = leaveTypeStr.split(' - ')[0].trim();
+        }
+        
+        // Check for leave record (S.No as number in column 1, date in column 3)
+        if (currentEmployee && currentLeaveType && typeof row[1] === 'number' && row[3]) {
+          const dateStr = row[3].toString(); // DD-MM-YYYY format
+          const dayOfWeek = row[9]?.toString() || '';
+          const remarks = row[13]?.toString() || null;
+          const daysOrHours = row[24]?.toString() || '1.00 day';
+          const mlClaimAmt = row[31]?.toString() || null;
+          
+          // Parse year from date (format: DD-MM-YYYY)
+          const dateParts = dateStr.split('-');
+          let year = new Date().getFullYear();
+          let formattedDate = dateStr;
+          
+          if (dateParts.length === 3) {
+            year = parseInt(dateParts[2]);
+            // Convert to YYYY-MM-DD format for storage
+            formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+          }
+          
+          records.push({
+            employeeCode: currentEmployee.code,
+            employeeName: currentEmployee.name,
+            leaveType: currentLeaveType,
+            leaveDate: formattedDate,
+            dayOfWeek: dayOfWeek || null,
+            remarks: remarks,
+            daysOrHours: daysOrHours,
+            mlClaimAmount: mlClaimAmt,
+            year: year
+          });
+        }
+      }
+      
+      console.log(`[Leave Import] Parsed ${records.length} leave records`);
+      
+      // Get unique employees and leave types for summary
+      const uniqueEmployees = new Set(records.map(r => r.employeeCode));
+      const leaveTypeCounts: Record<string, number> = {};
+      records.forEach(r => {
+        leaveTypeCounts[r.leaveType] = (leaveTypeCounts[r.leaveType] || 0) + 1;
+      });
+      
+      res.json({
+        success: true,
+        records,
+        summary: {
+          totalRecords: records.length,
+          uniqueEmployees: uniqueEmployees.size,
+          leaveTypes: leaveTypeCounts
+        }
+      });
+    } catch (error) {
+      console.error("[Leave Import] Parse error:", error);
+      res.status(500).json({ message: "Failed to parse leave history file" });
+    }
+  });
+
   // Admin: Get leave history
   app.get("/api/admin/leave/history", async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
