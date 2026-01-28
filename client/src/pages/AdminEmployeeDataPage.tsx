@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download } from "lucide-react";
+import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download, Archive, ArchiveRestore } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useLocation } from "wouter";
@@ -55,6 +55,7 @@ export default function AdminEmployeeDataPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [viewingAuditUser, setViewingAuditUser] = useState<User | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -100,6 +101,11 @@ export default function AdminEmployeeDataPage() {
 
   const { data: usersData, isLoading: usersLoading, refetch: refetchUsers } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
+  });
+
+  const { data: archivedUsersData, isLoading: archivedLoading, refetch: refetchArchivedUsers } = useQuery<User[]>({
+    queryKey: ["/api/admin/users/archived"],
+    enabled: showArchived,
   });
 
   const { data: auditLogsData, isLoading: auditLoading } = useQuery<{ employee: { id: string; name: string; employeeCode: string }; auditLogs: EmployeeDataAuditLog[] }>({
@@ -168,6 +174,48 @@ export default function AdminEmployeeDataPage() {
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      return await apiRequest("POST", "/api/admin/users/archive", { userIds });
+    },
+    onSuccess: async () => {
+      toast({
+        title: "Success",
+        description: "Employee archived successfully",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/users/archived"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to archive employee",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      return await apiRequest("POST", "/api/admin/users/unarchive", { userIds });
+    },
+    onSuccess: async () => {
+      toast({
+        title: "Success",
+        description: "Employee restored successfully",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/users/archived"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to restore employee",
+        variant: "destructive",
+      });
+    },
+  });
+
   const isIncompleteRecord = (user: User): boolean => {
     return !user.employeeCode || !user.department || !user.basicMonthlySalary;
   };
@@ -203,6 +251,19 @@ export default function AdminEmployeeDataPage() {
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [users, searchTerm, selectedDepartment, showIncompleteOnly]);
+
+  const archivedUsers = useMemo(() => {
+    const archived = archivedUsersData || [];
+    return archived
+      .filter(u => {
+        const matchesSearch = searchTerm === "" || 
+          u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (u.employeeCode?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (u.email?.toLowerCase().includes(searchTerm.toLowerCase()));
+        return matchesSearch;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [archivedUsersData, searchTerm]);
 
   const handleEditClick = (user: User) => {
     setEditingUser(user);
@@ -502,6 +563,18 @@ export default function AdminEmployeeDataPage() {
                   </Badge>
                 )}
               </Button>
+              <Button
+                variant={showArchived ? "default" : "outline"}
+                onClick={() => {
+                  setShowArchived(!showArchived);
+                  if (!showArchived) refetchArchivedUsers();
+                }}
+                className="gap-2"
+                data-testid="button-show-archived"
+              >
+                <Archive className="h-4 w-4" />
+                Archived
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -567,6 +640,16 @@ export default function AdminEmployeeDataPage() {
                             >
                               <History className="h-4 w-4" />
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => archiveMutation.mutate([user.id])}
+                              disabled={archiveMutation.isPending}
+                              data-testid={`button-archive-${user.id}`}
+                              title="Archive employee"
+                            >
+                              <Archive className="h-4 w-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -577,6 +660,74 @@ export default function AdminEmployeeDataPage() {
             )}
           </CardContent>
         </Card>
+
+        {showArchived && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Archive className="h-5 w-5" />
+                Archived Employees ({archivedUsers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {archivedLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : archivedUsers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No archived employees
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">S/N</TableHead>
+                        <TableHead>Employee Code</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>Designation</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {archivedUsers.map((user, index) => (
+                        <TableRow key={user.id} className="opacity-70" data-testid={`row-archived-${user.id}`}>
+                          <TableCell className="font-mono text-muted-foreground">
+                            {index + 1}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono">
+                              {user.employeeCode || "-"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">{user.name}</TableCell>
+                          <TableCell>{user.department || "-"}</TableCell>
+                          <TableCell>{user.designation || "-"}</TableCell>
+                          <TableCell className="text-muted-foreground">{user.email || "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => unarchiveMutation.mutate([user.id])}
+                              disabled={unarchiveMutation.isPending}
+                              data-testid={`button-restore-${user.id}`}
+                            >
+                              <ArchiveRestore className="h-4 w-4 mr-2" />
+                              Restore
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
