@@ -49,6 +49,13 @@ Preferred communication style: Simple, everyday language.
     - **Payslip Integration**: Approved claims automatically appear as reimbursements in employee payslips for the corresponding pay period, with itemized breakdown and totals included in net pay calculation.
     - **Admin Delete**: Admin can delete claims with optional reason, logged in audit trail.
     - **Audit Trail**: Dedicated "Audit Trail" tab showing all claim actions (approved, rejected, deleted) with performer name, timestamp, and comments.
+- **Foreign Employee Compliance Management**:
+    - **Employee Types**: Support for Local, PR (Permanent Resident), and Foreigner employee classifications.
+    - **Passport Tracking**: Passport number and expiry date fields for PR/foreign employees.
+    - **Work Pass Tracking**: Work permit number and expiry date fields with validation.
+    - **Document Management**: Upload, view, and delete compliance documents (Passport, Work Pass, Certificates, Other) with metadata including expiry dates and notes.
+    - **Expiry Warnings**: Visual badges in employee table and document list for documents expiring within 90 days (yellow) or already expired (red).
+    - **Secure Storage**: Documents stored privately in Object Storage with role-based access control.
 - **Admin Payroll Management**:
     - **Employee Payroll Settings**: Configuration of individual employee profiles including residency status, DOB, salary, and recurring salary adjustments with full CRUD and audit trails.
     - **Payroll Generation**: Automatic payroll generation from attendance records, supporting CPF calculations (Singapore-specific), overtime, and various pay types. Features idempotency checks and handles special cases for CPF.
