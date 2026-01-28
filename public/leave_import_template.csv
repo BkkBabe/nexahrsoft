@@ -1,0 +1,7 @@
+Employee Code,Employee Name,Leave Type,From Date,To Date,Days,Remarks
+001,John Smith,AL,01-01-2025,03-01-2025,3,Annual leave
+001,John Smith,ML,15-02-2025,16-02-2025,2,Medical leave with MC
+002,Jane Doe,AL,10-03-2025,12-03-2025,3,Family vacation
+002,Jane Doe,OIL,20-04-2025,20-04-2025,1,Off in lieu for overtime
+003,Bob Wilson,UL,05-05-2025,05-05-2025,1,Unpaid leave
+003,Bob Wilson,CL,01-06-2025,02-06-2025,2,Compassionate leave
