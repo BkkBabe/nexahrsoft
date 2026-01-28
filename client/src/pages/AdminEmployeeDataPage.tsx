@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle } from "lucide-react";
+import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useLocation } from "wouter";
@@ -313,6 +313,103 @@ export default function AdminEmployeeDataPage() {
     });
   };
 
+  const handleExportEmployees = () => {
+    if (!users || users.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No employee data to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headers = [
+      "Employee Code",
+      "Name",
+      "Email",
+      "Department",
+      "Designation",
+      "Mobile Number",
+      "Gender",
+      "NRIC/FIN",
+      "Birthday",
+      "Join Date",
+      "Resign Date",
+      "Work Permit Number",
+      "Work Permit Expiry",
+      "FIN Number",
+      "FIN Number Expiry",
+      "Role",
+      "Is Approved",
+      "Monthly Salary",
+      "Hourly Rate",
+      "OT 1.5x Rate",
+      "OT 2.0x Rate",
+      "Mobile Allowance",
+      "Transport Allowance",
+      "Meal Allowance",
+      "Shift Allowance",
+      "Other Allowance",
+      "House Rental Allowance",
+      "Remarks 1",
+      "Remarks 2",
+      "Remarks 3",
+      "Remarks 4",
+    ];
+
+    const csvContent = [
+      headers.join(","),
+      ...users.map((u) => [
+        u.employeeCode || "",
+        `"${(u.name || "").replace(/"/g, '""')}"`,
+        u.email || "",
+        u.department || "",
+        `"${(u.designation || "").replace(/"/g, '""')}"`,
+        u.mobileNumber || "",
+        u.gender || "",
+        u.nricFin || "",
+        u.birthday || "",
+        u.joinDate || "",
+        u.resignDate || "",
+        u.workPermitNumber || "",
+        u.workPermitExpiry || "",
+        u.finNumber || "",
+        u.finNumberExpiry || "",
+        u.role || "",
+        u.isApproved ? "Yes" : "No",
+        u.basicMonthlySalary || "",
+        u.hourlyRate || "",
+        u.ot15Rate || "",
+        u.ot20Rate || "",
+        u.defaultMobileAllowance || "",
+        u.defaultTransportAllowance || "",
+        u.defaultMealAllowance || "",
+        u.defaultShiftAllowance || "",
+        u.defaultOtherAllowance || "",
+        u.defaultHouseRentalAllowance || "",
+        `"${(u.remarks1 || "").replace(/"/g, '""')}"`,
+        `"${(u.remarks2 || "").replace(/"/g, '""')}"`,
+        `"${(u.remarks3 || "").replace(/"/g, '""')}"`,
+        `"${(u.remarks4 || "").replace(/"/g, '""')}"`,
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `employees_export_${format(new Date(), "yyyy-MM-dd")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export Complete",
+      description: `Exported ${users.length} employee records`,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -343,6 +440,14 @@ export default function AdminEmployeeDataPage() {
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleExportEmployees}
+              data-testid="button-export-employees"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export
             </Button>
             <Button
               onClick={() => setIsAddDialogOpen(true)}
