@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download, Archive, ArchiveRestore, LogOut } from "lucide-react";
+import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download, Archive, ArchiveRestore, LogOut, FileUp, Trash2, Eye, FileText, AlertTriangle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useLocation } from "wouter";
@@ -16,7 +16,7 @@ import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { User, EmployeeDataAuditLog } from "@shared/schema";
+import type { User, EmployeeDataAuditLog, EmployeeDocument } from "@shared/schema";
 
 interface EditableFields {
   name: string;
@@ -36,6 +36,10 @@ interface EditableFields {
   remarks2: string;
   remarks3: string;
   remarks4: string;
+  // Foreign employee fields
+  employeeType: string;
+  passportNumber: string;
+  passportExpiry: string;
   // Salary calculation fields
   basicMonthlySalary: string;
   hourlyRate: string;
@@ -87,6 +91,9 @@ export default function AdminEmployeeDataPage() {
     remarks2: "",
     remarks3: "",
     remarks4: "",
+    employeeType: "",
+    passportNumber: "",
+    passportExpiry: "",
     basicMonthlySalary: "",
     hourlyRate: "",
     ot15Rate: "",
@@ -108,6 +115,22 @@ export default function AdminEmployeeDataPage() {
   });
 
   const isEmployeeDataAdmin = sessionData?.isEmployeeDataAdmin || false;
+
+  // Document upload state
+  const [documentUploadState, setDocumentUploadState] = useState({
+    isUploading: false,
+    documentType: "other" as string,
+    documentName: "",
+    expiryDate: "",
+    notes: "",
+  });
+
+  // Fetch employee documents when editing - uses constructed queryKey for proper cache invalidation
+  const documentQueryKey = editingUser?.id ? `/api/admin/employees/${editingUser.id}/documents` : null;
+  const { data: employeeDocuments } = useQuery<EmployeeDocument[]>({
+    queryKey: [documentQueryKey],
+    enabled: !!editingUser?.id && !!documentQueryKey,
+  });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -189,6 +212,86 @@ export default function AdminEmployeeDataPage() {
       });
     },
   });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      if (!editingUser?.id) throw new Error("No employee selected");
+      return await apiRequest("DELETE", `/api/admin/employees/${editingUser.id}/documents/${docId}`);
+    },
+    onSuccess: async () => {
+      toast({
+        title: "Success",
+        description: "Document deleted successfully",
+      });
+      // Invalidate documents cache for this employee
+      if (documentQueryKey) {
+        await queryClient.invalidateQueries({ queryKey: [documentQueryKey] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete document",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDocumentUpload = async (file: File) => {
+    if (!editingUser?.id) return;
+    
+    setDocumentUploadState(prev => ({ ...prev, isUploading: true }));
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', documentUploadState.documentType);
+    formData.append('documentName', documentUploadState.documentName || file.name);
+    if (documentUploadState.expiryDate) {
+      formData.append('expiryDate', documentUploadState.expiryDate);
+    }
+    if (documentUploadState.notes) {
+      formData.append('notes', documentUploadState.notes);
+    }
+    
+    try {
+      const response = await fetch(`/api/admin/employees/${editingUser.id}/documents`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to upload document');
+      }
+      
+      toast({
+        title: "Success",
+        description: "Document uploaded successfully",
+      });
+      
+      // Reset form
+      setDocumentUploadState({
+        isUploading: false,
+        documentType: "other",
+        documentName: "",
+        expiryDate: "",
+        notes: "",
+      });
+      
+      // Invalidate documents cache for this employee
+      if (documentQueryKey) {
+        await queryClient.invalidateQueries({ queryKey: [documentQueryKey] });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload document",
+        variant: "destructive",
+      });
+      setDocumentUploadState(prev => ({ ...prev, isUploading: false }));
+    }
+  };
 
   const archiveMutation = useMutation({
     mutationFn: async (userIds: string[]) => {
@@ -301,6 +404,9 @@ export default function AdminEmployeeDataPage() {
       remarks2: user.remarks2 || "",
       remarks3: user.remarks3 || "",
       remarks4: user.remarks4 || "",
+      employeeType: user.employeeType || "",
+      passportNumber: user.passportNumber || "",
+      passportExpiry: user.passportExpiry || "",
       basicMonthlySalary: user.basicMonthlySalary || "",
       hourlyRate: user.hourlyRate || "",
       ot15Rate: user.ot15Rate || "",
@@ -649,7 +755,39 @@ export default function AdminEmployeeDataPage() {
                             {user.employeeCode || "Missing"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {user.name}
+                            {(user.employeeType === 'pr' || user.employeeType === 'foreigner') && (
+                              <>
+                                {user.passportExpiry && new Date(user.passportExpiry) < new Date() && (
+                                  <Badge variant="destructive" className="text-xs flex items-center gap-1" title="Passport expired">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Passport
+                                  </Badge>
+                                )}
+                                {user.passportExpiry && new Date(user.passportExpiry) >= new Date() && new Date(user.passportExpiry) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
+                                  <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" title="Passport expiring soon">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Passport
+                                  </Badge>
+                                )}
+                                {user.workPermitExpiry && new Date(user.workPermitExpiry) < new Date() && (
+                                  <Badge variant="destructive" className="text-xs flex items-center gap-1" title="Work Pass expired">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Work Pass
+                                  </Badge>
+                                )}
+                                {user.workPermitExpiry && new Date(user.workPermitExpiry) >= new Date() && new Date(user.workPermitExpiry) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
+                                  <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" title="Work Pass expiring soon">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Work Pass
+                                  </Badge>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>{user.department || "-"}</TableCell>
                         <TableCell>{user.designation || "-"}</TableCell>
                         <TableCell className="text-muted-foreground">{user.email || "-"}</TableCell>
@@ -872,50 +1010,149 @@ export default function AdminEmployeeDataPage() {
 
               <Separator />
 
-              {/* Work Permit & FIN Details */}
+              {/* Employee Type */}
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-3">Work Permit & FIN Details</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Employee Classification</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-workPermitNumber">Work Permit Number</Label>
-                    <Input
-                      id="edit-workPermitNumber"
-                      value={editFormData.workPermitNumber}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitNumber: e.target.value }))}
-                      data-testid="input-edit-workPermitNumber"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-workPermitExpiry">Work Permit Expiry</Label>
-                    <Input
-                      id="edit-workPermitExpiry"
-                      type="date"
-                      value={editFormData.workPermitExpiry}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitExpiry: e.target.value }))}
-                      data-testid="input-edit-workPermitExpiry"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-finNumber">FIN Number</Label>
-                    <Input
-                      id="edit-finNumber"
-                      value={editFormData.finNumber}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, finNumber: e.target.value }))}
-                      data-testid="input-edit-finNumber"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
-                    <Input
-                      id="edit-finNumberExpiry"
-                      type="date"
-                      value={editFormData.finNumberExpiry}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
-                      data-testid="input-edit-finNumberExpiry"
-                    />
+                    <Label htmlFor="edit-employeeType">Employee Type</Label>
+                    <Select 
+                      value={editFormData.employeeType} 
+                      onValueChange={(value) => setEditFormData(prev => ({ ...prev, employeeType: value }))}
+                    >
+                      <SelectTrigger id="edit-employeeType" data-testid="select-edit-employeeType">
+                        <SelectValue placeholder="Select employee type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="local">Local (Singapore Citizen)</SelectItem>
+                        <SelectItem value="pr">Permanent Resident (PR)</SelectItem>
+                        <SelectItem value="foreigner">Foreigner</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
+
+              {/* Foreign Employee Details - Only shown when employee type is foreigner or pr */}
+              {(editFormData.employeeType === "foreigner" || editFormData.employeeType === "pr") && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-3">Foreign Employee / PR Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-passportNumber">Passport Number</Label>
+                        <Input
+                          id="edit-passportNumber"
+                          value={editFormData.passportNumber}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, passportNumber: e.target.value }))}
+                          placeholder="Enter passport number"
+                          data-testid="input-edit-passportNumber"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-passportExpiry">Passport Expiry</Label>
+                        <Input
+                          id="edit-passportExpiry"
+                          type="date"
+                          value={editFormData.passportExpiry}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, passportExpiry: e.target.value }))}
+                          data-testid="input-edit-passportExpiry"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-workPermitNumber">Work Permit / Pass Number</Label>
+                        <Input
+                          id="edit-workPermitNumber"
+                          value={editFormData.workPermitNumber}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitNumber: e.target.value }))}
+                          placeholder="WP / EP / SP number"
+                          data-testid="input-edit-workPermitNumber"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-workPermitExpiry">Work Permit / Pass Expiry</Label>
+                        <Input
+                          id="edit-workPermitExpiry"
+                          type="date"
+                          value={editFormData.workPermitExpiry}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitExpiry: e.target.value }))}
+                          data-testid="input-edit-workPermitExpiry"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-finNumber">FIN Number</Label>
+                        <Input
+                          id="edit-finNumber"
+                          value={editFormData.finNumber}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumber: e.target.value }))}
+                          data-testid="input-edit-finNumber"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
+                        <Input
+                          id="edit-finNumberExpiry"
+                          type="date"
+                          value={editFormData.finNumberExpiry}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
+                          data-testid="input-edit-finNumberExpiry"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Work Permit & FIN Details - Show for local employees */}
+              {editFormData.employeeType !== "foreigner" && editFormData.employeeType !== "pr" && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-3">Work Permit & FIN Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-workPermitNumber">Work Permit Number</Label>
+                        <Input
+                          id="edit-workPermitNumber"
+                          value={editFormData.workPermitNumber}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitNumber: e.target.value }))}
+                          data-testid="input-edit-workPermitNumber"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-workPermitExpiry">Work Permit Expiry</Label>
+                        <Input
+                          id="edit-workPermitExpiry"
+                          type="date"
+                          value={editFormData.workPermitExpiry}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitExpiry: e.target.value }))}
+                          data-testid="input-edit-workPermitExpiry"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-finNumber">FIN Number</Label>
+                        <Input
+                          id="edit-finNumber"
+                          value={editFormData.finNumber}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumber: e.target.value }))}
+                          data-testid="input-edit-finNumber"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
+                        <Input
+                          id="edit-finNumberExpiry"
+                          type="date"
+                          value={editFormData.finNumberExpiry}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
+                          data-testid="input-edit-finNumberExpiry"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <Separator />
 
@@ -1104,6 +1341,166 @@ export default function AdminEmployeeDataPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Compliance Documents Section - Only for foreign employees */}
+              {(editFormData.employeeType === 'pr' || editFormData.employeeType === 'foreigner') && (
+                <div className="mt-6">
+                  <Separator className="mb-4" />
+                  <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Compliance Documents
+                  </h3>
+                  
+                  {/* Existing Documents */}
+                  {employeeDocuments && employeeDocuments.length > 0 && (
+                    <div className="mb-4">
+                      <Label className="text-xs text-muted-foreground mb-2 block">Uploaded Documents</Label>
+                      <div className="space-y-2">
+                        {employeeDocuments.map((doc) => {
+                          const isExpiringSoon = doc.expiryDate && new Date(doc.expiryDate) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+                          const isExpired = doc.expiryDate && new Date(doc.expiryDate) < new Date();
+                          return (
+                            <div 
+                              key={doc.id} 
+                              className="flex items-center justify-between p-3 rounded-md border bg-muted/30"
+                              data-testid={`doc-row-${doc.id}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm">{doc.documentName}</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      {doc.documentType === 'passport' ? 'Passport' :
+                                       doc.documentType === 'work_pass' ? 'Work Pass' :
+                                       doc.documentType === 'certificate' ? 'Certificate' : 'Other'}
+                                    </Badge>
+                                    {isExpired && (
+                                      <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        Expired
+                                      </Badge>
+                                    )}
+                                    {!isExpired && isExpiringSoon && (
+                                      <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        Expires Soon
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {doc.expiryDate ? `Expires: ${format(new Date(doc.expiryDate), "dd MMM yyyy")}` : 'No expiry'}
+                                    {doc.notes && ` | ${doc.notes}`}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => window.open(`/api/admin/employees/${editingUser?.id}/documents/${doc.id}/file`, '_blank')}
+                                  data-testid={`btn-view-doc-${doc.id}`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to delete this document?')) {
+                                      deleteDocumentMutation.mutate(doc.id);
+                                    }
+                                  }}
+                                  disabled={deleteDocumentMutation.isPending}
+                                  data-testid={`btn-delete-doc-${doc.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Upload New Document */}
+                  <div className="border rounded-md p-4 bg-muted/20">
+                    <Label className="text-sm font-medium mb-3 block">Upload New Document</Label>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="doc-type" className="text-xs">Document Type</Label>
+                        <Select 
+                          value={documentUploadState.documentType}
+                          onValueChange={(value) => setDocumentUploadState(prev => ({ ...prev, documentType: value }))}
+                        >
+                          <SelectTrigger id="doc-type" data-testid="select-doc-type">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="passport">Passport</SelectItem>
+                            <SelectItem value="work_pass">Work Pass</SelectItem>
+                            <SelectItem value="certificate">Certificate</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="doc-name" className="text-xs">Document Name</Label>
+                        <Input
+                          id="doc-name"
+                          placeholder="e.g., Passport Scan 2025"
+                          value={documentUploadState.documentName}
+                          onChange={(e) => setDocumentUploadState(prev => ({ ...prev, documentName: e.target.value }))}
+                          data-testid="input-doc-name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="doc-expiry" className="text-xs">Expiry Date (optional)</Label>
+                        <Input
+                          id="doc-expiry"
+                          type="date"
+                          value={documentUploadState.expiryDate}
+                          onChange={(e) => setDocumentUploadState(prev => ({ ...prev, expiryDate: e.target.value }))}
+                          data-testid="input-doc-expiry"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="doc-notes" className="text-xs">Notes (optional)</Label>
+                        <Input
+                          id="doc-notes"
+                          placeholder="Additional notes..."
+                          value={documentUploadState.notes}
+                          onChange={(e) => setDocumentUploadState(prev => ({ ...prev, notes: e.target.value }))}
+                          data-testid="input-doc-notes"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="flex-1"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            handleDocumentUpload(file);
+                            e.target.value = '';
+                          }
+                        }}
+                        disabled={documentUploadState.isUploading}
+                        data-testid="input-doc-file"
+                      />
+                      {documentUploadState.isUploading && (
+                        <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Accepted formats: PDF, JPEG, PNG (max 10MB)
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button

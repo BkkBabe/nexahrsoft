@@ -7128,6 +7128,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== EMPLOYEE DOCUMENTS ROUTES ====================
+  
+  // Get documents for an employee
+  app.get("/api/admin/employees/:id/documents", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const documents = await storage.getEmployeeDocuments(id);
+      res.json(documents);
+    } catch (error) {
+      console.error("Get employee documents error:", error);
+      res.status(500).json({ message: "Failed to fetch employee documents" });
+    }
+  });
+  
+  // Upload document for an employee
+  app.post("/api/admin/employees/:id/documents", requireAdmin, requireWriteAccess, upload.single('file'), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { documentType, documentName, expiryDate, notes } = req.body;
+      
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+      
+      if (!documentType || !documentName) {
+        return res.status(400).json({ message: "Document type and name are required" });
+      }
+      
+      // Validate document type
+      const validTypes = ['passport', 'work_pass', 'certificate', 'other'];
+      if (!validTypes.includes(documentType)) {
+        return res.status(400).json({ message: "Invalid document type" });
+      }
+      
+      // Upload to object storage
+      const objectStorageService = new ObjectStorageService();
+      const fileUrl = await objectStorageService.uploadPrivateFile(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+        `employee-documents/${id}`
+      );
+      
+      // Get uploader ID (handle master admin case)
+      let uploadedBy: string | null = null;
+      if (req.session.userId && req.session.userId !== "admin") {
+        uploadedBy = req.session.userId;
+      }
+      
+      const document = await storage.createEmployeeDocument({
+        userId: id,
+        documentType,
+        documentName,
+        fileUrl,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        expiryDate: expiryDate || null,
+        notes: notes || null,
+        uploadedBy,
+      });
+      
+      res.json(document);
+    } catch (error) {
+      console.error("Upload employee document error:", error);
+      res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+  
+  // Download/view employee document
+  app.get("/api/admin/employees/:userId/documents/:docId/file", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { docId } = req.params;
+      const document = await storage.getEmployeeDocument(docId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      const objectStorageService = new ObjectStorageService();
+      const file = await objectStorageService.getPrivateFile(document.fileUrl);
+      
+      if (!file) {
+        return res.status(404).json({ message: "File not found in storage" });
+      }
+      
+      // Determine content type from filename
+      const ext = document.fileName.split('.').pop()?.toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (ext === 'pdf') contentType = 'application/pdf';
+      else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+      else if (ext === 'png') contentType = 'image/png';
+      
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
+      res.send(file);
+    } catch (error) {
+      console.error("Get employee document file error:", error);
+      res.status(500).json({ message: "Failed to get document file" });
+    }
+  });
+  
+  // Delete employee document
+  app.delete("/api/admin/employees/:userId/documents/:docId", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const { docId } = req.params;
+      const document = await storage.getEmployeeDocument(docId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Delete from object storage
+      const objectStorageService = new ObjectStorageService();
+      try {
+        await objectStorageService.deletePrivateFile(document.fileUrl);
+      } catch (err) {
+        console.error("Failed to delete file from storage:", err);
+        // Continue with database deletion even if storage deletion fails
+      }
+      
+      await storage.deleteEmployeeDocument(docId);
+      
+      res.json({ success: true, message: "Document deleted successfully" });
+    } catch (error) {
+      console.error("Delete employee document error:", error);
+      res.status(500).json({ message: "Failed to delete document" });
+    }
+  });
+
   // ==================== CLAIMS ROUTES ====================
   
   // Employee: Submit a new claim

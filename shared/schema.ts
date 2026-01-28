@@ -62,6 +62,25 @@ export const users = pgTable("users", {
   remarks2: text("remarks_2"),
   remarks3: text("remarks_3"),
   remarks4: text("remarks_4"),
+  // Foreign employee fields
+  employeeType: text("employee_type"), // 'local', 'foreigner', 'pr'
+  passportNumber: text("passport_number"),
+  passportExpiry: text("passport_expiry"), // YYYY-MM-DD format
+});
+
+// Employee documents table for storing compliance documents
+export const employeeDocuments = pgTable("employee_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  documentType: text("document_type").notNull(), // 'passport', 'work_pass', 'certificate', 'other'
+  documentName: text("document_name").notNull(), // User-friendly name/label
+  fileUrl: text("file_url").notNull(), // URL to file in object storage
+  fileName: text("file_name").notNull(), // Original filename
+  fileSize: integer("file_size"), // File size in bytes
+  expiryDate: text("expiry_date"), // YYYY-MM-DD format (optional, for documents with expiry)
+  notes: text("notes"), // Optional notes
+  uploadedBy: varchar("uploaded_by").references(() => users.id), // Admin who uploaded
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
 
 export const companySettings = pgTable("company_settings", {
@@ -199,6 +218,13 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type RegisterUser = z.infer<typeof registerUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const insertEmployeeDocumentSchema = createInsertSchema(employeeDocuments).omit({
+  id: true,
+  uploadedAt: true,
+});
+export type InsertEmployeeDocument = z.infer<typeof insertEmployeeDocumentSchema>;
+export type EmployeeDocument = typeof employeeDocuments.$inferSelect;
 
 export const insertCompanySettingsSchema = createInsertSchema(companySettings).omit({
   id: true,

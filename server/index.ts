@@ -283,6 +283,57 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("claims table FK constraints dropped (if existed)");
     }
     
+    // Add foreign employee fields to users table
+    const employeeTypeCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = 'employee_type'
+      )
+    `);
+    
+    if (!employeeTypeCheck.rows[0]?.exists) {
+      console.log("Adding foreign employee fields to users table...");
+      await pool.query(`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS employee_type text,
+        ADD COLUMN IF NOT EXISTS passport_number text,
+        ADD COLUMN IF NOT EXISTS passport_expiry text
+      `);
+      console.log("Foreign employee fields added to users table");
+    } else {
+      console.log("Foreign employee fields already exist");
+    }
+    
+    // Create employee_documents table for compliance documents
+    const employeeDocsTableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_name = 'employee_documents'
+      )
+    `);
+    
+    if (!employeeDocsTableCheck.rows[0]?.exists) {
+      console.log("Creating employee_documents table...");
+      await pool.query(`
+        CREATE TABLE employee_documents (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id varchar NOT NULL REFERENCES users(id),
+          document_type text NOT NULL,
+          document_name text NOT NULL,
+          file_url text NOT NULL,
+          file_name text NOT NULL,
+          file_size integer,
+          expiry_date text,
+          notes text,
+          uploaded_by varchar REFERENCES users(id),
+          uploaded_at timestamp NOT NULL DEFAULT NOW()
+        )
+      `);
+      console.log("employee_documents table created");
+    } else {
+      console.log("employee_documents table already exists");
+    }
+    
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production

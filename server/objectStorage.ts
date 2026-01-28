@@ -168,6 +168,25 @@ export class ObjectStorageService {
     return null;
   }
 
+  async deletePrivateFile(filePath: string): Promise<void> {
+    const privateDir = process.env.PRIVATE_OBJECT_DIR;
+    if (!privateDir) {
+      throw new Error("PRIVATE_OBJECT_DIR not set");
+    }
+
+    const relativePath = filePath.replace(/^\/private-objects\//, '');
+    const fullPath = `${privateDir}/${relativePath}`;
+
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    const [exists] = await file.exists();
+    if (exists) {
+      await file.delete();
+    }
+  }
+
   normalizePublicAssetPath(rawPath: string): string {
     if (!rawPath.startsWith("https://storage.googleapis.com/")) {
       return rawPath;
