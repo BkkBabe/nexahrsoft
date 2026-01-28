@@ -7059,14 +7059,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Admin: Update claim status (approve/reject)
+  // Admin: Update claim status (approve/reject/reverse)
   app.patch("/api/admin/claims/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { status, reviewComments } = req.body;
       const adminUserId = req.session.userId;
       
-      if (!status || !['approved', 'rejected'].includes(status)) {
+      if (!status || !['approved', 'rejected', 'pending'].includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
       }
       
@@ -7076,12 +7076,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Claim not found" });
       }
       
-      const updatedClaim = await storage.updateClaim(id, {
+      // For reversals, clear the reviewer info
+      const updateData: any = {
         status,
         reviewComments: reviewComments || null,
-        reviewedBy: adminUserId,
-        reviewedAt: new Date(),
-      });
+      };
+      
+      if (status === 'pending') {
+        // Reversal - clear reviewer info
+        updateData.reviewedBy = null;
+        updateData.reviewedAt = null;
+      } else {
+        // Approval/rejection - set reviewer info
+        updateData.reviewedBy = adminUserId;
+        updateData.reviewedAt = new Date();
+      }
+      
+      const updatedClaim = await storage.updateClaim(id, updateData);
       
       // Log the action - handle master admin case
       let performedByName = "Master Admin";
@@ -7089,6 +7100,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const admin = await storage.getUser(adminUserId!);
         performedByName = admin?.name || "Unknown Admin";
       }
+      
+      // Determine audit action - use 'reversed' when changing to pending from approved/rejected
+      const auditAction = status === 'pending' ? 'reversed' : status;
       
       await storage.createClaimsAuditLog({
         claimId: id,
@@ -7100,7 +7114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: existingClaim.description || null,
         claimMonth: existingClaim.claimMonth,
         claimYear: existingClaim.claimYear,
-        action: status,
+        action: auditAction,
         previousStatus: existingClaim.status,
         performedBy: adminUserId!,
         performedByName,

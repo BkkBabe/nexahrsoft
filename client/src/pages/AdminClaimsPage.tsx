@@ -458,6 +458,34 @@ export default function AdminClaimsPage() {
                     </div>
                   </>
                 )}
+
+                {(selectedClaim.status === "approved" || selectedClaim.status === "rejected") && (
+                  <>
+                    <div>
+                      <Label htmlFor="reverse-comments">Reason for Reversal (Optional)</Label>
+                      <Textarea
+                        id="reverse-comments"
+                        value={reviewComments}
+                        onChange={(e) => setReviewComments(e.target.value)}
+                        placeholder="Add reason for reversing this claim decision..."
+                        rows={3}
+                        data-testid="input-reverse-comments"
+                      />
+                    </div>
+                    <div className="pt-2">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => updateClaimMutation.mutate({ id: selectedClaim.id, status: "pending" })}
+                        disabled={updateClaimMutation.isPending}
+                        data-testid="button-reverse-claim"
+                      >
+                        <History className="h-4 w-4 mr-2" />
+                        Reverse to Pending
+                      </Button>
+                    </div>
+                  </>
+                )}
                 
                 {/* Delete Button - hidden */}
                 <div className="border-t pt-4 mt-4 hidden">
@@ -569,6 +597,9 @@ export default function AdminClaimsPage() {
                             )}
                             {log.action === "deleted" && (
                               <Badge variant="outline" className="text-destructive border-destructive"><Trash2 className="h-3 w-3 mr-1" /> Deleted</Badge>
+                            )}
+                            {log.action === "reversed" && (
+                              <Badge variant="outline" className="text-orange-500 border-orange-500"><History className="h-3 w-3 mr-1" /> Reversed</Badge>
                             )}
                             <span className="font-medium">{log.employeeName}</span>
                             {log.employeeCode && (
