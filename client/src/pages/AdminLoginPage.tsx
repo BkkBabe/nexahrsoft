@@ -31,19 +31,11 @@ export default function AdminLoginPage() {
       // This avoids race conditions with React Query cache updates
       window.location.href = "/admin/dashboard";
     } catch (error: any) {
-      if (error.message.includes("401")) {
-        toast({
-          title: "Login Failed",
-          description: "Invalid credentials",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to login. Please try again.",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid credentials",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
