@@ -103,9 +103,15 @@ export default function AdminEmployeeDataPage() {
     queryKey: ["/api/admin/users"],
   });
 
+  const { data: sessionData } = useQuery<{ isEmployeeDataAdmin?: boolean }>({
+    queryKey: ["/api/auth/session"],
+  });
+
+  const isEmployeeDataAdmin = sessionData?.isEmployeeDataAdmin || false;
+
   const { data: archivedUsersData, isLoading: archivedLoading, refetch: refetchArchivedUsers } = useQuery<User[]>({
     queryKey: ["/api/admin/users/archived"],
-    enabled: showArchived,
+    enabled: showArchived && !isEmployeeDataAdmin,
   });
 
   const { data: auditLogsData, isLoading: auditLoading } = useQuery<{ employee: { id: string; name: string; employeeCode: string }; auditLogs: EmployeeDataAuditLog[] }>({
@@ -502,14 +508,16 @@ export default function AdminEmployeeDataPage() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportEmployees}
-              data-testid="button-export-employees"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
+            {!isEmployeeDataAdmin && (
+              <Button
+                variant="outline"
+                onClick={handleExportEmployees}
+                data-testid="button-export-employees"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            )}
             <Button
               onClick={() => setIsAddDialogOpen(true)}
               data-testid="button-add-employee"
@@ -563,18 +571,20 @@ export default function AdminEmployeeDataPage() {
                   </Badge>
                 )}
               </Button>
-              <Button
-                variant={showArchived ? "default" : "outline"}
-                onClick={() => {
-                  setShowArchived(!showArchived);
-                  if (!showArchived) refetchArchivedUsers();
-                }}
-                className="gap-2"
-                data-testid="button-show-archived"
-              >
-                <Archive className="h-4 w-4" />
-                Archived
-              </Button>
+              {!isEmployeeDataAdmin && (
+                <Button
+                  variant={showArchived ? "default" : "outline"}
+                  onClick={() => {
+                    setShowArchived(!showArchived);
+                    if (!showArchived) refetchArchivedUsers();
+                  }}
+                  className="gap-2"
+                  data-testid="button-show-archived"
+                >
+                  <Archive className="h-4 w-4" />
+                  Archived
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -640,16 +650,18 @@ export default function AdminEmployeeDataPage() {
                             >
                               <History className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => archiveMutation.mutate([user.id])}
-                              disabled={archiveMutation.isPending}
-                              data-testid={`button-archive-${user.id}`}
-                              title="Archive employee"
-                            >
-                              <Archive className="h-4 w-4" />
-                            </Button>
+                            {!isEmployeeDataAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => archiveMutation.mutate([user.id])}
+                                disabled={archiveMutation.isPending}
+                                data-testid={`button-archive-${user.id}`}
+                                title="Archive employee"
+                              >
+                                <Archive className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -661,7 +673,7 @@ export default function AdminEmployeeDataPage() {
           </CardContent>
         </Card>
 
-        {showArchived && (
+        {showArchived && !isEmployeeDataAdmin && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
