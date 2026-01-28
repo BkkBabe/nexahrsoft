@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download, Archive, ArchiveRestore } from "lucide-react";
+import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download, Archive, ArchiveRestore, LogOut } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useLocation } from "wouter";
@@ -108,6 +108,16 @@ export default function AdminEmployeeDataPage() {
   });
 
   const isEmployeeDataAdmin = sessionData?.isEmployeeDataAdmin || false;
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/admin/logout");
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+      setLocation("/admin");
+    },
+  });
 
   const { data: archivedUsersData, isLoading: archivedLoading, refetch: refetchArchivedUsers } = useQuery<User[]>({
     queryKey: ["/api/admin/users/archived"],
@@ -482,14 +492,16 @@ export default function AdminEmployeeDataPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setLocation("/admin/dashboard")}
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+            {!isEmployeeDataAdmin && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setLocation("/admin/dashboard")}
+                data-testid="button-back"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
             <div>
               <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
                 Employee Data Management
@@ -525,6 +537,16 @@ export default function AdminEmployeeDataPage() {
               <UserPlus className="h-4 w-4 mr-2" />
               Add Employee
             </Button>
+            {isEmployeeDataAdmin && (
+              <Button
+                variant="outline"
+                onClick={() => logoutMutation.mutate()}
+                data-testid="button-logout"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            )}
           </div>
         </div>
 
