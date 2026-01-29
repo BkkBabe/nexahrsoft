@@ -42,6 +42,7 @@ interface EditableFields {
   passportExpiry: string;
   // Salary calculation fields
   basicMonthlySalary: string;
+  weeklyContractHours: string;
   hourlyRate: string;
   ot15Rate: string;
   ot20Rate: string;
@@ -95,6 +96,7 @@ export default function AdminEmployeeDataPage() {
     passportNumber: "",
     passportExpiry: "",
     basicMonthlySalary: "",
+    weeklyContractHours: "44",
     hourlyRate: "",
     ot15Rate: "",
     ot20Rate: "",
@@ -407,6 +409,7 @@ export default function AdminEmployeeDataPage() {
       passportNumber: user.passportNumber || "",
       passportExpiry: user.passportExpiry || "",
       basicMonthlySalary: user.basicMonthlySalary || "",
+      weeklyContractHours: user.weeklyContractHours?.toString() || "44",
       hourlyRate: user.hourlyRate || "",
       ot15Rate: user.ot15Rate || "",
       ot20Rate: user.ot20Rate || "",
@@ -467,8 +470,19 @@ export default function AdminEmployeeDataPage() {
     return labels[field] || field;
   };
 
+  const calculateMOMRates = (monthlySalary: number, weeklyHours: number) => {
+    if (monthlySalary <= 0 || weeklyHours <= 0) return null;
+    // MOM-compliant formula: (Monthly Salary × 12) ÷ (52 × Weekly Hours)
+    const hourly = (monthlySalary * 12) / (52 * weeklyHours);
+    const ot15 = hourly * 1.5;
+    const ot20 = hourly * 2.0;
+    return { hourly, ot15, ot20 };
+  };
+
   const calculateRates = () => {
     const monthlySalary = parseFloat(editFormData.basicMonthlySalary) || 0;
+    const weeklyHours = parseFloat(editFormData.weeklyContractHours) || 44;
+    
     if (monthlySalary <= 0) {
       toast({
         title: "Error",
@@ -477,21 +491,28 @@ export default function AdminEmployeeDataPage() {
       });
       return;
     }
-    // Standard calculation: Monthly / 26 days / 8 hours
-    const hourly = monthlySalary / 26 / 8;
-    const ot15 = hourly * 1.5;
-    const ot20 = hourly * 2.0;
+    if (weeklyHours <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter valid weekly contract hours",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const rates = calculateMOMRates(monthlySalary, weeklyHours);
+    if (!rates) return;
     
     setEditFormData(prev => ({
       ...prev,
-      hourlyRate: hourly.toFixed(2),
-      ot15Rate: ot15.toFixed(2),
-      ot20Rate: ot20.toFixed(2),
+      hourlyRate: rates.hourly.toFixed(2),
+      ot15Rate: rates.ot15.toFixed(2),
+      ot20Rate: rates.ot20.toFixed(2),
     }));
     
     toast({
-      title: "Rates Calculated",
-      description: `Hourly: $${hourly.toFixed(2)}, OT 1.5x: $${ot15.toFixed(2)}, OT 2.0x: $${ot20.toFixed(2)}`,
+      title: "MOM-Compliant Rates Calculated",
+      description: `Hourly: $${rates.hourly.toFixed(2)}, OT 1.5x: $${rates.ot15.toFixed(2)}, OT 2.0x: $${rates.ot20.toFixed(2)}`,
     });
   };
 
@@ -1116,20 +1137,36 @@ export default function AdminEmployeeDataPage() {
 
               <Separator />
 
-              {/* Salary Calculation */}
+              {/* Salary Calculation - MOM Compliant */}
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-3">Salary Settings</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Salary Settings (MOM-Compliant)</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Hourly and OT rates are calculated using MOM formula: (Monthly Salary × 12) ÷ (52 × Weekly Hours)
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-basicMonthlySalary">Monthly Salary ($)</Label>
+                    <Input
+                      id="edit-basicMonthlySalary"
+                      type="number"
+                      step="0.01"
+                      value={editFormData.basicMonthlySalary}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, basicMonthlySalary: e.target.value }))}
+                      data-testid="input-edit-basicMonthlySalary"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-weeklyContractHours">Weekly Contract Hours</Label>
                     <div className="flex gap-2">
                       <Input
-                        id="edit-basicMonthlySalary"
+                        id="edit-weeklyContractHours"
                         type="number"
-                        step="0.01"
-                        value={editFormData.basicMonthlySalary}
-                        onChange={(e) => setEditFormData(prev => ({ ...prev, basicMonthlySalary: e.target.value }))}
-                        data-testid="input-edit-basicMonthlySalary"
+                        step="0.5"
+                        min="1"
+                        max="60"
+                        value={editFormData.weeklyContractHours}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, weeklyContractHours: e.target.value }))}
+                        data-testid="input-edit-weeklyContractHours"
                       />
                       <Button
                         type="button"
@@ -1143,13 +1180,14 @@ export default function AdminEmployeeDataPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-hourlyRate">Hourly Rate ($)</Label>
+                    <Label htmlFor="edit-hourlyRate">Hourly Basic Rate (MOM-compliant)</Label>
                     <Input
                       id="edit-hourlyRate"
                       type="number"
                       step="0.01"
                       value={editFormData.hourlyRate}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, hourlyRate: e.target.value }))}
+                      readOnly
+                      className="bg-muted"
                       data-testid="input-edit-hourlyRate"
                     />
                   </div>
@@ -1160,18 +1198,20 @@ export default function AdminEmployeeDataPage() {
                       type="number"
                       step="0.01"
                       value={editFormData.ot15Rate}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, ot15Rate: e.target.value }))}
+                      readOnly
+                      className="bg-muted"
                       data-testid="input-edit-ot15Rate"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-ot20Rate">OT 2.0x Rate ($)</Label>
+                    <Label htmlFor="edit-ot20Rate">OT 2.0x Rate (Rest Day/PH)</Label>
                     <Input
                       id="edit-ot20Rate"
                       type="number"
                       step="0.01"
                       value={editFormData.ot20Rate}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, ot20Rate: e.target.value }))}
+                      readOnly
+                      className="bg-muted"
                       data-testid="input-edit-ot20Rate"
                     />
                   </div>

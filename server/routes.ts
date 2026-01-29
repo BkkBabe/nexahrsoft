@@ -901,7 +901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'mobileNumber', 'gender', 'joinDate', 'resignDate', 'nricFin', 'fingerId',
         'birthday', 'workPermitNumber', 'workPermitExpiry', 'finNumber', 'finNumberExpiry',
         'remarks1', 'remarks2', 'remarks3', 'remarks4',
-        'basicMonthlySalary', 'hourlyRate', 'ot15Rate', 'ot20Rate',
+        'basicMonthlySalary', 'weeklyContractHours', 'hourlyRate', 'ot15Rate', 'ot20Rate',
         'defaultMobileAllowance', 'defaultTransportAllowance', 'defaultMealAllowance',
         'defaultShiftAllowance', 'defaultOtherAllowance', 'defaultHouseRentalAllowance'
       ];
@@ -931,6 +931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         remarks3: z.string().optional(),
         remarks4: z.string().optional(),
         basicMonthlySalary: z.string().optional().transform(v => v === '' ? null : v),
+        weeklyContractHours: z.string().optional().transform(v => !v || v === '' ? null : parseFloat(v)),
         hourlyRate: z.string().optional().transform(v => v === '' ? null : v),
         ot15Rate: z.string().optional().transform(v => v === '' ? null : v),
         ot20Rate: z.string().optional().transform(v => v === '' ? null : v),
