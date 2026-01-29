@@ -389,7 +389,7 @@ export default function AdminClaimsPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Submitted</Label>
-                    <p className="font-medium">{format(new Date(selectedClaim.submittedAt), "MMM dd, yyyy HH:mm")}</p>
+                    <p className="font-medium">{format(new Date(selectedClaim.submittedAt), "dd MMM yyyy HH:mm")}</p>
                   </div>
                 </div>
                 
@@ -614,7 +614,7 @@ export default function AdminClaimsPage() {
                         </div>
                         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                           <span>By: {log.performedByName || "Admin"}</span>
-                          <span>{format(new Date(log.performedAt), "MMM dd, yyyy HH:mm")}</span>
+                          <span>{format(new Date(log.performedAt), "dd MMM yyyy HH:mm")}</span>
                         </div>
                         {log.comments && (
                           <div className="mt-2 text-sm bg-muted p-2 rounded">
@@ -665,7 +665,7 @@ function ClaimRow({ claim, onView, onViewReceipt, onDelete, getStatusBadge }: Cl
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Submitted: {format(new Date(claim.submittedAt), "MMM dd, yyyy")}
+          Submitted: {format(new Date(claim.submittedAt), "dd MMM yyyy")}
         </p>
       </div>
       <div className="flex items-center gap-2">

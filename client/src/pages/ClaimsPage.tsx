@@ -313,7 +313,7 @@ export default function ClaimsPage() {
                         {claim.description || "No description"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Submitted: {format(new Date(claim.submittedAt), "MMM dd, yyyy")}
+                        Submitted: {format(new Date(claim.submittedAt), "dd MMM yyyy")}
                         {" • "}
                         Period: {claim.claimMonth}/{claim.claimYear}
                       </p>
