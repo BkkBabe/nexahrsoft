@@ -74,7 +74,7 @@ export default function PayslipPage() {
                       Payslip
                     </span>
                     <span className="text-sm font-normal text-muted-foreground" data-testid={`text-period-${payslip.id}`}>
-                      {new Date(payslip.periodStart).toLocaleDateString()} - {new Date(payslip.periodEnd).toLocaleDateString()}
+                      {new Date(payslip.periodStart).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(payslip.periodEnd).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </CardTitle>
                 </CardHeader>
@@ -83,13 +83,13 @@ export default function PayslipPage() {
                     <div>
                       <p className="text-muted-foreground">Period</p>
                       <p className="font-medium" data-testid={`text-payslip-period-${payslip.id}`}>
-                        {new Date(payslip.periodStart).toLocaleDateString()} to {new Date(payslip.periodEnd).toLocaleDateString()}
+                        {new Date(payslip.periodStart).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} to {new Date(payslip.periodEnd).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Generated On</p>
                       <p className="font-medium" data-testid={`text-generated-date-${payslip.id}`}>
-                        {new Date(payslip.createdAt!).toLocaleDateString()}
+                        {new Date(payslip.createdAt!).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     </div>
                   </div>
@@ -126,7 +126,7 @@ export default function PayslipPage() {
                     </div>
                     {payslip.approvedAt && (
                       <p className="text-xs text-muted-foreground mt-2">
-                        Approved on {new Date(payslip.approvedAt).toLocaleDateString()}
+                        Approved on {new Date(payslip.approvedAt).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     )}
                   </div>

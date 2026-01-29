@@ -888,7 +888,7 @@ export default function AdminToolsPage() {
                   {/* Footer */}
                   <div className="text-center text-xs text-muted-foreground pt-4 border-t">
                     <p>This is a computer-generated payslip. No signature required.</p>
-                    <p>Generated on {new Date().toLocaleDateString()}</p>
+                    <p>Generated on {new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                   </div>
                 </div>
               </div>

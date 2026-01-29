@@ -903,7 +903,7 @@ export default function AdminLeavePage() {
                                 <div>
                                   <p className="text-muted-foreground">Dates</p>
                                   <p className="font-medium">
-                                    {new Date(app.startDate).toLocaleDateString()} - {new Date(app.endDate).toLocaleDateString()}
+                                    {new Date(app.startDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(app.endDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                                   </p>
                                 </div>
                                 <div>
@@ -964,7 +964,7 @@ export default function AdminLeavePage() {
                               </Badge>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(app.startDate).toLocaleDateString()} - {new Date(app.endDate).toLocaleDateString()} • {app.totalDays} days
+                              {new Date(app.startDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(app.endDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} • {app.totalDays} days
                             </p>
                             {app.reviewComments && (
                               <p className="text-sm text-muted-foreground">Comment: {app.reviewComments}</p>
@@ -1198,7 +1198,7 @@ export default function AdminLeavePage() {
                                         <tbody>
                                           {empRecords.map((record) => (
                                             <tr key={record.id} className="border-b" data-testid={`row-record-${record.id}`}>
-                                              <td className="py-2 px-2">{new Date(record.leaveDate).toLocaleDateString()}</td>
+                                              <td className="py-2 px-2">{new Date(record.leaveDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                                               <td className="py-2 px-2">
                                                 <Badge variant="outline" className="text-xs">{record.leaveType}</Badge>
                                               </td>
@@ -1417,7 +1417,7 @@ export default function AdminLeavePage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Duration</p>
                   <p className="font-medium">
-                    {new Date(selectedApplication.startDate).toLocaleDateString()} - {new Date(selectedApplication.endDate).toLocaleDateString()} ({selectedApplication.totalDays} days)
+                    {new Date(selectedApplication.startDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(selectedApplication.endDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} ({selectedApplication.totalDays} days)
                   </p>
                 </div>
                 <div>
@@ -1547,7 +1547,7 @@ export default function AdminLeavePage() {
               Are you sure you want to delete this leave record? This action cannot be undone.
               {selectedHistoryRecord && (
                 <span className="block mt-2 text-foreground font-medium">
-                  {selectedHistoryRecord.employeeName} - {selectedHistoryRecord.leaveType} on {new Date(selectedHistoryRecord.leaveDate).toLocaleDateString()}
+                  {selectedHistoryRecord.employeeName} - {selectedHistoryRecord.leaveType} on {new Date(selectedHistoryRecord.leaveDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </span>
               )}
             </AlertDialogDescription>

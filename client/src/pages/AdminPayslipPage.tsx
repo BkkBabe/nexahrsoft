@@ -372,7 +372,7 @@ export default function AdminPayslipPage() {
                             <div>
                               <p className="text-muted-foreground">Period</p>
                               <p className="font-medium">
-                                {new Date(payslip.periodStart).toLocaleDateString()} - {new Date(payslip.periodEnd).toLocaleDateString()}
+                                {new Date(payslip.periodStart).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(payslip.periodEnd).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                               </p>
                             </div>
                             <div>

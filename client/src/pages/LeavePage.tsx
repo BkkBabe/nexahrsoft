@@ -440,7 +440,7 @@ export default function LeavePage() {
                     </p>
                     <p className="text-sm text-muted-foreground">
                       <Clock className="inline h-3 w-3 mr-1" />
-                      {new Date(record.startDate).toLocaleDateString()} - {new Date(record.endDate).toLocaleDateString()} • {record.totalDays} {parseFloat(String(record.totalDays)) === 1 ? "day" : "days"}
+                      {new Date(record.startDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(record.endDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })} • {record.totalDays} {parseFloat(String(record.totalDays)) === 1 ? "day" : "days"}
                     </p>
                     {record.reason && (
                       <p className="text-sm text-muted-foreground mt-1">
