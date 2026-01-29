@@ -541,7 +541,6 @@ export default function AdminEmployeeDataPage() {
       "Work Permit Number",
       "Work Permit Expiry",
       "FIN Number",
-      "FIN Number Expiry",
       "Role",
       "Is Approved",
       "Monthly Salary",
@@ -577,7 +576,6 @@ export default function AdminEmployeeDataPage() {
         u.workPermitNumber || "",
         u.workPermitExpiry || "",
         u.finNumber || "",
-        u.finNumberExpiry || "",
         u.role || "",
         u.isApproved ? "Yes" : "No",
         u.basicMonthlySalary || "",
@@ -1122,17 +1120,7 @@ export default function AdminEmployeeDataPage() {
                       data-testid="input-edit-finNumber"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
-                    <Input
-                      id="edit-finNumberExpiry"
-                      type="date"
-                      value={editFormData.finNumberExpiry}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
-                      data-testid="input-edit-finNumberExpiry"
-                    />
-                  </div>
-                </div>
+                                  </div>
               </div>
 
               <Separator />
