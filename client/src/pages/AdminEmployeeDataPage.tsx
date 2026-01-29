@@ -37,7 +37,6 @@ interface EditableFields {
   remarks3: string;
   remarks4: string;
   // Foreign employee fields
-  employeeType: string;
   passportNumber: string;
   passportExpiry: string;
   // Salary calculation fields
@@ -91,7 +90,6 @@ export default function AdminEmployeeDataPage() {
     remarks2: "",
     remarks3: "",
     remarks4: "",
-    employeeType: "",
     passportNumber: "",
     passportExpiry: "",
     basicMonthlySalary: "",
@@ -404,7 +402,6 @@ export default function AdminEmployeeDataPage() {
       remarks2: user.remarks2 || "",
       remarks3: user.remarks3 || "",
       remarks4: user.remarks4 || "",
-      employeeType: user.employeeType || "",
       passportNumber: user.passportNumber || "",
       passportExpiry: user.passportExpiry || "",
       basicMonthlySalary: user.basicMonthlySalary || "",
@@ -758,33 +755,29 @@ export default function AdminEmployeeDataPage() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2 flex-wrap">
                             {user.name}
-                            {(user.employeeType === 'pr' || user.employeeType === 'foreigner') && (
-                              <>
-                                {user.passportExpiry && new Date(user.passportExpiry) < new Date() && (
-                                  <Badge variant="destructive" className="text-xs flex items-center gap-1" title="Passport expired">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    Passport
-                                  </Badge>
-                                )}
-                                {user.passportExpiry && new Date(user.passportExpiry) >= new Date() && new Date(user.passportExpiry) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
-                                  <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" title="Passport expiring soon">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    Passport
-                                  </Badge>
-                                )}
-                                {user.workPermitExpiry && new Date(user.workPermitExpiry) < new Date() && (
-                                  <Badge variant="destructive" className="text-xs flex items-center gap-1" title="Work Pass expired">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    Work Pass
-                                  </Badge>
-                                )}
-                                {user.workPermitExpiry && new Date(user.workPermitExpiry) >= new Date() && new Date(user.workPermitExpiry) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
-                                  <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" title="Work Pass expiring soon">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    Work Pass
-                                  </Badge>
-                                )}
-                              </>
+                            {user.passportExpiry && new Date(user.passportExpiry) < new Date() && (
+                              <Badge variant="destructive" className="text-xs flex items-center gap-1" title="Passport expired">
+                                <AlertTriangle className="h-3 w-3" />
+                                Passport
+                              </Badge>
+                            )}
+                            {user.passportExpiry && new Date(user.passportExpiry) >= new Date() && new Date(user.passportExpiry) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
+                              <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" title="Passport expiring soon">
+                                <AlertTriangle className="h-3 w-3" />
+                                Passport
+                              </Badge>
+                            )}
+                            {user.workPermitExpiry && new Date(user.workPermitExpiry) < new Date() && (
+                              <Badge variant="destructive" className="text-xs flex items-center gap-1" title="Work Pass expired">
+                                <AlertTriangle className="h-3 w-3" />
+                                Work Pass
+                              </Badge>
+                            )}
+                            {user.workPermitExpiry && new Date(user.workPermitExpiry) >= new Date() && new Date(user.workPermitExpiry) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
+                              <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" title="Work Pass expiring soon">
+                                <AlertTriangle className="h-3 w-3" />
+                                Work Pass
+                              </Badge>
                             )}
                           </div>
                         </TableCell>
@@ -1010,149 +1003,71 @@ export default function AdminEmployeeDataPage() {
 
               <Separator />
 
-              {/* Employee Type */}
+              {/* Passport & Work Pass Details - Optional fields for any employee */}
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-3">Employee Classification</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Passport & Work Pass Details (Optional)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-employeeType">Employee Type</Label>
-                    <Select 
-                      value={editFormData.employeeType} 
-                      onValueChange={(value) => setEditFormData(prev => ({ ...prev, employeeType: value }))}
-                    >
-                      <SelectTrigger id="edit-employeeType" data-testid="select-edit-employeeType">
-                        <SelectValue placeholder="Select employee type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="local">Local (Singapore Citizen)</SelectItem>
-                        <SelectItem value="pr">Permanent Resident (PR)</SelectItem>
-                        <SelectItem value="foreigner">Foreigner</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="edit-passportNumber">Passport Number</Label>
+                    <Input
+                      id="edit-passportNumber"
+                      value={editFormData.passportNumber}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, passportNumber: e.target.value }))}
+                      placeholder="Enter passport number"
+                      data-testid="input-edit-passportNumber"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-passportExpiry">Passport Expiry</Label>
+                    <Input
+                      id="edit-passportExpiry"
+                      type="date"
+                      value={editFormData.passportExpiry}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, passportExpiry: e.target.value }))}
+                      data-testid="input-edit-passportExpiry"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-workPermitNumber">Work Permit / Pass Number</Label>
+                    <Input
+                      id="edit-workPermitNumber"
+                      value={editFormData.workPermitNumber}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitNumber: e.target.value }))}
+                      placeholder="WP / EP / SP number"
+                      data-testid="input-edit-workPermitNumber"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-workPermitExpiry">Work Permit / Pass Expiry</Label>
+                    <Input
+                      id="edit-workPermitExpiry"
+                      type="date"
+                      value={editFormData.workPermitExpiry}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitExpiry: e.target.value }))}
+                      data-testid="input-edit-workPermitExpiry"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-finNumber">FIN Number</Label>
+                    <Input
+                      id="edit-finNumber"
+                      value={editFormData.finNumber}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, finNumber: e.target.value }))}
+                      data-testid="input-edit-finNumber"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
+                    <Input
+                      id="edit-finNumberExpiry"
+                      type="date"
+                      value={editFormData.finNumberExpiry}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
+                      data-testid="input-edit-finNumberExpiry"
+                    />
                   </div>
                 </div>
               </div>
-
-              {/* Foreign Employee Details - Only shown when employee type is foreigner or pr */}
-              {(editFormData.employeeType === "foreigner" || editFormData.employeeType === "pr") && (
-                <>
-                  <Separator />
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-3">Foreign Employee / PR Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-passportNumber">Passport Number</Label>
-                        <Input
-                          id="edit-passportNumber"
-                          value={editFormData.passportNumber}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, passportNumber: e.target.value }))}
-                          placeholder="Enter passport number"
-                          data-testid="input-edit-passportNumber"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-passportExpiry">Passport Expiry</Label>
-                        <Input
-                          id="edit-passportExpiry"
-                          type="date"
-                          value={editFormData.passportExpiry}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, passportExpiry: e.target.value }))}
-                          data-testid="input-edit-passportExpiry"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-workPermitNumber">Work Permit / Pass Number</Label>
-                        <Input
-                          id="edit-workPermitNumber"
-                          value={editFormData.workPermitNumber}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitNumber: e.target.value }))}
-                          placeholder="WP / EP / SP number"
-                          data-testid="input-edit-workPermitNumber"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-workPermitExpiry">Work Permit / Pass Expiry</Label>
-                        <Input
-                          id="edit-workPermitExpiry"
-                          type="date"
-                          value={editFormData.workPermitExpiry}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitExpiry: e.target.value }))}
-                          data-testid="input-edit-workPermitExpiry"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-finNumber">FIN Number</Label>
-                        <Input
-                          id="edit-finNumber"
-                          value={editFormData.finNumber}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumber: e.target.value }))}
-                          data-testid="input-edit-finNumber"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
-                        <Input
-                          id="edit-finNumberExpiry"
-                          type="date"
-                          value={editFormData.finNumberExpiry}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
-                          data-testid="input-edit-finNumberExpiry"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Work Permit & FIN Details - Show for local employees */}
-              {editFormData.employeeType !== "foreigner" && editFormData.employeeType !== "pr" && (
-                <>
-                  <Separator />
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-3">Work Permit & FIN Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-workPermitNumber">Work Permit Number</Label>
-                        <Input
-                          id="edit-workPermitNumber"
-                          value={editFormData.workPermitNumber}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitNumber: e.target.value }))}
-                          data-testid="input-edit-workPermitNumber"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-workPermitExpiry">Work Permit Expiry</Label>
-                        <Input
-                          id="edit-workPermitExpiry"
-                          type="date"
-                          value={editFormData.workPermitExpiry}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, workPermitExpiry: e.target.value }))}
-                          data-testid="input-edit-workPermitExpiry"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-finNumber">FIN Number</Label>
-                        <Input
-                          id="edit-finNumber"
-                          value={editFormData.finNumber}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumber: e.target.value }))}
-                          data-testid="input-edit-finNumber"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-finNumberExpiry">FIN Number Expiry</Label>
-                        <Input
-                          id="edit-finNumberExpiry"
-                          type="date"
-                          value={editFormData.finNumberExpiry}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, finNumberExpiry: e.target.value }))}
-                          data-testid="input-edit-finNumberExpiry"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
 
               <Separator />
 
@@ -1342,9 +1257,8 @@ export default function AdminEmployeeDataPage() {
                 </div>
               </div>
 
-              {/* Compliance Documents Section - Only for foreign employees */}
-              {(editFormData.employeeType === 'pr' || editFormData.employeeType === 'foreigner') && (
-                <div className="mt-6">
+              {/* Compliance Documents Section - Optional for any employee */}
+              <div className="mt-6">
                   <Separator className="mb-4" />
                   <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                     <FileText className="h-4 w-4" />
@@ -1500,8 +1414,7 @@ export default function AdminEmployeeDataPage() {
                     </p>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
             <DialogFooter>
               <Button
                 variant="outline"
