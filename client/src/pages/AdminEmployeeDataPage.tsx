@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Search, Edit, History, Users, RefreshCw, X, Save, Filter, Calculator, UserPlus, AlertCircle, Download, Archive, ArchiveRestore, LogOut, FileUp, Trash2, Eye, FileText, AlertTriangle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -59,6 +60,7 @@ export default function AdminEmployeeDataPage() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [selectedArchivedIds, setSelectedArchivedIds] = useState<string[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [viewingAuditUser, setViewingAuditUser] = useState<User | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -700,8 +702,12 @@ export default function AdminEmployeeDataPage() {
                 <Button
                   variant={showArchived ? "default" : "outline"}
                   onClick={() => {
+                    if (showArchived) {
+                      setSelectedArchivedIds([]);
+                    } else {
+                      refetchArchivedUsers();
+                    }
                     setShowArchived(!showArchived);
-                    if (!showArchived) refetchArchivedUsers();
                   }}
                   className="gap-2"
                   data-testid="button-show-archived"
@@ -828,11 +834,24 @@ export default function AdminEmployeeDataPage() {
 
         {showArchived && !isEmployeeDataAdmin && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
               <CardTitle className="flex items-center gap-2">
                 <Archive className="h-5 w-5" />
                 Archived Employees ({archivedUsers.length})
               </CardTitle>
+              {selectedArchivedIds.length > 0 && (
+                <Button
+                  onClick={() => {
+                    unarchiveMutation.mutate(selectedArchivedIds);
+                    setSelectedArchivedIds([]);
+                  }}
+                  disabled={unarchiveMutation.isPending}
+                  data-testid="button-restore-selected"
+                >
+                  <ArchiveRestore className="h-4 w-4 mr-2" />
+                  Restore Selected ({selectedArchivedIds.length})
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {archivedLoading ? (
@@ -848,6 +867,19 @@ export default function AdminEmployeeDataPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={selectedArchivedIds.length === archivedUsers.length && archivedUsers.length > 0}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedArchivedIds(archivedUsers.map(u => u.id));
+                              } else {
+                                setSelectedArchivedIds([]);
+                              }
+                            }}
+                            data-testid="checkbox-select-all-archived"
+                          />
+                        </TableHead>
                         <TableHead className="w-16">S/N</TableHead>
                         <TableHead>Employee Code</TableHead>
                         <TableHead>Name</TableHead>
@@ -860,6 +892,19 @@ export default function AdminEmployeeDataPage() {
                     <TableBody>
                       {archivedUsers.map((user, index) => (
                         <TableRow key={user.id} className="opacity-70" data-testid={`row-archived-${user.id}`}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedArchivedIds.includes(user.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedArchivedIds(prev => [...prev, user.id]);
+                                } else {
+                                  setSelectedArchivedIds(prev => prev.filter(id => id !== user.id));
+                                }
+                              }}
+                              data-testid={`checkbox-archived-${user.id}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-mono text-muted-foreground">
                             {index + 1}
                           </TableCell>
