@@ -122,7 +122,7 @@ function formatTime(date: Date | string | null): string {
 // Helper function to format date
 function formatDate(date: Date | string): string {
   const d = new Date(date);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // Helper to get date range for period
@@ -514,8 +514,8 @@ export default function AttendancePage() {
         // Get current time and date
         const now = new Date();
         const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-        const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+        const dayName = now.toLocaleDateString('en-SG', { weekday: 'long' });
+        const dateStr = now.toLocaleDateString('en-SG', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
         
         // Draw overlay
         drawPhotoOverlay(
@@ -715,7 +715,7 @@ export default function AttendancePage() {
             Today's Attendance
           </CardTitle>
           <CardDescription>
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            {new Date().toLocaleDateString('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

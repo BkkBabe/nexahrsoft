@@ -49,7 +49,7 @@ function formatTime(date: Date | string | null): string {
 // Helper function to format date
 function formatDate(date: Date | string): string {
   const d = new Date(date);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // Helper function to convert name to Title Case
@@ -1193,14 +1193,14 @@ export default function AdminAttendancePage() {
     });
   };
   
-  // Helper function to format date as "Dec 1", "Dec 2", etc.
+  // Helper function to format date as "1 Dec", "2 Dec", etc.
   const formatDateForExport = (date: Date) => {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
   };
   
   // Helper function to get day of week abbreviation
   const getDayOfWeek = (date: Date) => {
-    return date.toLocaleDateString('en-US', { weekday: 'short' });
+    return date.toLocaleDateString('en-SG', { weekday: 'short' });
   };
   
   // Check if date is weekend
@@ -1213,7 +1213,7 @@ export default function AdminAttendancePage() {
   const exportToCSV = () => {
     // Get month/year for title from first day in range
     const firstDay = heatmapDays[0];
-    const monthYearTitle = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    const monthYearTitle = firstDay.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' });
     
     // Title row with month/year
     const titleRow = [`Attendance Report - ${monthYearTitle}`, '', '', '', ...heatmapDays.map(() => ''), '', ''];
@@ -1264,7 +1264,7 @@ export default function AdminAttendancePage() {
     const link = document.createElement('a');
     link.href = url;
     // File name includes month/year
-    const fileMonthYear = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '_');
+    const fileMonthYear = firstDay.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }).replace(' ', '_');
     link.download = `Attendance_Report_${fileMonthYear}.csv`;
     document.body.appendChild(link);
     link.click();
@@ -1281,7 +1281,7 @@ export default function AdminAttendancePage() {
   const exportToExcel = async () => {
     // Get month/year for title from first day in range
     const firstDay = heatmapDays[0];
-    const monthYearTitle = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    const monthYearTitle = firstDay.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' });
     
     // Create workbook and worksheet
     const workbook = new ExcelJS.Workbook();
@@ -1428,7 +1428,7 @@ export default function AdminAttendancePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    const fileMonthYear = firstDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '_');
+    const fileMonthYear = firstDay.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }).replace(' ', '_');
     link.download = `Attendance_Report_${fileMonthYear}.xlsx`;
     document.body.appendChild(link);
     link.click();
@@ -1477,11 +1477,11 @@ export default function AdminAttendancePage() {
     // Format: "Attendance Report - January 2026" for single month, or "Attendance Report - Jan 5-11, 2026" for week view
     let printTitle: string;
     if (heatmapViewType === 'month') {
-      printTitle = `Attendance Report - ${firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+      printTitle = `Attendance Report - ${firstDay.toLocaleDateString('en-SG', { month: 'long', year: 'numeric' })}`;
     } else {
       // Week view - show date range
-      const startDate = firstDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const endDate = lastDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const startDate = firstDay.toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+      const endDate = lastDay.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
       printTitle = `Attendance Report - ${startDate} to ${endDate}`;
     }
     document.title = printTitle;
@@ -1599,15 +1599,15 @@ export default function AdminAttendancePage() {
     });
   };
 
-  const monthName = new Date(heatmapMonth.year, heatmapMonth.month).toLocaleDateString('en-US', { 
+  const monthName = new Date(heatmapMonth.year, heatmapMonth.month).toLocaleDateString('en-SG', { 
     month: 'long', 
     year: 'numeric' 
   });
 
   // Format week range (now uses custom end date)
   const weekRangeName = heatmapWeekStart.getTime() === heatmapWeekEnd.getTime()
-    ? heatmapWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : `${heatmapWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${heatmapWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    ? heatmapWeekStart.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })
+    : `${heatmapWeekStart.toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })} - ${heatmapWeekEnd.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
   // Navigate heatmap based on view type
   const goToPrevious = heatmapViewType === 'week' ? goToPreviousWeek : goToPreviousMonth;
@@ -1709,7 +1709,7 @@ export default function AdminAttendancePage() {
                     {isViewingToday ? "Today's Clock-ins" : "Clock-ins"}
                   </CardTitle>
                   <CardDescription>
-                    {new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    {new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2454,8 +2454,8 @@ export default function AdminAttendancePage() {
                               <div className="font-medium">{day.getDate()}</div>
                               <div className="text-muted-foreground text-[10px]">
                                 {heatmapViewType === 'week' 
-                                  ? day.toLocaleDateString('en-US', { weekday: 'short' })
-                                  : day.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
+                                  ? day.toLocaleDateString('en-SG', { weekday: 'short' })
+                                  : day.toLocaleDateString('en-SG', { weekday: 'short' }).charAt(0)}
                               </div>
                             </div>
                           );
@@ -3299,7 +3299,7 @@ export default function AdminAttendancePage() {
               Daily Attendance Report
             </DialogTitle>
             <DialogDescription>
-              {new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </DialogDescription>
           </DialogHeader>
           
@@ -3380,7 +3380,7 @@ export default function AdminAttendancePage() {
                         </head>
                         <body>
                           <h1>Daily Attendance Report</h1>
-                          <h2>${new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h2>
+                          <h2>${new Date(clockInsDate + 'T00:00:00').toLocaleDateString('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</h2>
                           ${reportContent.innerHTML}
                         </body>
                       </html>
