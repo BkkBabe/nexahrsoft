@@ -49,6 +49,7 @@ export const users = pgTable("users", {
   salaryAdjustmentReason: text("salary_adjustment_reason"),
   // Work schedule - for salary calculations
   regularDaysPerWeek: real("regular_days_per_week").default(5), // 5 or 5.5 days per week
+  weeklyContractHours: real("weekly_contract_hours").default(44), // MOM-compliant weekly contract hours (e.g., 44)
   // OT rate fields (calculated from hourly rate)
   ot15Rate: numeric("ot15_rate", { precision: 10, scale: 2 }), // Calculated OT 1.5x rate
   ot20Rate: numeric("ot20_rate", { precision: 10, scale: 2 }), // Calculated OT 2.0x rate
