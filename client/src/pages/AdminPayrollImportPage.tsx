@@ -163,7 +163,7 @@ export default function AdminPayrollImportPage() {
     queryKey: ["/api/admin/users"],
   });
 
-  const users = usersData || [];
+  const users = (usersData || []).filter(u => !u.isArchived);
 
   const saveEmployeeCodeMutation = useMutation({
     mutationFn: async ({ userId, employeeCode }: { userId: string; employeeCode: string }) => {

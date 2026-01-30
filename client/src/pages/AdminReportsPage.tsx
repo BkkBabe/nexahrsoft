@@ -90,7 +90,7 @@ export default function AdminReportsPage() {
     },
   });
 
-  const users = usersData || [];
+  const users = (usersData || []).filter(u => !u.isArchived);
   const attendanceRecords = attendanceData?.records || [];
 
   // Fetch addresses for clock-in/out locations

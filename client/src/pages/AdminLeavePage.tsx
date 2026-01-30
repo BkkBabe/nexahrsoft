@@ -120,7 +120,7 @@ export default function AdminLeavePage() {
     queryKey: ['/api/admin/leave/applications'],
   });
 
-  const users = usersData?.users?.filter(u => u.isApproved && !u.role?.includes('admin')) || [];
+  const users = usersData?.users?.filter(u => u.isApproved && !u.isArchived && !u.role?.includes('admin')) || [];
   const balances = balancesData?.balances || [];
   const applications = applicationsData?.applications || [];
 

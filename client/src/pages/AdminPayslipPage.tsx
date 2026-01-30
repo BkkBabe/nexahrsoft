@@ -49,7 +49,7 @@ export default function AdminPayslipPage() {
     queryKey: ['/api/admin/payslips'],
   });
 
-  const users = usersData?.users?.filter(u => u.isApproved && !u.role?.includes('admin')) || [];
+  const users = usersData?.users?.filter(u => u.isApproved && !u.isArchived && !u.role?.includes('admin')) || [];
   const payslips = payslipsData?.payslips || [];
 
   const calculateMutation = useMutation({

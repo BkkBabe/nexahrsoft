@@ -85,7 +85,7 @@ export default function AdminEmailsPage() {
     queryKey: ["/api/admin/password-override-logs"],
   });
 
-  const users = usersData || [];
+  const users = (usersData || []).filter(u => !u.isArchived);
   const passwordOverrideLogs = passwordOverrideLogsData?.logs || [];
   const emailLogs = emailLogsData?.logs || [];
   const emailConfigured = settingsData?.senderEmail && settingsData?.senderName;

@@ -18,7 +18,7 @@ export default function HRAdminPage() {
     queryKey: ['/api/admin/payroll/records', String(new Date().getFullYear()), null],
   });
   
-  const employees = usersData?.filter(u => u.isApproved && u.role !== 'admin') || [];
+  const employees = usersData?.filter(u => u.isApproved && !u.isArchived && u.role !== 'admin') || [];
   const payrollRecords = payrollData?.records || [];
   const totalPayroll = payrollRecords.reduce((sum, r) => sum + r.nett, 0) / 100;
 

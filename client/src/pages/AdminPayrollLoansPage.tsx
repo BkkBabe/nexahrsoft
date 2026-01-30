@@ -64,7 +64,7 @@ export default function AdminPayrollLoansPage() {
   });
 
   const loans = loansData?.loans || [];
-  const users = usersData || [];
+  const users = (usersData || []).filter(u => !u.isArchived);
 
   const filteredLoans = loans.filter(loan => 
     loan.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
