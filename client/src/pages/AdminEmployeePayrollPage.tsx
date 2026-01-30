@@ -12,6 +12,13 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { 
+  calculateCPF, 
+  calculateAge, 
+  formatPercentage, 
+  getAgeBracketDescription,
+  type ResidencyStatus 
+} from "@/lib/cpf-calculator";
 import {
   Table,
   TableBody,
@@ -790,6 +797,68 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                           />
                         </div>
                       </div>
+
+                      {/* CPF Calculation Preview */}
+                      {(() => {
+                        const residency = getValue("residencyStatus") as ResidencyStatus | null;
+                        const birthDate = getValue("birthDate");
+                        const salary = formState.basicMonthlySalary !== undefined 
+                          ? formState.basicMonthlySalary 
+                          : settings?.basicMonthlySalary;
+                        
+                        if (!residency || !salary || salary <= 0) {
+                          return (
+                            <div className="mt-4 p-3 bg-muted rounded-lg">
+                              <p className="text-sm text-muted-foreground">
+                                Enter residency status, date of birth, and salary to see CPF calculations
+                              </p>
+                            </div>
+                          );
+                        }
+                        
+                        const age = birthDate ? calculateAge(birthDate) : 30;
+                        const cpfResult = calculateCPF(salary, age, residency);
+                        
+                        return (
+                          <div className="mt-4 p-4 bg-muted rounded-lg space-y-3" data-testid="cpf-preview">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">CPF Preview</span>
+                              {birthDate && (
+                                <Badge variant="outline" className="text-xs">
+                                  Age: {age} ({getAgeBracketDescription(age)})
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {!cpfResult.isEligible ? (
+                              <p className="text-sm text-muted-foreground">{cpfResult.reason}</p>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground">Employee Rate:</span>
+                                  <span className="ml-2 font-medium">{formatPercentage(cpfResult.rates.employeeRate)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Employer Rate:</span>
+                                  <span className="ml-2 font-medium">{formatPercentage(cpfResult.rates.employerRate)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Employee CPF:</span>
+                                  <span className="ml-2 font-medium text-destructive">${cpfResult.employeeCPF.toFixed(2)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Employer CPF:</span>
+                                  <span className="ml-2 font-medium">${cpfResult.employerCPF.toFixed(2)}</span>
+                                </div>
+                                <div className="col-span-2 pt-2 border-t">
+                                  <span className="text-muted-foreground">Estimated Net Pay:</span>
+                                  <span className="ml-2 font-semibold text-primary">${cpfResult.netPay.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
 
