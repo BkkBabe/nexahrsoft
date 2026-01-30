@@ -15,8 +15,10 @@ import { format } from "date-fns";
 import { 
   calculateCPF, 
   calculateAge, 
+  calculateSPRYears,
   formatPercentage, 
   getAgeBracketDescription,
+  getSPRYearDescription,
   type ResidencyStatus 
 } from "@/lib/cpf-calculator";
 import {
@@ -131,8 +133,9 @@ function getResidencyLabel(status: string | null): string {
   if (!status) return "Not Set";
   switch (status) {
     case "SC":
-    case "SPR":
       return "Singaporean";
+    case "SPR":
+      return "Singapore PR";
     case "FOREIGNER":
       return "Foreigner";
     default:
@@ -141,7 +144,6 @@ function getResidencyLabel(status: string | null): string {
 }
 
 function normalizeResidencyStatus(status: string | null | undefined): string {
-  if (status === "SPR") return "SC";
   return status || "";
 }
 
@@ -653,8 +655,7 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       const updates: Record<string, any> = {};
       
       if (formState.residencyStatus !== undefined) {
-        const status = formState.residencyStatus;
-        updates.residencyStatus = status === "SPR" ? "SC" : (status || null);
+        updates.residencyStatus = formState.residencyStatus || null;
       }
       if (formState.birthDate !== undefined) {
         updates.birthDate = formState.birthDate || null;
@@ -780,11 +781,13 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="SC" data-testid="option-residency-singaporean">Singaporean</SelectItem>
+                              <SelectItem value="SPR" data-testid="option-residency-spr">Singapore PR</SelectItem>
                               <SelectItem value="FOREIGNER" data-testid="option-residency-foreigner">Foreigner</SelectItem>
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground mt-1">
                             {getValue("residencyStatus") === "FOREIGNER" && "No CPF contributions for foreigners"}
+                            {getValue("residencyStatus") === "SPR" && "CPF rates depend on SPR tenure"}
                           </p>
                         </div>
                         <div>
@@ -798,10 +801,28 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                         </div>
                       </div>
 
+                      {getValue("residencyStatus") === "SPR" && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>SPR Start Date</Label>
+                            <Input
+                              type="date"
+                              value={getValue("sprStartDate") || ""}
+                              onChange={(e) => updateField("sprStartDate", e.target.value || null)}
+                              data-testid="input-spr-start-date"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Used to determine graduated CPF rates
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* CPF Calculation Preview */}
                       {(() => {
                         const residency = getValue("residencyStatus") as ResidencyStatus | null;
                         const birthDate = getValue("birthDate");
+                        const sprStartDate = getValue("sprStartDate");
                         const salary = formState.basicMonthlySalary !== undefined 
                           ? formState.basicMonthlySalary 
                           : settings?.basicMonthlySalary;
@@ -810,24 +831,52 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                           return (
                             <div className="mt-4 p-3 bg-muted rounded-lg">
                               <p className="text-sm text-muted-foreground">
-                                Enter residency status, date of birth, and salary to see CPF calculations
+                                Enter residency status and salary to see CPF calculations
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        if (residency !== "FOREIGNER" && !birthDate) {
+                          return (
+                            <div className="mt-4 p-3 bg-muted rounded-lg">
+                              <p className="text-sm text-muted-foreground">
+                                Enter date of birth to calculate CPF based on age bracket
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        if (residency === "SPR" && !sprStartDate) {
+                          return (
+                            <div className="mt-4 p-3 bg-muted rounded-lg">
+                              <p className="text-sm text-muted-foreground">
+                                Enter SPR start date to calculate graduated CPF rates
                               </p>
                             </div>
                           );
                         }
                         
-                        const age = birthDate ? calculateAge(birthDate) : 30;
-                        const cpfResult = calculateCPF(salary, age, residency);
+                        const age = birthDate ? calculateAge(birthDate) : 0;
+                        const sprYears = residency === "SPR" && sprStartDate ? calculateSPRYears(sprStartDate) : undefined;
+                        const cpfResult = calculateCPF(salary, age, residency, sprYears);
                         
                         return (
                           <div className="mt-4 p-4 bg-muted rounded-lg space-y-3" data-testid="cpf-preview">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
                               <span className="text-sm font-medium">CPF Preview</span>
-                              {birthDate && (
-                                <Badge variant="outline" className="text-xs">
-                                  Age: {age} ({getAgeBracketDescription(age)})
-                                </Badge>
-                              )}
+                              <div className="flex gap-2 flex-wrap">
+                                {birthDate && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Age: {age} ({getAgeBracketDescription(age)})
+                                  </Badge>
+                                )}
+                                {residency === "SPR" && sprYears !== undefined && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {getSPRYearDescription(sprYears)}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                             
                             {!cpfResult.isEligible ? (
@@ -853,6 +902,11 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                                 <div className="col-span-2 pt-2 border-t">
                                   <span className="text-muted-foreground">Estimated Net Pay:</span>
                                   <span className="ml-2 font-semibold text-primary">${cpfResult.netPay.toFixed(2)}</span>
+                                </div>
+                                <div className="col-span-2">
+                                  <p className="text-xs text-muted-foreground italic">
+                                    Based on 2026 CPF rates. Actual payroll may vary with OT, allowances, and annual ceiling.
+                                  </p>
                                 </div>
                               </div>
                             )}
