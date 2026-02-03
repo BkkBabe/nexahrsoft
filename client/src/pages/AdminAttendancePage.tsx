@@ -2539,7 +2539,7 @@ export default function AdminAttendancePage() {
                                       <span className="font-medium text-[10px]">{leaveCode}</span>
                                     )}
                                     {!isFuture && hasAdjustment && !isLeaveAdjustment && (
-                                      <span className="font-medium">{(adjustment?.regularHours || 0) + (adjustment?.otHours || 0)}</span>
+                                      <span className="font-medium">{formatHours((adjustment?.regularHours || 0) + (adjustment?.otHours || 0))}</span>
                                     )}
                                     {!isFuture && !hasAdjustment && hasOpenSession && hours === 0 && (
                                       <Clock className="h-3 w-3" />
@@ -2631,8 +2631,8 @@ export default function AdminAttendancePage() {
                                             <div>Payroll Hours: 9 (full day)</div>
                                           ) : (
                                             <>
-                                              <div>Regular: {adjustment?.regularHours || 0} hrs</div>
-                                              <div>OT: {adjustment?.otHours || 0} hrs</div>
+                                              <div>Regular: {formatHours(adjustment?.regularHours || 0)} hrs</div>
+                                              <div>OT: {formatHours(adjustment?.otHours || 0)} hrs</div>
                                             </>
                                           )}
                                           {adjustment?.notes && (
