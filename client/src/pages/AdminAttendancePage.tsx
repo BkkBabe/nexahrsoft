@@ -22,6 +22,17 @@ import type { AttendanceRecord, User, DailyAttendanceSummary, CompanySettings, A
 // NOTE: Geocoding is now handled server-side during clock-in/out
 // Location text is stored in the database and displayed directly
 
+// Helper function to round hours to nearest 0.5
+function roundToHalf(value: number): number {
+  return Math.round(value * 2) / 2;
+}
+
+// Helper function to format hours for display (always shows x.0 or x.5)
+function formatHours(value: number): string {
+  const rounded = roundToHalf(value);
+  return rounded.toFixed(1);
+}
+
 // Helper function to calculate hours worked (to nearest 0.5 hour)
 function calculateHours(clockInTime: Date | string, clockOutTime: Date | string | null): number {
   if (!clockOutTime) return 0;
@@ -32,7 +43,7 @@ function calculateHours(clockInTime: Date | string, clockOutTime: Date | string 
   const diffHours = diffMs / (1000 * 60 * 60);
   
   // Round to nearest 0.5 hour
-  return Math.round(diffHours * 2) / 2;
+  return roundToHalf(diffHours);
 }
 
 // Helper function to format time in Singapore timezone
@@ -1250,7 +1261,7 @@ export default function AdminAttendancePage() {
           const aggData = heatmapDataMap[user.id]?.[dateKey];
           return aggData?.totalHours || 0;
         }),
-        totalHours.toFixed(1),
+        formatHours(totalHours),
         userRemark
       ];
     });
@@ -1401,7 +1412,7 @@ export default function AdminAttendancePage() {
         }
       });
       
-      rowData.push(parseFloat(totalHours.toFixed(1)));
+      rowData.push(parseFloat(formatHours(totalHours)));
       rowData.push(userRemark);
       const dataRow = worksheet.addRow(rowData);
       
@@ -1813,7 +1824,7 @@ export default function AdminAttendancePage() {
                                   ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" 
                                   : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
                               }`}>
-                                {isInProgress ? "In Progress" : `${hours.toFixed(1)} hrs`}
+                                {isInProgress ? "In Progress" : `${formatHours(hours)} hrs`}
                               </div>
                             </div>
                             
@@ -1980,11 +1991,10 @@ export default function AdminAttendancePage() {
                   <p className="text-xs text-muted-foreground mb-1">Avg Hours</p>
                   <p className="text-xl font-bold" data-testid="text-today-avg-hours">
                     {clockInsRecords.filter(r => r.clockOutTime).length > 0
-                      ? (clockInsRecords
+                      ? formatHours(clockInsRecords
                           .filter(r => r.clockOutTime)
                           .reduce((sum, r) => sum + calculateHours(r.clockInTime, r.clockOutTime), 0) / 
-                         clockInsRecords.filter(r => r.clockOutTime).length
-                        ).toFixed(1)
+                         clockInsRecords.filter(r => r.clockOutTime).length)
                       : '-'}
                   </p>
                 </div>
@@ -2535,7 +2545,7 @@ export default function AdminAttendancePage() {
                                       <Clock className="h-3 w-3" />
                                     )}
                                     {!isFuture && !hasAdjustment && hours > 0 && (
-                                      <span className="font-medium">{Number.isInteger(hours) ? hours : hours.toFixed(1)}</span>
+                                      <span className="font-medium">{formatHours(hours)}</span>
                                     )}
                                   </>
                                 );
@@ -2629,7 +2639,7 @@ export default function AdminAttendancePage() {
                                             <div className="text-muted-foreground italic">{adjustment.notes}</div>
                                           )}
                                           {hours > 0 && (
-                                            <div className="text-muted-foreground">(Actual: {hours.toFixed(1)} hrs)</div>
+                                            <div className="text-muted-foreground">(Actual: {formatHours(hours)} hrs)</div>
                                           )}
                                         </div>
                                       )}
@@ -2642,7 +2652,7 @@ export default function AdminAttendancePage() {
                                             </div>
                                           )}
                                           <div className="border-t pt-1 space-y-1">
-                                            <div>Total Hours: {hours.toFixed(1)} hrs</div>
+                                            <div>Total Hours: {formatHours(hours)} hrs</div>
                                             {hasOpenSession && (
                                               <>
                                                 <div className="text-blue-500 font-medium">Has active session</div>
@@ -2715,7 +2725,7 @@ export default function AdminAttendancePage() {
                                 return sum + (aggData?.totalHours || 0);
                               }, 0);
                               
-                              const totalCellContent = userTotalHours > 0 ? userTotalHours.toFixed(1) : '-';
+                              const totalCellContent = userTotalHours > 0 ? formatHours(userTotalHours) : '-';
                               const totalCellClassName = "w-12 flex-shrink-0 min-h-[36px] flex items-center justify-center text-xs font-bold border-l";
                               const totalCellStyle: React.CSSProperties = { backgroundColor: '#e0f2fe' }; // Light blue for print
                               
@@ -2744,7 +2754,7 @@ export default function AdminAttendancePage() {
                                   </TooltipTrigger>
                                   <TooltipContent side="left" className="text-xs">
                                     <div className="font-medium">{toTitleCase(user.name)}</div>
-                                    <div>Total hours this {heatmapViewType === 'week' ? 'week' : 'month'}: {userTotalHours.toFixed(1)} hrs</div>
+                                    <div>Total hours this {heatmapViewType === 'week' ? 'week' : 'month'}: {formatHours(userTotalHours)} hrs</div>
                                   </TooltipContent>
                                 </Tooltip>
                               );
