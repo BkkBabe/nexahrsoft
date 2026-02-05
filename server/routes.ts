@@ -5692,9 +5692,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const finalUpdates = { ...updates, ...recalculated };
-      const updated = await storage.updatePayrollRecord(id, finalUpdates);
       
+      // Track CPF override status
+      // If CPF was manually changed (not recalculated), mark as overridden
+      const cpfManuallyChanged = (updates.employerCpf !== undefined || updates.employeeCpf !== undefined) && !recalculateCpf;
+      // If CPF was recalculated by the system, clear the override flag
       const cpfWasRecalculated = recalculateCpf && recalculated.employerCpf !== undefined;
+      
+      if (cpfManuallyChanged) {
+        finalUpdates.cpfOverridden = true;
+        // Audit log for the override flag change
+        if (!existingRecord.cpfOverridden) {
+          await storage.createPayrollAuditLog({
+            payrollRecordId: id,
+            fieldName: 'cpfOverridden',
+            oldValue: 'false',
+            newValue: 'true',
+            changedBy: adminUsername,
+            reason: reason || 'CPF manually overridden by admin',
+          });
+        }
+      } else if (cpfWasRecalculated) {
+        // When CPF is recalculated, clear override flag and update original values
+        finalUpdates.cpfOverridden = false;
+        finalUpdates.originalEmployerCpf = recalculated.employerCpf;
+        finalUpdates.originalEmployeeCpf = recalculated.employeeCpf;
+      }
+      
+      const updated = await storage.updatePayrollRecord(id, finalUpdates);
       const cpfSkippedReason = recalculateCpf && !cpfWasRecalculated 
         ? "CPF recalculation skipped - employee residency status not set to SC or SPR"
         : undefined;
@@ -5712,6 +5737,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update payroll record error:", error);
       res.status(500).json({ message: "Failed to update payroll record" });
+    }
+  });
+
+  // Revert CPF to original calculated values
+  app.post("/api/admin/payroll/records/:id/revert-cpf", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adminUsername = (req.session as any)?.adminUsername || "admin";
+      const reason = req.body.reason || "Reverted CPF to original calculated values";
+      
+      const existingRecord = await storage.getPayrollRecordById(id);
+      if (!existingRecord) {
+        return res.status(404).json({ message: "Payroll record not found" });
+      }
+      
+      // Check if original CPF values are available
+      if (existingRecord.originalEmployerCpf === null || existingRecord.originalEmployeeCpf === null) {
+        return res.status(400).json({ 
+          message: "Original calculated CPF values not available for this record. This may be an older payslip generated before the feature was added." 
+        });
+      }
+      
+      const oldEmployerCpf = parseNumeric(existingRecord.employerCpf);
+      const oldEmployeeCpf = parseNumeric(existingRecord.employeeCpf);
+      const originalEmployerCpf = parseNumeric(existingRecord.originalEmployerCpf);
+      const originalEmployeeCpf = parseNumeric(existingRecord.originalEmployeeCpf);
+      
+      // Check if already at original values
+      if (oldEmployerCpf === originalEmployerCpf && oldEmployeeCpf === originalEmployeeCpf) {
+        return res.json({ 
+          record: existingRecord, 
+          message: "CPF values already match the original calculated amounts" 
+        });
+      }
+      
+      // Create audit logs for the revert
+      if (oldEmployerCpf !== originalEmployerCpf) {
+        await storage.createPayrollAuditLog({
+          payrollRecordId: id,
+          fieldName: 'employerCpf',
+          oldValue: String(oldEmployerCpf),
+          newValue: String(originalEmployerCpf),
+          changedBy: adminUsername,
+          reason: reason,
+        });
+      }
+      if (oldEmployeeCpf !== originalEmployeeCpf) {
+        await storage.createPayrollAuditLog({
+          payrollRecordId: id,
+          fieldName: 'employeeCpf',
+          oldValue: String(oldEmployeeCpf),
+          newValue: String(originalEmployeeCpf),
+          changedBy: adminUsername,
+          reason: reason,
+        });
+      }
+      
+      // Calculate new totals
+      const totalCpf = roundToDollars(originalEmployerCpf + Math.abs(originalEmployeeCpf));
+      const grossWages = parseNumeric(existingRecord.grossWages);
+      const cc = parseNumeric(existingRecord.cc);
+      const cdac = parseNumeric(existingRecord.cdac);
+      const ecf = parseNumeric(existingRecord.ecf);
+      const mbmf = parseNumeric(existingRecord.mbmf);
+      const sinda = parseNumeric(existingRecord.sinda);
+      const loanRepaymentTotal = parseNumeric(existingRecord.loanRepaymentTotal);
+      const noPayDay = parseNumeric(existingRecord.noPayDay);
+      const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
+      const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(originalEmployeeCpf));
+      const nett = roundToDollars(grossWages - totalDeductions);
+      
+      // Update the record
+      const updates = {
+        employerCpf: toNumericString(originalEmployerCpf),
+        employeeCpf: toNumericString(originalEmployeeCpf),
+        totalCpf: toNumericString(totalCpf),
+        nett: toNumericString(nett),
+        cpfOverridden: false,
+      };
+      
+      await storage.createPayrollAuditLog({
+        payrollRecordId: id,
+        fieldName: 'cpfOverridden',
+        oldValue: 'true',
+        newValue: 'false',
+        changedBy: adminUsername,
+        reason: reason,
+      });
+      
+      const updated = await storage.updatePayrollRecord(id, updates);
+      
+      res.json({ 
+        record: updated, 
+        message: "CPF reverted to original calculated values",
+        reverted: {
+          employerCpf: originalEmployerCpf,
+          employeeCpf: originalEmployeeCpf
+        }
+      });
+    } catch (error) {
+      console.error("Revert CPF error:", error);
+      res.status(500).json({ message: "Failed to revert CPF values" });
     }
   });
 
