@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Save, History, DollarSign, AlertCircle, Calculator, RefreshCw } from "lucide-react";
+import { Loader2, Save, History, DollarSign, AlertCircle, Calculator, RefreshCw, Undo2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -288,6 +288,34 @@ export default function EditPayslipModal({
     },
   });
 
+  const revertCpfMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/admin/payroll/records/${record?.id}/revert-cpf`, {
+        reason: "Reverted CPF to original calculated values",
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "CPF Reverted",
+        description: "CPF values have been restored to the original calculated amounts.",
+      });
+      
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/payroll/records"],
+        exact: false,
+      });
+      if (onSaved) onSaved();
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Revert Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleValueChange = (key: string, inputValue: string) => {
     const cents = parseCurrency(inputValue);
     setValues((prev) => ({ ...prev, [key]: cents }));
@@ -352,12 +380,53 @@ export default function EditPayslipModal({
                 const fields = groupedFields[sectionKey] || [];
                 if (fields.length === 0) return null;
 
+                // Check if this is the CPF section and if CPF is overridden
+                const isCpfSection = sectionKey === 'cpf';
+                const cpfOverridden = record?.cpfOverridden || false;
+                const hasOriginalCpf = record?.originalEmployerCpf !== null && record?.originalEmployeeCpf !== null;
+
                 return (
                   <AccordionItem key={sectionKey} value={sectionKey}>
                     <AccordionTrigger className="text-sm font-medium">
-                      {sectionTitle}
+                      <div className="flex items-center gap-2">
+                        {sectionTitle}
+                        {isCpfSection && cpfOverridden && (
+                          <Badge variant="destructive" className="text-xs" data-testid="badge-cpf-overridden">
+                            Overridden
+                          </Badge>
+                        )}
+                      </div>
                     </AccordionTrigger>
                     <AccordionContent>
+                      {/* Show revert button for CPF section when overridden */}
+                      {isCpfSection && cpfOverridden && hasOriginalCpf && (
+                        <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 mb-4 border border-amber-200 dark:border-amber-900">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                              CPF values have been manually overridden
+                            </p>
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              Original: Employer ${formatCurrency(record?.originalEmployerCpf)} | 
+                              Employee ${formatCurrency(record?.originalEmployeeCpf)}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => revertCpfMutation.mutate()}
+                            disabled={revertCpfMutation.isPending || hasChanges}
+                            title={hasChanges ? "Save or discard changes before reverting" : "Revert to original calculated CPF"}
+                            data-testid="button-revert-cpf"
+                          >
+                            {revertCpfMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Undo2 className="h-4 w-4 mr-2" />
+                            )}
+                            Revert to Calculated
+                          </Button>
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                         {fields.map((field) => {
                           const originalValue = (record as any)[field.key] || 0;
