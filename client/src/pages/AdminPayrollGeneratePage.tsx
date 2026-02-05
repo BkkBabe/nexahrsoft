@@ -241,8 +241,6 @@ export default function AdminPayrollGeneratePage() {
     const headers = [
       'Employee Code',
       'Employee Name',
-      'Hours',
-      'Regular Hours',
       'OT Hours',
       'Rate/hr',
       'Mobile Allowance',
@@ -253,8 +251,9 @@ export default function AdminPayrollGeneratePage() {
       'House Rental',
       'Salary Adj',
       'Gross',
-      'Net Pay',
-      'Status'
+      'Employer CPF',
+      'Employee CPF',
+      'Net Pay'
     ];
     
     const rows = [...previewData.preview]
@@ -262,8 +261,6 @@ export default function AdminPayrollGeneratePage() {
       .map(emp => [
         emp.employeeCode,
         toTitleCase(emp.employeeName),
-        emp.totalHoursWorked.toFixed(2),
-        emp.regularHours.toFixed(2),
         emp.overtimeHours.toFixed(2),
         emp.hourlyRate.toFixed(2),
         (emp.mobileAllowance || 0).toFixed(2),
@@ -274,8 +271,9 @@ export default function AdminPayrollGeneratePage() {
         (emp.houseRentalAllowance || 0).toFixed(2),
         (emp.salaryAdjustments || 0).toFixed(2),
         emp.grossWages.toFixed(2),
-        emp.netPay.toFixed(2),
-        getResidencyLabel(emp.residencyStatus)
+        emp.employerCPF.toFixed(2),
+        emp.employeeCPF.toFixed(2),
+        emp.netPay.toFixed(2)
       ]);
     
     const csvContent = [
@@ -305,8 +303,6 @@ export default function AdminPayrollGeneratePage() {
       .map(emp => `
         <tr>
           <td style="padding: 8px; border: 1px solid #ddd;">${emp.employeeCode}<br><small>${toTitleCase(emp.employeeName)}</small></td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${emp.totalHoursWorked.toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${emp.regularHours.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${emp.overtimeHours.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.hourlyRate.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mobileAllowance || 0).toFixed(2)}</td>
@@ -317,8 +313,9 @@ export default function AdminPayrollGeneratePage() {
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.houseRentalAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; ${(emp.salaryAdjustments || 0) < 0 ? 'color: red;' : (emp.salaryAdjustments || 0) > 0 ? 'color: green;' : ''}">$${(emp.salaryAdjustments || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${emp.grossWages.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.employerCPF.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.employeeCPF.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: green;">$${emp.netPay.toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd;">${getResidencyLabel(emp.residencyStatus)}</td>
         </tr>
       `).join('');
     
@@ -341,8 +338,6 @@ export default function AdminPayrollGeneratePage() {
           <thead>
             <tr>
               <th>Employee</th>
-              <th style="text-align: right;">Hours</th>
-              <th style="text-align: right;">Regular</th>
               <th style="text-align: right;">OT</th>
               <th style="text-align: right;">Rate/hr</th>
               <th style="text-align: right;">Mobile</th>
@@ -353,8 +348,9 @@ export default function AdminPayrollGeneratePage() {
               <th style="text-align: right;">House Rental</th>
               <th style="text-align: right;">Salary Adj</th>
               <th style="text-align: right;">Gross</th>
+              <th style="text-align: right;">Employer CPF</th>
+              <th style="text-align: right;">Employee CPF</th>
               <th style="text-align: right;">Net Pay</th>
-              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -648,8 +644,6 @@ export default function AdminPayrollGeneratePage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Employee</TableHead>
-                        <TableHead className="text-right">Hours</TableHead>
-                        <TableHead className="text-right">Regular</TableHead>
                         <TableHead className="text-right">OT</TableHead>
                         <TableHead className="text-right">Rate/hr</TableHead>
                         <TableHead className="text-right">Mobile</TableHead>
@@ -660,8 +654,9 @@ export default function AdminPayrollGeneratePage() {
                         <TableHead className="text-right">House Rental</TableHead>
                         <TableHead className="text-right">Salary Adj</TableHead>
                         <TableHead className="text-right">Gross</TableHead>
+                        <TableHead className="text-right">Employer CPF</TableHead>
+                        <TableHead className="text-right">Employee CPF</TableHead>
                         <TableHead className="text-right">Net Pay</TableHead>
-                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -675,8 +670,6 @@ export default function AdminPayrollGeneratePage() {
                               <p className="text-xs text-muted-foreground">{emp.employeeCode}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">{formatHours(emp.totalHoursWorked)}</TableCell>
-                          <TableCell className="text-right">{formatHours(emp.regularHours)}</TableCell>
                           <TableCell className="text-right">{formatHours(emp.overtimeHours)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.hourlyRate)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.mobileAllowance || 0)}</TableCell>
@@ -689,12 +682,9 @@ export default function AdminPayrollGeneratePage() {
                             {(emp.salaryAdjustments || 0) !== 0 ? formatCurrency(emp.salaryAdjustments || 0) : '-'}
                           </TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(emp.grossWages)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.employerCPF)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.employeeCPF)}</TableCell>
                           <TableCell className="text-right font-bold text-green-600">{formatCurrency(emp.netPay)}</TableCell>
-                          <TableCell>
-                            <Badge variant={emp.cpfEligible ? "default" : "secondary"}>
-                              {getResidencyLabel(emp.residencyStatus)}
-                            </Badge>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
