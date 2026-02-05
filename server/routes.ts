@@ -4989,6 +4989,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           employerCpf: toNumericString(cpfResult.employerCPF),
           employeeCpf: toNumericString(-cpfResult.employeeCPF), // Stored as negative (deduction)
           totalCpf: toNumericString(cpfResult.totalCPF),
+          // Store original calculated CPF for override/revert functionality
+          originalEmployerCpf: toNumericString(cpfResult.employerCPF),
+          originalEmployeeCpf: toNumericString(-cpfResult.employeeCPF),
+          cpfOverridden: false,
           total: toNumericString(grossWages),
           nett: toNumericString(nett),
           payMode: 'BANK DISK',
