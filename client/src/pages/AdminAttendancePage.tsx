@@ -1259,7 +1259,8 @@ export default function AdminAttendancePage() {
           if (day > today) return '';
           const dateKey = getDateKey(day);
           const aggData = heatmapDataMap[user.id]?.[dateKey];
-          return aggData?.totalHours || 0;
+          const hrs = aggData?.totalHours || 0;
+          return hrs > 0 ? formatHours(hrs) : 0;
         }),
         formatHours(totalHours),
         userRemark
@@ -1406,7 +1407,8 @@ export default function AdminAttendancePage() {
         if (day <= today) {
           const dateKey = getDateKey(day);
           const aggData = heatmapDataMap[user.id]?.[dateKey];
-          rowData.push(aggData?.totalHours || 0);
+          const hrs = aggData?.totalHours || 0;
+          rowData.push(hrs > 0 ? parseFloat(formatHours(hrs)) : 0);
         } else {
           rowData.push('');
         }
