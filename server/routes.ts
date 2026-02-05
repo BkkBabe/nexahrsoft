@@ -4633,9 +4633,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         year: z.number().min(2020).max(2100),
         month: z.number().min(1).max(12),
         employeeIds: z.array(z.string()).optional(), // Optional: generate for specific employees only
+        suppressAllOT: z.boolean().optional(), // Global flag to suppress all OT for all employees
       });
 
-      const { year, month } = schema.parse(req.body);
+      const { year, month, suppressAllOT } = schema.parse(req.body);
       const employeeIds = req.body.employeeIds as string[] | undefined;
       
       // Get all approved employees (or specific ones if specified)
@@ -4866,19 +4867,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Check if OT should be suppressed for this employee (separate OT1.5 and OT2.0 suppression)
         // OT 1.5x (standard overtime) and OT 2.0x (usually weekend/holiday OT) are tracked separately
+        // Global suppressAllOT flag or individual suppress_ot15/suppress_ot20 adjustments
         let finalOt15Amount = otAmount; // Standard OT goes into 1.5x by default
         let finalOt20Amount = 0; // 2.0x OT (usually from adjustments or weekend work)
         let finalOtHours = overtimeHours;
         
-        // Apply OT suppression based on adjustment type
-        if (suppressOt15Employees.has(employee.id)) {
+        // Apply OT suppression based on global flag or individual adjustment type
+        const shouldSuppressOt15 = suppressAllOT || suppressOt15Employees.has(employee.id);
+        const shouldSuppressOt20 = suppressAllOT || suppressOt20Employees.has(employee.id);
+        
+        if (shouldSuppressOt15) {
           finalOt15Amount = 0;
           // Only zero hours if both OT types are suppressed
-          if (suppressOt20Employees.has(employee.id)) {
+          if (shouldSuppressOt20) {
             finalOtHours = 0;
           }
         }
-        if (suppressOt20Employees.has(employee.id)) {
+        if (shouldSuppressOt20) {
           finalOt20Amount = 0;
         }
         
@@ -5025,9 +5030,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         year: z.number().min(2020).max(2100),
         month: z.number().min(1).max(12),
         employeeIds: z.array(z.string()).optional(),
+        suppressAllOT: z.boolean().optional(),
       });
 
-      const { year, month } = schema.parse(req.body);
+      const { year, month, suppressAllOT } = schema.parse(req.body);
       const employeeIds = req.body.employeeIds as string[] | undefined;
       
       // Get all approved employees
@@ -5227,18 +5233,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Check if OT should be suppressed for this employee (separate OT1.5 and OT2.0 suppression)
+        // Global suppressAllOT flag or individual suppress_ot15/suppress_ot20 adjustments
         let finalOt15Pay = overtimePay; // Standard OT goes into 1.5x by default
         let finalOt20Pay = 0; // 2.0x OT (usually from adjustments or weekend work)
         let finalOvertimeHours = overtimeHours;
         
-        if (suppressOt15Employees.has(employee.id)) {
+        const shouldSuppressOt15 = suppressAllOT || suppressOt15Employees.has(employee.id);
+        const shouldSuppressOt20 = suppressAllOT || suppressOt20Employees.has(employee.id);
+        
+        if (shouldSuppressOt15) {
           finalOt15Pay = 0;
           // Only zero hours if both OT types are suppressed
-          if (suppressOt20Employees.has(employee.id)) {
+          if (shouldSuppressOt20) {
             finalOvertimeHours = 0;
           }
         }
-        if (suppressOt20Employees.has(employee.id)) {
+        if (shouldSuppressOt20) {
           finalOt20Pay = 0;
         }
         

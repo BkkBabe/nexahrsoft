@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History, Settings, Download, Printer } from "lucide-react";
+import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History, Settings, Download, Printer, Ban } from "lucide-react";
 import { useLocation } from "wouter";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
@@ -148,6 +148,7 @@ export default function AdminPayrollGeneratePage() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>(`${currentYear}-${currentMonth}`);
   const [previewData, setPreviewData] = useState<PreviewResponse | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [suppressAllOT, setSuppressAllOT] = useState(false);
 
   const { data: masterAdminData } = useQuery<{ isMasterAdmin: boolean }>({
     queryKey: ["/api/admin/is-master-admin"],
@@ -163,10 +164,11 @@ export default function AdminPayrollGeneratePage() {
   const { year: selectedYear, month: selectedMonth } = parsePeriod(selectedPeriod);
 
   const previewMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (options?: { suppressOT?: boolean }) => {
       const response = await apiRequest("POST", "/api/admin/payroll/generate/preview", {
         year: selectedYear,
         month: selectedMonth,
+        suppressAllOT: options?.suppressOT ?? suppressAllOT,
       });
       return response.json();
     },
@@ -194,6 +196,7 @@ export default function AdminPayrollGeneratePage() {
       const response = await apiRequest("POST", "/api/admin/payroll/generate", {
         year: selectedYear,
         month: selectedMonth,
+        suppressAllOT,
       });
       return response.json();
     },
@@ -221,7 +224,7 @@ export default function AdminPayrollGeneratePage() {
 
   const handlePreview = () => {
     setPreviewData(null);
-    previewMutation.mutate();
+    previewMutation.mutate({});
   };
 
   const handleGenerate = () => {
@@ -579,6 +582,21 @@ export default function AdminPayrollGeneratePage() {
                 {previewData.preview.length > 0 && (
                   <>
                     <Button
+                      variant={suppressAllOT ? "destructive" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        const newValue = !suppressAllOT;
+                        setSuppressAllOT(newValue);
+                        // Refresh preview with new suppressOT value
+                        previewMutation.mutate({ suppressOT: newValue });
+                      }}
+                      disabled={previewMutation.isPending}
+                      data-testid="button-suppress-ot"
+                    >
+                      <Ban className="h-4 w-4 mr-2" />
+                      {suppressAllOT ? "OT Suppressed" : "Suppress All OT"}
+                    </Button>
+                    <Button
                       variant="outline"
                       size="sm"
                       onClick={handleDownloadCSV}
@@ -695,6 +713,12 @@ export default function AdminPayrollGeneratePage() {
             <AlertDialogDescription>
               This will create payroll records for {previewData?.eligibleCount || 0} employees 
               for {previewData?.period}. Total net pay: {formatCurrency(totalNetPay)}.
+              {suppressAllOT && (
+                <>
+                  <br /><br />
+                  <strong className="text-destructive">Note: All OT (1.5x and 2.0x) will be suppressed for all employees.</strong>
+                </>
+              )}
               <br /><br />
               Are you sure you want to proceed?
             </AlertDialogDescription>
