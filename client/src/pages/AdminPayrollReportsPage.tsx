@@ -31,6 +31,17 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
+
+// Helper to convert text to Title Case
+const toTitleCase = (str: string): string => {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 const MONTHS = [
   { value: "1", label: "January" },
   { value: "2", label: "February" },
@@ -316,7 +327,7 @@ export default function AdminPayrollReportsPage() {
       const row = [
         escapeCsvField(r.payPeriod),
         escapeCsvField(r.employeeCode),
-        escapeCsvField(r.employeeName),
+        escapeCsvField(toTitleCase(r.employeeName)),
         escapeCsvField(r.deptName || ""),
         escapeCsvField(r.secName || ""),
         parseAmount(r.basicSalary).toFixed(2),
