@@ -547,6 +547,11 @@ export const payrollRecords = pgTable("payroll_records", {
   employeeCpf: numeric("employee_cpf", { precision: 12, scale: 2 }).notNull().default("0"), // stored as negative
   totalCpf: numeric("total_cpf", { precision: 12, scale: 2 }).notNull().default("0"), // total CPF contribution
   
+  // Original Calculated CPF (for override/revert functionality)
+  originalEmployerCpf: numeric("original_employer_cpf", { precision: 12, scale: 2 }), // System-calculated employer CPF
+  originalEmployeeCpf: numeric("original_employee_cpf", { precision: 12, scale: 2 }), // System-calculated employee CPF
+  cpfOverridden: boolean("cpf_overridden").notNull().default(false), // True if CPF has been manually overridden
+  
   // Final Amounts
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"), // total before deductions
   nett: numeric("nett", { precision: 12, scale: 2 }).notNull().default("0"), // final take-home pay
