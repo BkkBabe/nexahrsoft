@@ -242,8 +242,6 @@ export default function AdminPayrollGeneratePage() {
       'Employee Code',
       'Employee Name',
       'Basic Salary',
-      'OT Hours',
-      'Rate/hr',
       'Mobile Allowance',
       'Transport Allowance',
       'Loan',
@@ -263,8 +261,6 @@ export default function AdminPayrollGeneratePage() {
         emp.employeeCode,
         toTitleCase(emp.employeeName),
         emp.basicPay.toFixed(2),
-        emp.overtimeHours.toFixed(2),
-        emp.hourlyRate.toFixed(2),
         (emp.mobileAllowance || 0).toFixed(2),
         (emp.transportAllowance || 0).toFixed(2),
         (emp.mealAllowance || 0).toFixed(2),
@@ -306,8 +302,6 @@ export default function AdminPayrollGeneratePage() {
         <tr>
           <td style="padding: 8px; border: 1px solid #ddd;">${emp.employeeCode}<br><small>${toTitleCase(emp.employeeName)}</small></td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.basicPay.toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${emp.overtimeHours.toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.hourlyRate.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mobileAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.transportAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mealAllowance || 0).toFixed(2)}</td>
@@ -342,8 +336,6 @@ export default function AdminPayrollGeneratePage() {
             <tr>
               <th>Employee</th>
               <th style="text-align: right;">Basic Salary</th>
-              <th style="text-align: right;">OT</th>
-              <th style="text-align: right;">Rate/hr</th>
               <th style="text-align: right;">Mobile</th>
               <th style="text-align: right;">Transport</th>
               <th style="text-align: right;">Loan</th>
@@ -649,8 +641,6 @@ export default function AdminPayrollGeneratePage() {
                       <TableRow>
                         <TableHead>Employee</TableHead>
                         <TableHead className="text-right">Basic Salary</TableHead>
-                        <TableHead className="text-right">OT</TableHead>
-                        <TableHead className="text-right">Rate/hr</TableHead>
                         <TableHead className="text-right">Mobile</TableHead>
                         <TableHead className="text-right">Transport</TableHead>
                         <TableHead className="text-right">Loan</TableHead>
@@ -676,8 +666,6 @@ export default function AdminPayrollGeneratePage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.basicPay)}</TableCell>
-                          <TableCell className="text-right">{formatHours(emp.overtimeHours)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.hourlyRate)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.mobileAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.transportAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.mealAllowance || 0)}</TableCell>
