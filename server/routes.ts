@@ -1446,7 +1446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const allowanceMapping: Record<string, { from: string; to: string }> = {
             defaultMobileAllowance: { from: 'defaultMobileAllowance', to: 'mobileAllowance' },
             defaultTransportAllowance: { from: 'defaultTransportAllowance', to: 'transportAllowance' },
-            defaultMealAllowance: { from: 'defaultMealAllowance', to: 'mealAllowance' },
+            defaultMealAllowance: { from: 'defaultMealAllowance', to: 'loanRepaymentTotal' },
             defaultShiftAllowance: { from: 'defaultShiftAllowance', to: 'shiftAllowance' },
             defaultOtherAllowance: { from: 'defaultOtherAllowance', to: 'otherAllowance' },
             defaultHouseRentalAllowance: { from: 'defaultHouseRentalAllowance', to: 'houseRentalAllowances' },
@@ -1519,13 +1519,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             const totSalary = roundToDollars(basicSalary + monthlyVariablesComponent);
             const overtimeTotal = roundToDollars(flat + ot10 + ot15 + ot20 + ot30 + shiftAllowance + totRestPhAmount);
-            const allowancesWithCpf = roundToDollars(mobileAllowance + transportAllowance + mealAllowance + annualLeaveEncashment + serviceCallAllowances);
+            const allowancesWithCpf = roundToDollars(mobileAllowance + transportAllowance + annualLeaveEncashment + serviceCallAllowances);
             const allowancesWithoutCpf = roundToDollars(otherAllowance + houseRentalAllowances);
             const grossWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + allowancesWithoutCpf + bonus);
             const cpfWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + bonus);
             const totalCpf = roundToDollars(employerCpf + Math.abs(employeeCpf));
             const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
-            const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(employeeCpf));
+            const effectiveLoanRepayment = roundToDollars(loanRepaymentTotal + mealAllowance);
+            const totalDeductions = roundToDollars(effectiveLoanRepayment + noPayDay + communityDeductions + Math.abs(employeeCpf));
             const nett = roundToDollars(grossWages - totalDeductions);
             
             const recalculated = {
@@ -4896,6 +4897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const shiftAllowance = parseFloat(employee.defaultShiftAllowance || '0');
         const otherAllowance = parseFloat(employee.defaultOtherAllowance || '0');
         const houseRentalAllowance = parseFloat(employee.defaultHouseRentalAllowance || '0');
+        const loanDeduction = parseFloat(employee.defaultMealAllowance || '0');
         const totalAllowances = mobileAllowance + transportAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
 
         // Calculate gross wages (calculated earnings + OT + allowances)
@@ -4935,8 +4937,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
 
-        // Calculate net pay
-        const nett = cpfResult.netPay; // After employee CPF deduction
+        // Calculate net pay (after CPF and loan deduction)
+        const nett = cpfResult.netPay - loanDeduction;
 
         // Create payroll record - convert all numeric values to strings for PostgreSQL
         const record = {
@@ -4973,8 +4975,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           serviceCallAllowances: toNumericString(0),
           otherAllowance: toNumericString(otherAllowance),
           houseRentalAllowances: toNumericString(houseRentalAllowance),
-          loanRepaymentTotal: toNumericString(0),
-          loanRepaymentDetails: null,
+          loanRepaymentTotal: toNumericString(loanDeduction),
+          loanRepaymentDetails: loanDeduction > 0 ? `Recurring loan deduction: $${loanDeduction.toFixed(2)}` : null,
           noPayDay: toNumericString(0),
           cc: toNumericString(0),
           cdac: toNumericString(0),
@@ -5112,6 +5114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shiftAllowance: number;
         otherAllowance: number;
         houseRentalAllowance: number;
+        loanDeduction: number;
         salaryAdjustments: number;
         grossWages: number;
         employeeCPF: number;
@@ -5265,7 +5268,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const shiftAllowance = parseFloat(employee.defaultShiftAllowance || '0');
         const otherAllowance = parseFloat(employee.defaultOtherAllowance || '0');
         const houseRentalAllowance = parseFloat(employee.defaultHouseRentalAllowance || '0');
-        const totalAllowances = mobileAllowance + transportAllowance + mealAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
+        const loanDeduction = parseFloat(employee.defaultMealAllowance || '0');
+        const totalAllowances = mobileAllowance + transportAllowance + shiftAllowance + otherAllowance + houseRentalAllowance;
         
         // Calculate salary adjustments (additions/deductions from employee settings)
         const employeeSalaryAdjustments = salaryAdjustmentsMap.get(employee.id) || [];
@@ -5315,6 +5319,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
 
+        const previewNetPay = cpfResult.netPay - loanDeduction;
+
         preview.push({
           employeeCode: employee.employeeCode || 'N/A',
           employeeName: employee.name,
@@ -5333,11 +5339,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           shiftAllowance,
           otherAllowance,
           houseRentalAllowance,
+          loanDeduction,
           salaryAdjustments: salaryAdjustmentsTotal,
           grossWages,
           employeeCPF: cpfResult.employeeCPF,
           employerCPF: cpfResult.employerCPF,
-          netPay: cpfResult.netPay,
+          netPay: previewNetPay,
           residencyStatus: residencyStatus || 'NOT_SET',
           cpfEligible: cpfResult.isEligible,
         });
@@ -5871,7 +5878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allowanceMapping: Record<string, { from: string; to: string }> = {
         defaultMobileAllowance: { from: 'defaultMobileAllowance', to: 'mobileAllowance' },
         defaultTransportAllowance: { from: 'defaultTransportAllowance', to: 'transportAllowance' },
-        defaultMealAllowance: { from: 'defaultMealAllowance', to: 'mealAllowance' },
+        defaultMealAllowance: { from: 'defaultMealAllowance', to: 'loanRepaymentTotal' },
         defaultShiftAllowance: { from: 'defaultShiftAllowance', to: 'shiftAllowance' },
         defaultOtherAllowance: { from: 'defaultOtherAllowance', to: 'otherAllowance' },
         defaultHouseRentalAllowance: { from: 'defaultHouseRentalAllowance', to: 'houseRentalAllowances' },
@@ -5948,14 +5955,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const totSalary = roundToDollars(basicSalary + monthlyVariablesComponent);
       const overtimeTotal = roundToDollars(flat + ot10 + ot15 + ot20 + ot30 + shiftAllowance + totRestPhAmount);
-      const allowancesWithCpf = roundToDollars(mobileAllowance + transportAllowance + mealAllowance + annualLeaveEncashment + serviceCallAllowances);
+      const allowancesWithCpf = roundToDollars(mobileAllowance + transportAllowance + annualLeaveEncashment + serviceCallAllowances);
       const allowancesWithoutCpf = roundToDollars(otherAllowance + houseRentalAllowances);
       const grossWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + allowancesWithoutCpf + bonus);
       const cpfWages = roundToDollars(totSalary + overtimeTotal + allowancesWithCpf + bonus);
       // Note: employeeCpf is stored as negative, use Math.abs for totals (consistent with existing update logic)
       const totalCpf = roundToDollars(employerCpf + Math.abs(employeeCpf));
       const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
-      const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(employeeCpf));
+      const effectiveLoanRepayment = roundToDollars(loanRepaymentTotal + mealAllowance);
+      const totalDeductions = roundToDollars(effectiveLoanRepayment + noPayDay + communityDeductions + Math.abs(employeeCpf));
       const nett = roundToDollars(grossWages - totalDeductions);
       
       const recalculated = {

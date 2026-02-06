@@ -87,6 +87,7 @@ interface PreviewEmployee {
   shiftAllowance: number;
   otherAllowance: number;
   houseRentalAllowance: number;
+  loanDeduction: number;
   salaryAdjustments: number;
   grossWages: number;
   employeeCPF: number;
@@ -258,7 +259,7 @@ export default function AdminPayrollGeneratePage() {
         emp.basicPay.toFixed(2),
         (emp.mobileAllowance || 0).toFixed(2),
         (emp.transportAllowance || 0).toFixed(2),
-        (emp.mealAllowance || 0).toFixed(2),
+        (emp.loanDeduction || 0).toFixed(2),
         (emp.shiftAllowance || 0).toFixed(2),
         (emp.otherAllowance || 0).toFixed(2),
         (emp.houseRentalAllowance || 0).toFixed(2),
@@ -299,7 +300,7 @@ export default function AdminPayrollGeneratePage() {
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.basicPay.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mobileAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.transportAllowance || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mealAllowance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.loanDeduction || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shiftAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.otherAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.houseRentalAllowance || 0).toFixed(2)}</td>
@@ -663,7 +664,7 @@ export default function AdminPayrollGeneratePage() {
                           <TableCell className="text-right">{formatCurrency(emp.basicPay)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.mobileAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.transportAllowance || 0)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.mealAllowance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.loanDeduction || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.shiftAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.otherAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.houseRentalAllowance || 0)}</TableCell>
