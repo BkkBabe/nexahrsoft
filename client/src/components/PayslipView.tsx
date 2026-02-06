@@ -217,10 +217,8 @@ export default function PayslipView({
       const filename = `Payslip_${employeeName}_${record.payPeriod?.replace(/\s+/g, '_')}.pdf`;
       
       // Hide controls during PDF export
-      const controlsElement = element.querySelector('[data-pdf-hide]') as HTMLElement;
-      if (controlsElement) {
-        controlsElement.style.display = 'none';
-      }
+      const hiddenElements = element.querySelectorAll('[data-pdf-hide]') as NodeListOf<HTMLElement>;
+      hiddenElements.forEach(el => { el.style.display = 'none'; });
       
       const opt = {
         margin: [10, 10, 10, 10] as [number, number, number, number],
@@ -242,9 +240,7 @@ export default function PayslipView({
       await html2pdf().set(opt).from(element).save();
       
       // Restore controls after PDF export
-      if (controlsElement) {
-        controlsElement.style.display = '';
-      }
+      hiddenElements.forEach(el => { el.style.display = ''; });
     } catch (error) {
       console.error('PDF export error:', error);
     } finally {
@@ -410,7 +406,7 @@ export default function PayslipView({
         </div>
 
         {isAdmin && (
-          <div className="flex items-center gap-3 bg-muted/30 rounded-lg px-4 py-2">
+          <div className="flex items-center gap-3 bg-muted/30 rounded-lg px-4 py-2 print:hidden" data-pdf-hide>
             <UserCheck className="h-4 w-4 text-muted-foreground" />
             <div className="flex items-center gap-2">
               <Switch
