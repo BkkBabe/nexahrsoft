@@ -623,7 +623,8 @@ export default function AdminAttendancePage() {
     if (!addSearchQuery.trim()) return [];
     const query = addSearchQuery.toLowerCase();
     return users
-      .filter(u => u.role !== "viewonly_admin") // Only exclude view-only admins
+      .filter(u => u.role !== "viewonly_admin")
+      .filter(u => !u.isArchived)
       .filter(u => 
         u.name?.toLowerCase().includes(query) ||
         u.email?.toLowerCase().includes(query) ||
