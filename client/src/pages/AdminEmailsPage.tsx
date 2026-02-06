@@ -15,6 +15,7 @@ import { ArrowLeft, Mail, Send, RefreshCw, Search, Users, CheckCircle2, UserPlus
 import { useLocation, Link } from "wouter";
 import { useState } from "react";
 import { format } from "date-fns";
+import { toTitleCase } from "@/lib/utils";
 import type { User, CompanySettings, EmailLog, AuditLog, PasswordOverrideLog } from "@shared/schema";
 
 interface NewUserForm {
@@ -751,7 +752,7 @@ export default function AdminEmailsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredUsers.map(user => (
+                        {filteredUsers.sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(user => (
                           <tr key={user.id} className="border-b hover:bg-muted/50" data-testid={`row-user-${user.id}`}>
                             <td className="p-3">
                               <Checkbox
@@ -761,7 +762,7 @@ export default function AdminEmailsPage() {
                               />
                             </td>
                             <td className="p-3">{user.employeeCode || "-"}</td>
-                            <td className="p-3">{user.name}</td>
+                            <td className="p-3">{toTitleCase(user.name)}</td>
                             <td className="p-3 text-sm">{user.email}</td>
                             <td className="p-3">{user.department || "-"}</td>
                             <td className="p-3 text-center">
@@ -962,7 +963,7 @@ export default function AdminEmailsPage() {
                             <tr key={log.id} className="border-b hover:bg-muted/50" data-testid={`row-audit-${log.id}`}>
                               <td className="p-3 text-sm">
                                 <div>
-                                  <p className="font-medium">{employee?.name || 'Unknown'}</p>
+                                  <p className="font-medium">{toTitleCase(employee?.name) || 'Unknown'}</p>
                                   <p className="text-xs text-muted-foreground">{employee?.employeeCode || '-'}</p>
                                 </div>
                               </td>
@@ -1047,7 +1048,7 @@ export default function AdminEmailsPage() {
                             <tr key={log.id} className="border-b hover:bg-muted/50" data-testid={`row-override-${log.id}`}>
                               <td className="p-3 text-sm">
                                 <div>
-                                  <p className="font-medium">{employee?.name || 'Unknown'}</p>
+                                  <p className="font-medium">{toTitleCase(employee?.name) || 'Unknown'}</p>
                                   <p className="text-xs text-muted-foreground">{employee?.employeeCode || '-'}</p>
                                 </div>
                               </td>

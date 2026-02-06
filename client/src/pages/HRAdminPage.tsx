@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { toTitleCase } from "@/lib/utils";
 import type { User, PayrollRecord } from "@shared/schema";
 
 export default function HRAdminPage() {
@@ -95,7 +96,7 @@ export default function HRAdminPage() {
                     </Avatar>
                     <div>
                       <p className="font-medium" data-testid={`text-employee-name-${employee.id}`}>
-                        {employee.name}
+                        {toTitleCase(employee.name)}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {employee.designation || "Staff"} • {employee.department || "Unassigned"}

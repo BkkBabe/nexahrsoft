@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { toTitleCase } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,15 +64,6 @@ function formatDate(date: Date | string): string {
   return d.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// Helper function to convert name to Title Case
-function toTitleCase(str: string | null | undefined): string {
-  if (!str) return '';
-  return str
-    .toLowerCase()
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
 
 // Helper to get date range for period (using local dates, not UTC)
 function getDateRange(period: 'daily' | 'weekly' | 'monthly'): { startDate: string; endDate: string } {

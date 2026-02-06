@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toTitleCase } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Calendar, ArrowLeft, Plus, CheckCircle, XCircle, Upload, BarChart3, PieChart as PieChartIcon, Download, Users, TrendingUp, FileText, AlertTriangle, Printer, Settings, History, Pencil, Trash2, Eye, ChevronDown, ChevronUp } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -429,7 +430,7 @@ export default function AdminLeavePage() {
     
     const headers = ['Employee', 'Leave Type', 'Brought Fwd', 'Earned', 'Eligible', 'Taken', 'Balance'];
     const rows = balances.map(b => [
-      b.employeeName || getUserName(b.userId),
+      toTitleCase(b.employeeName || getUserName(b.userId)),
       b.leaveType,
       b.broughtForward,
       b.earned,
@@ -462,7 +463,7 @@ export default function AdminLeavePage() {
     
     const rows = employeeUtilizationList.map(emp => [
       emp.code,
-      emp.name,
+      toTitleCase(emp.name),
       ...leaveTypes.map(lt => emp.byType[lt]?.toString() || '0'),
       emp.total.toString(),
     ]);
@@ -551,7 +552,7 @@ export default function AdminLeavePage() {
 
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId);
-    return user?.name || user?.username || "Unknown User";
+    return toTitleCase(user?.name) || user?.username || "Unknown User";
   };
   
   // Handle opening edit dialog
@@ -608,7 +609,7 @@ export default function AdminLeavePage() {
       ...b,
       remaining: Math.max(0, remaining),
       percentRemaining: eligible > 0 ? Math.max(0, (remaining / eligible) * 100) : 100,
-      userName: b.employeeName || getUserName(b.userId),
+      userName: toTitleCase(b.employeeName) || getUserName(b.userId),
       isOverdrawn: remaining < 0,
     };
   });
@@ -749,7 +750,7 @@ export default function AdminLeavePage() {
                         <SelectContent>
                           {users.map((user) => (
                             <SelectItem key={user.id} value={user.id}>
-                              {user.name || user.username} ({user.email})
+                              {toTitleCase(user.name) || user.username} ({user.email})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1163,7 +1164,7 @@ export default function AdminLeavePage() {
                                 </Button>
                               </td>
                               <td className="py-3 px-2 font-mono">{emp.code}</td>
-                              <td className="py-3 px-2">{emp.name}</td>
+                              <td className="py-3 px-2">{toTitleCase(emp.name)}</td>
                               <td className="py-3 px-2 text-right font-medium">{emp.total.toFixed(1)}</td>
                               <td className="py-3 px-2">
                                 <div className="flex flex-wrap gap-1">
@@ -1179,7 +1180,7 @@ export default function AdminLeavePage() {
                               <tr key={`${emp.code}-details`}>
                                 <td colSpan={5} className="bg-muted/50 p-4">
                                   <div className="space-y-2">
-                                    <p className="text-sm font-medium mb-3">Leave Records for {emp.name}</p>
+                                    <p className="text-sm font-medium mb-3">Leave Records for {toTitleCase(emp.name)}</p>
                                     {historyLoading ? (
                                       <Skeleton className="h-20 w-full" />
                                     ) : empRecords.length === 0 ? (
@@ -1369,7 +1370,7 @@ export default function AdminLeavePage() {
                           </span>
                           {log.employeeName && (
                             <span className="text-sm font-medium">
-                              {log.employeeName} ({log.employeeCode})
+                              {toTitleCase(log.employeeName)} ({log.employeeCode})
                             </span>
                           )}
                         </div>
@@ -1473,7 +1474,7 @@ export default function AdminLeavePage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Employee: <span className="font-medium text-foreground">{selectedHistoryRecord.employeeName}</span> ({selectedHistoryRecord.employeeCode})
+                  Employee: <span className="font-medium text-foreground">{toTitleCase(selectedHistoryRecord.employeeName)}</span> ({selectedHistoryRecord.employeeCode})
                 </p>
               </div>
               
@@ -1547,7 +1548,7 @@ export default function AdminLeavePage() {
               Are you sure you want to delete this leave record? This action cannot be undone.
               {selectedHistoryRecord && (
                 <span className="block mt-2 text-foreground font-medium">
-                  {selectedHistoryRecord.employeeName} - {selectedHistoryRecord.leaveType} on {new Date(selectedHistoryRecord.leaveDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {toTitleCase(selectedHistoryRecord.employeeName)} - {selectedHistoryRecord.leaveType} on {new Date(selectedHistoryRecord.leaveDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </span>
               )}
             </AlertDialogDescription>

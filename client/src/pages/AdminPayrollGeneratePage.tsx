@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toTitleCase } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -122,13 +123,7 @@ function formatHours(hours: number): string {
   return hours.toFixed(2);
 }
 
-function toTitleCase(str: string): string {
-  return str
-    .toLowerCase()
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
+
 
 function getResidencyLabel(status: string): string {
   switch (status) {

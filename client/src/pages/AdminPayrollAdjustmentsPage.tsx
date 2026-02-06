@@ -29,6 +29,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toTitleCase } from "@/lib/utils";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -241,7 +242,7 @@ export default function AdminPayrollAdjustmentsPage() {
 
   const getEmployeeName = (userId: string) => {
     const emp = employees.find(e => e.id === userId);
-    return emp ? emp.name : "Unknown";
+    return emp ? toTitleCase(emp.name) : "Unknown";
   };
 
   const getEmployeeCode = (userId: string) => {
@@ -431,7 +432,7 @@ export default function AdminPayrollAdjustmentsPage() {
                         <SelectItem key={emp.id} value={emp.id}>
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4" />
-                            <span>{emp.name}</span>
+                            <span>{toTitleCase(emp.name)}</span>
                             {emp.employeeCode && <span className="text-muted-foreground font-mono text-xs">({emp.employeeCode})</span>}
                           </div>
                         </SelectItem>

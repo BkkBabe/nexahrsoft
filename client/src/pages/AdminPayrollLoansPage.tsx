@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toTitleCase } from "@/lib/utils";
 import type { PayrollLoanAccount, User } from "@shared/schema";
 
 // Helper to parse numeric values from PostgreSQL (returned as strings)
@@ -135,7 +136,7 @@ export default function AdminPayrollLoansPage() {
       setFormData(prev => ({
         ...prev,
         employeeCode: user.employeeCode || "",
-        employeeName: user.name,
+        employeeName: toTitleCase(user.name),
       }));
     }
   };
@@ -290,7 +291,7 @@ export default function AdminPayrollLoansPage() {
                     <TableRow key={loan.id} data-testid={`row-loan-${loan.id}`}>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{loan.employeeName}</p>
+                          <p className="font-medium">{toTitleCase(loan.employeeName)}</p>
                           <p className="text-sm text-muted-foreground">{loan.employeeCode}</p>
                         </div>
                       </TableCell>
@@ -369,7 +370,7 @@ export default function AdminPayrollLoansPage() {
                 <SelectContent>
                   {users.filter(u => u.employeeCode).map((user) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {user.name} ({user.employeeCode})
+                      {toTitleCase(user.name)} ({user.employeeCode})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -470,7 +471,7 @@ export default function AdminPayrollLoansPage() {
             <DialogTitle>Record Repayment</DialogTitle>
             <DialogDescription>
               {selectedLoan && (
-                <>Record repayment for {selectedLoan.employeeName}'s {selectedLoan.loanType.replace("_", " ")}</>
+                <>Record repayment for {toTitleCase(selectedLoan.employeeName)}'s {selectedLoan.loanType.replace("_", " ")}</>
               )}
             </DialogDescription>
           </DialogHeader>

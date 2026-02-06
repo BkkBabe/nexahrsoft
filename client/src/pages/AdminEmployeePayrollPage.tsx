@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toTitleCase } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -156,14 +157,6 @@ function calculateCompletionPercentage(employee: EmployeePayrollSummary): number
   return Math.round((filledCount / fields.length) * 100);
 }
 
-function toTitleCase(str: string | null): string {
-  if (!str) return "";
-  return str
-    .toLowerCase()
-    .split(" ")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
 
 function getFieldLabel(field: string): string {
   const labels: Record<string, string> = {

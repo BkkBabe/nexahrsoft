@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { toTitleCase } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -32,15 +33,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 
-// Helper to convert text to Title Case
-const toTitleCase = (str: string): string => {
-  if (!str) return "";
-  return str
-    .toLowerCase()
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-};
+
 
 const MONTHS = [
   { value: "1", label: "January" },

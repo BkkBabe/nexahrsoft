@@ -16,6 +16,7 @@ import type { CompanySettings, User } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { toTitleCase } from "@/lib/utils";
 
 interface ParsedEmployee {
   code: string;
@@ -1030,7 +1031,7 @@ export default function AdminSettingsPage() {
                           {parsedEmployees.slice(0, 10).map((emp, index) => (
                             <TableRow key={index} data-testid={`row-preview-${index}`}>
                               <TableCell className="font-mono text-sm">{emp.code}</TableCell>
-                              <TableCell>{emp.name}</TableCell>
+                              <TableCell>{toTitleCase(emp.name)}</TableCell>
                               <TableCell className="text-sm">{emp.email}</TableCell>
                               <TableCell className="text-sm">{emp.department || '-'}</TableCell>
                               <TableCell className="text-sm">{emp.designation || '-'}</TableCell>
@@ -1601,7 +1602,7 @@ export default function AdminSettingsPage() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <Shield className="h-4 w-4 text-primary" />
-                            {admin.name}
+                            {toTitleCase(admin.name)}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -1697,7 +1698,7 @@ export default function AdminSettingsPage() {
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               <Eye className="h-4 w-4 text-blue-500" />
-                              {admin.name}
+                              {toTitleCase(admin.name)}
                             </div>
                           </TableCell>
                           <TableCell>{admin.email}</TableCell>
@@ -1774,7 +1775,7 @@ export default function AdminSettingsPage() {
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               <UserCog className="h-4 w-4 text-teal-500" />
-                              {admin.name}
+                              {toTitleCase(admin.name)}
                             </div>
                           </TableCell>
                           <TableCell>{admin.email}</TableCell>
@@ -1854,7 +1855,7 @@ export default function AdminSettingsPage() {
                         onClick={() => setSelectedUserId(user.id)}
                         data-testid={`option-user-${user.id}`}
                       >
-                        <div className="font-medium">{user.name}</div>
+                        <div className="font-medium">{toTitleCase(user.name)}</div>
                         <div className="text-sm text-muted-foreground">
                           {user.email} {user.employeeCode && `· ${user.employeeCode}`}
                         </div>
@@ -1875,7 +1876,7 @@ export default function AdminSettingsPage() {
                 <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                   <div className="text-sm text-muted-foreground">Selected:</div>
                   <div className="font-medium">
-                    {nonAdminUsers.find(u => u.id === selectedUserId)?.name}
+                    {toTitleCase(nonAdminUsers.find(u => u.id === selectedUserId)?.name)}
                   </div>
                 </div>
                 
@@ -1955,7 +1956,7 @@ export default function AdminSettingsPage() {
           <DialogHeader>
             <DialogTitle>Change Admin Password</DialogTitle>
             <DialogDescription>
-              Set a new password for {passwordTargetUser?.name}. They will be required to change it on their next login.
+              Set a new password for {toTitleCase(passwordTargetUser?.name)}. They will be required to change it on their next login.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1972,7 +1973,7 @@ export default function AdminSettingsPage() {
             </div>
             {passwordTargetUser && (
               <div className="text-sm text-muted-foreground">
-                Changing password for: <span className="font-medium text-foreground">{passwordTargetUser.name}</span> ({passwordTargetUser.email})
+                Changing password for: <span className="font-medium text-foreground">{toTitleCase(passwordTargetUser.name)}</span> ({passwordTargetUser.email})
               </div>
             )}
           </div>
@@ -2039,7 +2040,7 @@ export default function AdminSettingsPage() {
                         onClick={() => setSelectedAttendanceAdminUserId(user.id)}
                         data-testid={`option-attendance-admin-${user.id}`}
                       >
-                        <div className="font-medium">{user.name}</div>
+                        <div className="font-medium">{toTitleCase(user.name)}</div>
                         <div className="text-sm text-muted-foreground">
                           {user.email} {user.employeeCode && `· ${user.employeeCode}`}
                         </div>
@@ -2059,7 +2060,7 @@ export default function AdminSettingsPage() {
               <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                 <div className="text-sm text-muted-foreground">Selected:</div>
                 <div className="font-medium">
-                  {eligibleForAttendanceAdmin.find(u => u.id === selectedAttendanceAdminUserId)?.name}
+                  {toTitleCase(eligibleForAttendanceAdmin.find(u => u.id === selectedAttendanceAdminUserId)?.name)}
                 </div>
               </div>
             )}
@@ -2127,7 +2128,7 @@ export default function AdminSettingsPage() {
                         onClick={() => setSelectedEmployeeDataAdminUserId(user.id)}
                         data-testid={`option-employee-data-admin-${user.id}`}
                       >
-                        <div className="font-medium">{user.name}</div>
+                        <div className="font-medium">{toTitleCase(user.name)}</div>
                         <div className="text-sm text-muted-foreground">
                           {user.email} {user.employeeCode && `· ${user.employeeCode}`}
                         </div>
@@ -2147,7 +2148,7 @@ export default function AdminSettingsPage() {
               <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                 <div className="text-sm text-muted-foreground">Selected:</div>
                 <div className="font-medium">
-                  {eligibleForEmployeeDataAdmin.find(u => u.id === selectedEmployeeDataAdminUserId)?.name}
+                  {toTitleCase(eligibleForEmployeeDataAdmin.find(u => u.id === selectedEmployeeDataAdminUserId)?.name)}
                 </div>
               </div>
             )}

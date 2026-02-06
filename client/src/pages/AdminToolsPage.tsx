@@ -11,6 +11,7 @@ import { ArrowLeft, FileText, Download, Save, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toTitleCase } from "@/lib/utils";
 import type { CompanySettings } from "@shared/schema";
 import html2pdf from "html2pdf.js";
 
@@ -705,7 +706,7 @@ export default function AdminToolsPage() {
                   <div className="grid grid-cols-2 gap-2 text-sm border-b pb-4">
                     <div>
                       <span className="text-muted-foreground">Name:</span>
-                      <span className="ml-2 font-medium">{formData.employeeName || "-"}</span>
+                      <span className="ml-2 font-medium">{toTitleCase(formData.employeeName) || "-"}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Employee Code:</span>

@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, EmployeeDataAuditLog, EmployeeDocument } from "@shared/schema";
+import { toTitleCase } from "@/lib/utils";
 
 interface EditableFields {
   name: string;
@@ -563,7 +564,7 @@ export default function AdminEmployeeDataPage() {
       headers.join(","),
       ...users.map((u) => [
         u.employeeCode || "",
-        `"${(u.name || "").replace(/"/g, '""')}"`,
+        `"${(toTitleCase(u.name || "")).replace(/"/g, '""')}"`,
         u.email || "",
         u.department || "",
         `"${(u.designation || "").replace(/"/g, '""')}"`,
@@ -779,7 +780,7 @@ export default function AdminEmployeeDataPage() {
                         </TableCell>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2 flex-wrap">
-                            {user.name}
+                            {toTitleCase(user.name)}
                             {user.passportExpiry && new Date(user.passportExpiry) < new Date() && (
                               <Badge variant="destructive" className="text-xs flex items-center gap-1" title="Passport expired">
                                 <AlertTriangle className="h-3 w-3" />
@@ -932,7 +933,7 @@ export default function AdminEmployeeDataPage() {
                               {user.employeeCode || "-"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-medium">{user.name}</TableCell>
+                          <TableCell className="font-medium">{toTitleCase(user.name)}</TableCell>
                           <TableCell>{user.department || "-"}</TableCell>
                           <TableCell>{user.designation || "-"}</TableCell>
                           <TableCell className="text-muted-foreground">{user.email || "-"}</TableCell>

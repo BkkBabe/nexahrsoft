@@ -9,6 +9,7 @@ import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import type { User, AttendanceRecord } from "@shared/schema";
+import { toTitleCase } from "@/lib/utils";
 
 // Address cache to avoid repeated API calls
 const addressCache: Record<string, string> = {};
@@ -154,7 +155,7 @@ export default function AdminReportsPage() {
   const getEmployeeReport = () => {
     return users.map(user => ({
       employeeCode: user.employeeCode || "",
-      name: user.name,
+      name: toTitleCase(user.name),
       email: user.email,
       department: user.department || "",
       designation: user.designation || "",
@@ -172,14 +173,14 @@ export default function AdminReportsPage() {
       const summary = getAttendanceSummary();
       csvContent = "Employee Code,Name,Department,Designation,Days Present,Total Hours\n";
       summary.forEach(s => {
-        csvContent += `"${s.user.employeeCode || ""}","${s.user.name}","${s.user.department || ""}","${s.user.designation || ""}",${s.daysPresent},${s.totalHours.toFixed(2)}\n`;
+        csvContent += `"${s.user.employeeCode || ""}","${toTitleCase(s.user.name)}","${s.user.department || ""}","${s.user.designation || ""}",${s.daysPresent},${s.totalHours.toFixed(2)}\n`;
       });
       filename = `attendance_report_${startDate}_${endDate}.csv`;
     } else if (reportType === "employees") {
       const employees = getEmployeeReport();
       csvContent = "Employee Code,Name,Email,Department,Designation,Section,Join Date,Status\n";
       employees.forEach(e => {
-        csvContent += `"${e.employeeCode}","${e.name}","${e.email}","${e.department}","${e.designation}","${e.section}","${e.joinDate}","${e.status}"\n`;
+        csvContent += `"${e.employeeCode}","${toTitleCase(e.name)}","${e.email}","${e.department}","${e.designation}","${e.section}","${e.joinDate}","${e.status}"\n`;
       });
       filename = `employee_report_${format(new Date(), "yyyy-MM-dd")}.csv`;
     } else if (reportType === "detailed-attendance") {
@@ -190,7 +191,7 @@ export default function AdminReportsPage() {
           const hours = calculateHours(record.clockInTime, record.clockOutTime);
           const clockInAddress = addresses[`in-${record.id}`] || (record.latitude && record.longitude ? `${record.latitude}, ${record.longitude}` : "");
           const clockOutAddress = addresses[`out-${record.id}`] || (record.clockOutLatitude && record.clockOutLongitude ? `${record.clockOutLatitude}, ${record.clockOutLongitude}` : "");
-          csvContent += `"${record.date}","${user.employeeCode || ""}","${user.name}","${user.department || ""}","${format(new Date(record.clockInTime), "HH:mm")}","${clockInAddress}","${record.clockOutTime ? format(new Date(record.clockOutTime), "HH:mm") : "N/A"}","${clockOutAddress}",${hours.toFixed(2)}\n`;
+          csvContent += `"${record.date}","${user.employeeCode || ""}","${toTitleCase(user.name)}","${user.department || ""}","${format(new Date(record.clockInTime), "HH:mm")}","${clockInAddress}","${record.clockOutTime ? format(new Date(record.clockOutTime), "HH:mm") : "N/A"}","${clockOutAddress}",${hours.toFixed(2)}\n`;
         }
       });
       filename = `detailed_attendance_${startDate}_${endDate}.csv`;
@@ -228,10 +229,10 @@ export default function AdminReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {summary.map(s => (
+                {[...summary].sort((a, b) => (a.user.name || "").localeCompare(b.user.name || "")).map(s => (
                   <tr key={s.user.id} data-testid={`row-attendance-${s.user.id}`}>
                     <td className="border p-2">{s.user.employeeCode || "-"}</td>
-                    <td className="border p-2">{s.user.name}</td>
+                    <td className="border p-2">{toTitleCase(s.user.name)}</td>
                     <td className="border p-2">{s.user.department || "-"}</td>
                     <td className="border p-2">{s.user.designation || "-"}</td>
                     <td className="border p-2 text-center">{s.daysPresent}</td>
@@ -263,10 +264,10 @@ export default function AdminReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {employees.map((e, index) => (
+                {[...employees].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((e, index) => (
                   <tr key={index} data-testid={`row-employee-${index}`}>
                     <td className="border p-2">{e.employeeCode || "-"}</td>
-                    <td className="border p-2">{e.name}</td>
+                    <td className="border p-2">{toTitleCase(e.name)}</td>
                     <td className="border p-2">{e.email}</td>
                     <td className="border p-2">{e.department || "-"}</td>
                     <td className="border p-2">{e.designation || "-"}</td>
@@ -306,7 +307,11 @@ export default function AdminReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {attendanceRecords.map(record => {
+                {[...attendanceRecords].sort((a, b) => {
+                  const userA = getUserById(a.userId);
+                  const userB = getUserById(b.userId);
+                  return (userA?.name || "").localeCompare(userB?.name || "");
+                }).map(record => {
                   const user = getUserById(record.userId);
                   const hours = calculateHours(record.clockInTime, record.clockOutTime);
                   const clockInAddress = addresses[`in-${record.id}`];
@@ -315,7 +320,7 @@ export default function AdminReportsPage() {
                     <tr key={record.id} data-testid={`row-detail-${record.id}`}>
                       <td className="border p-2">{record.date}</td>
                       <td className="border p-2">{user?.employeeCode || "-"}</td>
-                      <td className="border p-2">{user?.name || `User ${record.userId}`}</td>
+                      <td className="border p-2">{toTitleCase(user?.name) || `User ${record.userId}`}</td>
                       <td className="border p-2">{user?.department || "-"}</td>
                       <td className="border p-2 text-center">{format(new Date(record.clockInTime), "HH:mm")}</td>
                       <td className="border p-2 text-sm">

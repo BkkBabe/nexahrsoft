@@ -38,6 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
+import { toTitleCase } from "@/lib/utils";
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -219,8 +220,8 @@ export default function AdminClaimsPage() {
   const claims = claimsData?.claims || [];
   const pendingCount = pendingCountData?.count || 0;
 
-  const pendingClaims = claims.filter(c => c.status === "pending");
-  const processedClaims = claims.filter(c => c.status !== "pending");
+  const pendingClaims = claims.filter(c => c.status === "pending").sort((a, b) => (a.employeeName || "").localeCompare(b.employeeName || ""));
+  const processedClaims = claims.filter(c => c.status !== "pending").sort((a, b) => (a.employeeName || "").localeCompare(b.employeeName || ""));
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
@@ -367,7 +368,7 @@ export default function AdminClaimsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-muted-foreground text-xs">Employee</Label>
-                    <p className="font-medium">{selectedClaim.employeeName}</p>
+                    <p className="font-medium">{toTitleCase(selectedClaim.employeeName)}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Employee Code</Label>
@@ -514,7 +515,7 @@ export default function AdminClaimsPage() {
               </AlertDialogTitle>
               <AlertDialogDescription>
                 This action cannot be undone. This will permanently delete the claim
-                {claimToDelete && ` from ${claimToDelete.employeeName} for $${parseFloat(claimToDelete.amount).toFixed(2)}`}.
+                {claimToDelete && ` from ${toTitleCase(claimToDelete.employeeName)} for $${parseFloat(claimToDelete.amount).toFixed(2)}`}.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="py-4">
@@ -601,7 +602,7 @@ export default function AdminClaimsPage() {
                             {log.action === "reversed" && (
                               <Badge variant="outline" className="text-orange-500 border-orange-500"><History className="h-3 w-3 mr-1" /> Reversed</Badge>
                             )}
-                            <span className="font-medium">{log.employeeName}</span>
+                            <span className="font-medium">{toTitleCase(log.employeeName)}</span>
                             {log.employeeCode && (
                               <span className="text-sm text-muted-foreground">({log.employeeCode})</span>
                             )}
@@ -650,7 +651,7 @@ function ClaimRow({ claim, onView, onViewReceipt, onDelete, getStatusBadge }: Cl
     >
       <div className="space-y-1 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium">{claim.employeeName}</span>
+          <span className="font-medium">{toTitleCase(claim.employeeName)}</span>
           {claim.employeeCode && (
             <span className="text-sm text-muted-foreground">({claim.employeeCode})</span>
           )}

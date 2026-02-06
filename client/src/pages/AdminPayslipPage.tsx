@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { toTitleCase } from "@/lib/utils";
 
 export default function AdminPayslipPage() {
   const { toast } = useToast();
@@ -155,7 +156,7 @@ export default function AdminPayslipPage() {
 
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId);
-    return user?.name || user?.username || "Unknown User";
+    return toTitleCase(user?.name) || user?.username || "Unknown User";
   };
 
   return (
@@ -208,7 +209,7 @@ export default function AdminPayslipPage() {
                     <SelectContent>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
-                          {user.name || user.username} ({user.email})
+                          {toTitleCase(user.name) || user.username} ({user.email})
                         </SelectItem>
                       ))}
                     </SelectContent>
