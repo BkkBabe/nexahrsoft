@@ -334,6 +334,8 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("employee_documents table already exists");
     }
     
+    await pool.query(`UPDATE payroll_records SET pay_mode = 'BANK' WHERE pay_mode = 'BANK DISK'`);
+
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production

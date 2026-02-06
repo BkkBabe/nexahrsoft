@@ -4997,7 +4997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cpfOverridden: false,
           total: toNumericString(grossWages),
           nett: toNumericString(nett),
-          payMode: 'BANK DISK',
+          payMode: 'BANK',
           chequeNo: null,
           importedBy: (req.session as any)?.user?.id || 'system',
         };
