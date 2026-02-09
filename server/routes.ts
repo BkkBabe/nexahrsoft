@@ -4061,16 +4061,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const allUsers = await storage.getAllUsers();
-      const usersByCode = new Map(allUsers.filter(u => u.employeeCode).map(u => [u.employeeCode!, u]));
+      const activeUsers = allUsers.filter(u => (u.isApproved && !u.role?.includes('admin')) || u.isArchived);
+      const usersByCode = new Map(activeUsers.filter(u => u.employeeCode).map(u => [u.employeeCode!, u]));
       
       const results = employeeCodes.map(ec => {
-        const user = usersByCode.get(ec.code);
+        let user = usersByCode.get(ec.code);
+        let matchMethod: 'code' | 'name' | null = user ? 'code' : null;
+
+        if (!user) {
+          const importNameLower = ec.name.toLowerCase().trim();
+          for (const u of activeUsers) {
+            const systemNameLower = (u.name || '').toLowerCase().trim();
+            if (!systemNameLower) continue;
+            if (importNameLower.includes(systemNameLower) || systemNameLower.includes(importNameLower)) {
+              user = u;
+              matchMethod = 'name';
+              break;
+            }
+          }
+        }
+
         return {
           code: ec.code,
           importName: ec.name,
           recordCount: ec.recordCount,
           matched: !!user,
+          matchMethod,
           systemName: user?.name || null,
+          systemCode: user?.employeeCode || null,
           systemId: user?.id || null,
         };
       });

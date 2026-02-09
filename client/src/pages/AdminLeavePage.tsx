@@ -112,7 +112,7 @@ export default function AdminLeavePage() {
     total: number;
     matchedCount: number;
     unmatchedCount: number;
-    matched: { code: string; importName: string; recordCount: number; systemName: string | null }[];
+    matched: { code: string; importName: string; recordCount: number; systemName: string | null; systemCode: string | null; matchMethod: 'code' | 'name' | null }[];
     unmatched: { code: string; importName: string; recordCount: number }[];
     totalRecordsMatched: number;
     totalRecordsUnmatched: number;
@@ -1789,6 +1789,7 @@ export default function AdminLeavePage() {
                           <th className="text-left p-2">Code</th>
                           <th className="text-left p-2">Import Name</th>
                           <th className="text-left p-2">System Name</th>
+                          <th className="text-left p-2">Match</th>
                           <th className="text-right p-2">Records</th>
                         </tr>
                       </thead>
@@ -1798,6 +1799,13 @@ export default function AdminLeavePage() {
                             <td className="p-2 font-mono">{m.code}</td>
                             <td className="p-2">{toTitleCase(m.importName)}</td>
                             <td className="p-2">{m.systemName}</td>
+                            <td className="p-2">
+                              {m.matchMethod && (
+                                <Badge variant={m.matchMethod === 'code' ? 'default' : 'secondary'}>
+                                  {m.matchMethod === 'code' ? 'By Code' : 'By Name'}
+                                </Badge>
+                              )}
+                            </td>
                             <td className="p-2 text-right">{m.recordCount}</td>
                           </tr>
                         ))}
