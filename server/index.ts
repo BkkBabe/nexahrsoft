@@ -369,6 +369,20 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("employee_deletion_logs table already exists");
     }
 
+    // Add userId column to leave_history if it doesn't exist
+    const leaveHistoryUserIdCol = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.columns 
+        WHERE table_name = 'leave_history' AND column_name = 'user_id'
+      )
+    `);
+    if (!leaveHistoryUserIdCol.rows[0].exists) {
+      await pool.query(`ALTER TABLE leave_history ADD COLUMN user_id varchar`);
+      console.log("leave_history user_id column added");
+    } else {
+      console.log("leave_history user_id column already exists");
+    }
+
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production

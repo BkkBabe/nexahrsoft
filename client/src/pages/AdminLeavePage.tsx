@@ -171,15 +171,16 @@ export default function AdminLeavePage() {
         records,
         replaceExisting: false,
       });
-      return res.json() as Promise<{ imported: number }>;
+      return res.json() as Promise<{ imported: number; skipped?: number; balancesSynced?: number; message?: string }>;
     },
     onSuccess: (data) => {
       toast({
-        title: "Success",
-        description: `Successfully imported ${data.imported} leave records`,
+        title: "Import Complete",
+        description: data.message || `Imported ${data.imported} leave records`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/analytics', analyticsYear] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/audit-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances'] });
       setParsedRecords([]);
       setCsvFileName("");
       if (fileInputRef.current) fileInputRef.current.value = "";

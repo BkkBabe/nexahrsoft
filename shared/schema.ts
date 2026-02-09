@@ -401,6 +401,7 @@ export type LeaveApplication = typeof leaveApplications.$inferSelect;
 // Leave History (for imported historical leave data)
 export const leaveHistory = pgTable("leave_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id"), // Linked system user ID (from matching)
   employeeCode: text("employee_code").notNull(),
   employeeName: text("employee_name").notNull(),
   leaveType: text("leave_type").notNull(), // 'AL', 'ML', 'OIL', 'UL', 'CL', etc.

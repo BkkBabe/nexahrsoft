@@ -7,10 +7,12 @@ import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
 import * as XLSX from "xlsx";
 import multer from "multer";
-import { registerUserSchema, loginUserSchema } from "@shared/schema";
+import { registerUserSchema, loginUserSchema, leaveHistory, leaveBalances } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { Resend } from "resend";
 import { Pool } from "@neondatabase/serverless";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 
 // Create a pool for raw SQL queries (used by tools API)
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -3756,7 +3758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Import leave history from CSV
+  // Admin: Import leave history from CSV (server-side matching, only imports matched employees)
   app.post("/api/admin/leave/history/import", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -3784,22 +3786,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No records to import" });
       }
 
-      console.log(`[Leave Import] Starting import of ${records.length} records, replaceExisting=${replaceExisting}`);
+      console.log(`[Leave Import] Starting import of ${records.length} total records, replaceExisting=${replaceExisting}`);
 
-      const sanitizedRecords = records.map(r => ({
-        ...r,
-        mlClaimAmount: (() => {
-          if (r.mlClaimAmount === null || r.mlClaimAmount === undefined || r.mlClaimAmount === '') return "0";
-          const num = parseFloat(String(r.mlClaimAmount));
-          return isNaN(num) ? "0" : num.toFixed(2);
-        })(),
-        dayOfWeek: r.dayOfWeek || null,
-        remarks: r.remarks || null,
-        daysOrHours: r.daysOrHours || "1.00 day",
-      }));
+      // Server-side employee matching (same logic as check-matches)
+      const allUsers = await storage.getAllUsers();
+      const activeUsers = allUsers.filter(u => (u.isApproved && !u.role?.includes('admin')) || u.isArchived);
+      const usersByCode = new Map(activeUsers.filter(u => u.employeeCode).map(u => [u.employeeCode!, u]));
+
+      // Build a map of import employee key -> matched system user
+      const uniqueEmployees = new Map<string, { code: string; name: string }>();
+      for (const r of records) {
+        const key = `${r.employeeCode}||${r.employeeName}`;
+        if (!uniqueEmployees.has(key)) {
+          uniqueEmployees.set(key, { code: r.employeeCode, name: r.employeeName });
+        }
+      }
+
+      const matchMap = new Map<string, { userId: string; systemName: string; systemCode: string | null }>();
+      for (const [key, emp] of uniqueEmployees) {
+        let user = usersByCode.get(emp.code);
+        if (!user) {
+          const importNameLower = emp.name.toLowerCase().trim();
+          for (const u of activeUsers) {
+            const systemNameLower = (u.name || '').toLowerCase().trim();
+            if (!systemNameLower) continue;
+            if (importNameLower.includes(systemNameLower) || systemNameLower.includes(importNameLower)) {
+              user = u;
+              break;
+            }
+          }
+        }
+        if (user) {
+          matchMap.set(key, { userId: user.id, systemName: user.name, systemCode: user.employeeCode || null });
+        }
+      }
+
+      console.log(`[Leave Import] Matched ${matchMap.size} of ${uniqueEmployees.size} unique employees`);
+
+      // Filter to only matched records and stamp with userId
+      const matchedRecords = records
+        .map(r => {
+          const key = `${r.employeeCode}||${r.employeeName}`;
+          const match = matchMap.get(key);
+          if (!match) return null;
+          return {
+            ...r,
+            userId: match.userId,
+            employeeCode: match.systemCode || r.employeeCode,
+            mlClaimAmount: (() => {
+              if (r.mlClaimAmount === null || r.mlClaimAmount === undefined || r.mlClaimAmount === '') return "0";
+              const num = parseFloat(String(r.mlClaimAmount));
+              return isNaN(num) ? "0" : num.toFixed(2);
+            })(),
+            dayOfWeek: r.dayOfWeek || null,
+            remarks: r.remarks || null,
+            daysOrHours: r.daysOrHours || "1.00 day",
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+
+      const skippedCount = records.length - matchedRecords.length;
+      console.log(`[Leave Import] ${matchedRecords.length} matched records to import, ${skippedCount} unmatched records skipped`);
+
+      if (matchedRecords.length === 0) {
+        return res.status(400).json({ message: "No matching employees found. Use Check Matches to verify employee matching before importing." });
+      }
 
       if (replaceExisting) {
-        const years = Array.from(new Set(sanitizedRecords.map(r => r.year)));
+        const years = Array.from(new Set(matchedRecords.map(r => r.year)));
         for (const year of years) {
           await storage.deleteLeaveHistoryByYear(year);
         }
@@ -3808,10 +3862,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const CHUNK_SIZE = 200;
       let allCreated: any[] = [];
       const failedChunks: number[] = [];
-      const totalChunks = Math.ceil(sanitizedRecords.length / CHUNK_SIZE);
-      for (let i = 0; i < sanitizedRecords.length; i += CHUNK_SIZE) {
+      const totalChunks = Math.ceil(matchedRecords.length / CHUNK_SIZE);
+      for (let i = 0; i < matchedRecords.length; i += CHUNK_SIZE) {
         const chunkIdx = Math.floor(i / CHUNK_SIZE) + 1;
-        const chunk = sanitizedRecords.slice(i, i + CHUNK_SIZE);
+        const chunk = matchedRecords.slice(i, i + CHUNK_SIZE);
         try {
           const created = await storage.bulkCreateLeaveHistory(chunk);
           allCreated = allCreated.concat(created);
@@ -3828,23 +3882,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const adminUsername = req.session.userId || "admin";
-      const years = Array.from(new Set(sanitizedRecords.map(r => r.year)));
+      const years = Array.from(new Set(matchedRecords.map(r => r.year)));
       await storage.createLeaveAuditLog({
         action: "import",
         tableName: "leave_history",
-        details: JSON.stringify({ count: allCreated.length, years, replaceExisting }),
+        details: JSON.stringify({ 
+          totalRecords: records.length, 
+          matchedImported: allCreated.length, 
+          unmatchedSkipped: skippedCount,
+          years, 
+          replaceExisting 
+        }),
         changedBy: adminUsername,
       });
 
-      console.log(`[Leave Import] Complete: ${allCreated.length}/${sanitizedRecords.length} records imported, ${failedChunks.length} chunk(s) failed`);
+      // Auto-sync leave history into leave_balances
+      // Recompute "taken" from ALL leave_history records per userId/leaveType/year
+      // and preserve existing broughtForward/earned/eligible values
+      const syncResults = { synced: 0, errors: 0 };
+      try {
+        // Identify unique userId/leaveType/year combos from this import
+        const affectedKeys = new Set<string>();
+        const affectedMeta = new Map<string, { userId: string; leaveType: string; year: number; employeeCode: string | null; employeeName: string }>();
+        for (const r of allCreated) {
+          const aggKey = `${r.userId}||${r.leaveType}||${r.year}`;
+          if (!affectedMeta.has(aggKey)) {
+            affectedMeta.set(aggKey, {
+              userId: r.userId,
+              leaveType: r.leaveType,
+              year: r.year,
+              employeeCode: r.employeeCode,
+              employeeName: r.employeeName,
+            });
+          }
+          affectedKeys.add(aggKey);
+        }
+
+        console.log(`[Leave Import] Syncing ${affectedMeta.size} leave balance entries from full history`);
+
+        for (const [, meta] of affectedMeta) {
+          try {
+            // Query ALL leave_history records for this userId/leaveType/year to get accurate total
+            const allHistoryForKey = await db.select()
+              .from(leaveHistory)
+              .where(
+                and(
+                  eq(leaveHistory.userId, meta.userId),
+                  eq(leaveHistory.leaveType, meta.leaveType),
+                  eq(leaveHistory.year, meta.year)
+                )
+              );
+            
+            const totalDays = allHistoryForKey.reduce((sum, h) => {
+              const days = parseFloat(h.daysOrHours?.match(/[\d.]+/)?.[0] || '1') || 1;
+              return sum + days;
+            }, 0);
+
+            // Get existing balance to preserve broughtForward/earned/eligible
+            const existingBalance = await storage.getLeaveBalance(meta.userId, meta.leaveType, meta.year);
+            const bf = existingBalance ? parseFloat(existingBalance.broughtForward || '0') : 0;
+            const earned = existingBalance ? parseFloat(existingBalance.earned || '0') : 0;
+            const eligible = existingBalance ? parseFloat(existingBalance.eligible || '0') : 0;
+            const computedBalance = eligible - totalDays;
+
+            await storage.createOrUpdateLeaveBalance({
+              userId: meta.userId,
+              leaveType: meta.leaveType,
+              year: meta.year,
+              taken: totalDays.toFixed(2),
+              balance: computedBalance.toFixed(2),
+              broughtForward: bf.toFixed(2),
+              earned: earned.toFixed(2),
+              eligible: eligible.toFixed(2),
+              employeeCode: meta.employeeCode || undefined,
+              employeeName: meta.employeeName,
+            });
+            syncResults.synced++;
+          } catch (syncErr: any) {
+            syncResults.errors++;
+            console.error(`[Leave Import] Balance sync error for ${meta.userId}/${meta.leaveType}/${meta.year}:`, syncErr?.message);
+          }
+        }
+        console.log(`[Leave Import] Balance sync complete: ${syncResults.synced} synced, ${syncResults.errors} errors`);
+      } catch (syncError: any) {
+        console.error("[Leave Import] Balance sync failed:", syncError?.message);
+      }
+
+      console.log(`[Leave Import] Complete: ${allCreated.length} records imported (${skippedCount} unmatched skipped), ${failedChunks.length} chunk(s) failed`);
 
       const partialFailure = failedChunks.length > 0;
       res.json({ 
         success: true, 
         message: partialFailure 
-          ? `Imported ${allCreated.length} of ${sanitizedRecords.length} records (${failedChunks.length} batch(es) failed)`
-          : `Imported ${allCreated.length} leave records`,
+          ? `Imported ${allCreated.length} of ${matchedRecords.length} matched records (${skippedCount} unmatched skipped, ${failedChunks.length} batch(es) failed)`
+          : `Imported ${allCreated.length} matched records (${skippedCount} unmatched skipped). ${syncResults.synced} leave balance entries synced.`,
         imported: allCreated.length,
+        skipped: skippedCount,
+        balancesSynced: syncResults.synced,
         ...(partialFailure && { failedBatches: failedChunks.length, totalBatches: totalChunks })
       });
     } catch (error: any) {
