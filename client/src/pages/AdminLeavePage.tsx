@@ -105,6 +105,19 @@ export default function AdminLeavePage() {
   const [editLeaveDate, setEditLeaveDate] = useState("");
   const [editDaysOrHours, setEditDaysOrHours] = useState("");
   const [editRemarks, setEditRemarks] = useState("");
+  
+  // Diagnostic dialog state
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const [diagnosticData, setDiagnosticData] = useState<{
+    total: number;
+    matchedCount: number;
+    unmatchedCount: number;
+    matched: { code: string; importName: string; recordCount: number; systemName: string | null }[];
+    unmatched: { code: string; importName: string; recordCount: number }[];
+    totalRecordsMatched: number;
+    totalRecordsUnmatched: number;
+  } | null>(null);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
 
   // Fetch all approved users
   const { data: usersData } = useQuery<{ users: User[] }>({
@@ -501,6 +514,40 @@ export default function AdminLeavePage() {
         }
       };
       reader.readAsText(file);
+    }
+  };
+
+  const checkMatches = async (records: LeaveHistoryRecord[]) => {
+    setDiagnosticLoading(true);
+    try {
+      const employeeMap = new Map<string, { name: string; count: number }>();
+      records.forEach(r => {
+        const existing = employeeMap.get(r.employeeCode);
+        if (existing) {
+          existing.count++;
+        } else {
+          employeeMap.set(r.employeeCode, { name: r.employeeName, count: 1 });
+        }
+      });
+
+      const employeeCodes = Array.from(employeeMap.entries()).map(([code, data]) => ({
+        code,
+        name: data.name,
+        recordCount: data.count,
+      }));
+
+      const res = await apiRequest('POST', '/api/admin/leave/history/check-matches', { employeeCodes });
+      const data = await res.json();
+      setDiagnosticData(data);
+      setDiagnosticOpen(true);
+    } catch (error: any) {
+      toast({
+        title: "Match Check Failed",
+        description: error.message || "Could not check employee matches",
+        variant: "destructive",
+      });
+    } finally {
+      setDiagnosticLoading(false);
     }
   };
 
@@ -1410,13 +1457,23 @@ export default function AdminLeavePage() {
                       </p>
                     )}
                   </div>
-                  <Button 
-                    onClick={handleImport}
-                    disabled={parsedRecords.length === 0 || importMutation.isPending || isViewOnlyAdmin}
-                    data-testid="button-import-leave"
-                  >
-                    {importMutation.isPending ? "Importing..." : "Import Records"}
-                  </Button>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button 
+                      variant="outline"
+                      onClick={() => checkMatches(parsedRecords)}
+                      disabled={parsedRecords.length === 0 || diagnosticLoading}
+                      data-testid="button-check-matches"
+                    >
+                      {diagnosticLoading ? "Checking..." : "Check Matches"}
+                    </Button>
+                    <Button 
+                      onClick={handleImport}
+                      disabled={parsedRecords.length === 0 || importMutation.isPending || isViewOnlyAdmin}
+                      data-testid="button-import-leave"
+                    >
+                      {importMutation.isPending ? "Importing..." : "Import Records"}
+                    </Button>
+                  </div>
                 </div>
                 <div className="text-sm text-muted-foreground">
                   <p className="font-medium mb-2">Supported Formats:</p>
@@ -1675,6 +1732,117 @@ export default function AdminLeavePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Diagnostic Dialog */}
+      <Dialog open={diagnosticOpen} onOpenChange={setDiagnosticOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Import Match Diagnostic
+            </DialogTitle>
+          </DialogHeader>
+          {diagnosticData && (
+            <div className="space-y-4" data-testid="diagnostic-results">
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-matched-count">
+                      {diagnosticData.matchedCount}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Matched Employees ({diagnosticData.totalRecordsMatched} records)
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-unmatched-count">
+                      {diagnosticData.unmatchedCount}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Unmatched Employees ({diagnosticData.totalRecordsUnmatched} records)
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {diagnosticData.unmatchedCount > 0 && (
+                <div className="rounded-lg border border-orange-200 dark:border-orange-800 p-3">
+                  <p className="text-sm font-medium text-orange-700 dark:text-orange-300 mb-1 flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4" />
+                    Unmatched employees will be stored in leave history but won't appear in Leave Balances until those employees are added to the system with matching employee codes.
+                  </p>
+                </div>
+              )}
+
+              {diagnosticData.matched.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    Matched Employees ({diagnosticData.matchedCount})
+                  </h4>
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2">Code</th>
+                          <th className="text-left p-2">Import Name</th>
+                          <th className="text-left p-2">System Name</th>
+                          <th className="text-right p-2">Records</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {diagnosticData.matched.map((m) => (
+                          <tr key={m.code} className="border-b last:border-0" data-testid={`match-row-${m.code}`}>
+                            <td className="p-2 font-mono">{m.code}</td>
+                            <td className="p-2">{toTitleCase(m.importName)}</td>
+                            <td className="p-2">{m.systemName}</td>
+                            <td className="p-2 text-right">{m.recordCount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {diagnosticData.unmatched.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                    <XCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    Unmatched Employees ({diagnosticData.unmatchedCount})
+                  </h4>
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2">Code</th>
+                          <th className="text-left p-2">Import Name</th>
+                          <th className="text-right p-2">Records</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {diagnosticData.unmatched.map((u) => (
+                          <tr key={u.code} className="border-b last:border-0" data-testid={`unmatch-row-${u.code}`}>
+                            <td className="p-2 font-mono">{u.code}</td>
+                            <td className="p-2">{toTitleCase(u.importName)}</td>
+                            <td className="p-2 text-right">{u.recordCount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground">
+                Total: {diagnosticData.total} employees, {diagnosticData.totalRecordsMatched + diagnosticData.totalRecordsUnmatched} records parsed
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

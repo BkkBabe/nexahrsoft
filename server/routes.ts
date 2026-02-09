@@ -4047,6 +4047,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Check employee matches for leave import
+  app.post("/api/admin/leave/history/check-matches", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
+    if (!req.session?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    try {
+      const { employeeCodes } = req.body as { employeeCodes: { code: string; name: string; recordCount: number }[] };
+      
+      if (!employeeCodes || !Array.isArray(employeeCodes)) {
+        return res.status(400).json({ message: "employeeCodes array required" });
+      }
+
+      const allUsers = await storage.getAllUsers();
+      const usersByCode = new Map(allUsers.filter(u => u.employeeCode).map(u => [u.employeeCode!, u]));
+      
+      const results = employeeCodes.map(ec => {
+        const user = usersByCode.get(ec.code);
+        return {
+          code: ec.code,
+          importName: ec.name,
+          recordCount: ec.recordCount,
+          matched: !!user,
+          systemName: user?.name || null,
+          systemId: user?.id || null,
+        };
+      });
+
+      const matched = results.filter(r => r.matched);
+      const unmatched = results.filter(r => !r.matched);
+
+      res.json({
+        total: results.length,
+        matchedCount: matched.length,
+        unmatchedCount: unmatched.length,
+        matched,
+        unmatched,
+        totalRecordsMatched: matched.reduce((sum, r) => sum + r.recordCount, 0),
+        totalRecordsUnmatched: unmatched.reduce((sum, r) => sum + r.recordCount, 0),
+      });
+    } catch (error) {
+      console.error("Check matches error:", error);
+      res.status(500).json({ message: "Failed to check employee matches" });
+    }
+  });
+
   // Admin: Get leave history
   app.get("/api/admin/leave/history", requireAdmin, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
