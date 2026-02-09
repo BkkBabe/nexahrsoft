@@ -88,6 +88,9 @@ export default function AdminLeavePage() {
   const [selectedApplication, setSelectedApplication] = useState<LeaveApplication | null>(null);
   const [reviewComments, setReviewComments] = useState("");
   
+  // Balance year state
+  const [balanceYear, setBalanceYear] = useState(new Date().getFullYear());
+  
   // Analytics state
   const [analyticsYear, setAnalyticsYear] = useState(new Date().getFullYear());
   const [parsedRecords, setParsedRecords] = useState<LeaveHistoryRecord[]>([]);
@@ -124,9 +127,14 @@ export default function AdminLeavePage() {
     queryKey: ['/api/admin/users'],
   });
 
-  // Fetch all leave balances
+  // Fetch all leave balances for selected year
   const { data: balancesData, isLoading: balancesLoading } = useQuery<{ balances: LeaveBalance[] }>({
-    queryKey: ['/api/admin/leave/balances'],
+    queryKey: ['/api/admin/leave/balances', balanceYear],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/leave/balances?year=${balanceYear}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch leave balances');
+      return res.json();
+    },
   });
 
   // Fetch all leave applications
@@ -180,7 +188,7 @@ export default function AdminLeavePage() {
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/analytics', analyticsYear] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/audit-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances', balanceYear] });
       setParsedRecords([]);
       setCsvFileName("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -648,7 +656,7 @@ export default function AdminLeavePage() {
         title: "Success",
         description: "Leave balance updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances', balanceYear] });
       setBalanceDialogOpen(false);
       setSelectedUserId("");
       setLeaveType("");
@@ -676,7 +684,7 @@ export default function AdminLeavePage() {
         description: "Leave application reviewed successfully",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/applications'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances', balanceYear] });
       setReviewDialogOpen(false);
       setSelectedApplication(null);
       setReviewComments("");
@@ -956,9 +964,19 @@ export default function AdminLeavePage() {
           {/* Leave Balances List */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle>Employee Leave Balances</CardTitle>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  <Select value={String(balanceYear)} onValueChange={(v) => setBalanceYear(Number(v))}>
+                    <SelectTrigger className="w-[100px]" data-testid="select-balance-year">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -980,7 +998,7 @@ export default function AdminLeavePage() {
                   </Button>
                 </div>
               </div>
-              <CardDescription>Current leave entitlements for all employees</CardDescription>
+              <CardDescription>Leave entitlements for all employees ({balanceYear})</CardDescription>
             </CardHeader>
             <CardContent>
               {balancesLoading ? (
