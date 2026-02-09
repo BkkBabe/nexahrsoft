@@ -3609,8 +3609,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { year } = req.query as { year?: string };
-      const currentYear = year ? parseInt(year) : new Date().getFullYear();
-      let balances = await storage.getAllLeaveBalances(currentYear);
+      const yearFilter = year ? parseInt(year) : undefined;
+      let balances = await storage.getAllLeaveBalances(yearFilter);
       
       // Auto-fill missing employee names from users table
       const balancesWithMissingNames = balances.filter(b => !b.employeeName);

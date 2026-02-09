@@ -88,9 +88,6 @@ export default function AdminLeavePage() {
   const [selectedApplication, setSelectedApplication] = useState<LeaveApplication | null>(null);
   const [reviewComments, setReviewComments] = useState("");
   
-  // Balance year state
-  const [balanceYear, setBalanceYear] = useState(new Date().getFullYear());
-  
   // Analytics state
   const [analyticsYear, setAnalyticsYear] = useState(new Date().getFullYear());
   const [parsedRecords, setParsedRecords] = useState<LeaveHistoryRecord[]>([]);
@@ -127,14 +124,9 @@ export default function AdminLeavePage() {
     queryKey: ['/api/admin/users'],
   });
 
-  // Fetch all leave balances for selected year
+  // Fetch all leave balances (all years combined)
   const { data: balancesData, isLoading: balancesLoading } = useQuery<{ balances: LeaveBalance[] }>({
-    queryKey: ['/api/admin/leave/balances', balanceYear],
-    queryFn: async () => {
-      const res = await fetch(`/api/admin/leave/balances?year=${balanceYear}`, { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch leave balances');
-      return res.json();
-    },
+    queryKey: ['/api/admin/leave/balances'],
   });
 
   // Fetch all leave applications
@@ -188,7 +180,7 @@ export default function AdminLeavePage() {
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/analytics', analyticsYear] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/audit-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances', balanceYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances'] });
       setParsedRecords([]);
       setCsvFileName("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -656,7 +648,7 @@ export default function AdminLeavePage() {
         title: "Success",
         description: "Leave balance updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances', balanceYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances'] });
       setBalanceDialogOpen(false);
       setSelectedUserId("");
       setLeaveType("");
@@ -684,7 +676,7 @@ export default function AdminLeavePage() {
         description: "Leave application reviewed successfully",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/applications'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances', balanceYear] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/leave/balances'] });
       setReviewDialogOpen(false);
       setSelectedApplication(null);
       setReviewComments("");
@@ -967,16 +959,6 @@ export default function AdminLeavePage() {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle>Employee Leave Balances</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Select value={String(balanceYear)} onValueChange={(v) => setBalanceYear(Number(v))}>
-                    <SelectTrigger className="w-[100px]" data-testid="select-balance-year">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
-                        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -998,7 +980,7 @@ export default function AdminLeavePage() {
                   </Button>
                 </div>
               </div>
-              <CardDescription>Leave entitlements for all employees ({balanceYear})</CardDescription>
+              <CardDescription>Current leave entitlements for all employees</CardDescription>
             </CardHeader>
             <CardContent>
               {balancesLoading ? (
@@ -1013,10 +995,14 @@ export default function AdminLeavePage() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {Object.entries(balancesByUser).map(([userId, userBalances]) => (
+                  {Object.entries(balancesByUser).map(([userId, userBalances]) => {
+                    const displayName = userBalances[0]?.employeeName 
+                      ? toTitleCase(userBalances[0].employeeName)
+                      : getUserName(userId);
+                    return (
                     <div key={userId} className="space-y-3">
                       <h3 className="font-medium" data-testid={`text-user-${userId}`}>
-                        {getUserName(userId)}
+                        {displayName}
                       </h3>
                       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                         {userBalances.map((balance) => (
@@ -1038,7 +1024,8 @@ export default function AdminLeavePage() {
                         ))}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

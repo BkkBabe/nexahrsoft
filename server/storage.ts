@@ -75,7 +75,7 @@ export interface IStorage {
   createOrUpdateLeaveBalance(balance: InsertLeaveBalance): Promise<LeaveBalance>;
   getLeaveBalance(userId: string, leaveType: string, year: number): Promise<LeaveBalance | undefined>;
   getUserLeaveBalances(userId: string, year: number): Promise<LeaveBalance[]>;
-  getAllLeaveBalances(year: number): Promise<LeaveBalance[]>;
+  getAllLeaveBalances(year?: number): Promise<LeaveBalance[]>;
   updateLeaveBalanceTaken(id: string, taken: string, balance: string): Promise<LeaveBalance | undefined>;
   
   createLeaveApplication(application: InsertLeaveApplication): Promise<LeaveApplication>;
@@ -576,7 +576,7 @@ export class MemStorage implements IStorage {
     throw new Error("MemStorage leave not implemented");
   }
 
-  async getAllLeaveBalances(year: number): Promise<LeaveBalance[]> {
+  async getAllLeaveBalances(year?: number): Promise<LeaveBalance[]> {
     throw new Error("MemStorage leave not implemented");
   }
 
@@ -1497,11 +1497,12 @@ export class PgStorage implements IStorage {
       .orderBy(leaveBalances.leaveType);
   }
 
-  async getAllLeaveBalances(year: number): Promise<LeaveBalance[]> {
-    return await db.select()
-      .from(leaveBalances)
-      .where(eq(leaveBalances.year, year))
-      .orderBy(leaveBalances.userId, leaveBalances.leaveType);
+  async getAllLeaveBalances(year?: number): Promise<LeaveBalance[]> {
+    const query = db.select().from(leaveBalances);
+    if (year) {
+      return await query.where(eq(leaveBalances.year, year)).orderBy(leaveBalances.userId, leaveBalances.leaveType);
+    }
+    return await query.orderBy(leaveBalances.userId, leaveBalances.leaveType);
   }
 
   async updateLeaveBalanceTaken(id: string, taken: string, balance: string): Promise<LeaveBalance | undefined> {
