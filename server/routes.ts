@@ -3772,7 +3772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dayOfWeek: z.string().optional().nullable(),
           remarks: z.string().optional().nullable(),
           daysOrHours: z.string().default("1.00 day"),
-          mlClaimAmount: z.string().optional().nullable(),
+          mlClaimAmount: z.any().optional().nullable(),
           year: z.number(),
         })),
         replaceExisting: z.boolean().optional().default(false),
@@ -3784,34 +3784,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No records to import" });
       }
 
-      // If replaceExisting, delete records for the year(s) being imported
+      console.log(`[Leave Import] Starting import of ${records.length} records, replaceExisting=${replaceExisting}`);
+
+      const sanitizedRecords = records.map(r => ({
+        ...r,
+        mlClaimAmount: (() => {
+          if (r.mlClaimAmount === null || r.mlClaimAmount === undefined || r.mlClaimAmount === '') return "0";
+          const num = parseFloat(String(r.mlClaimAmount));
+          return isNaN(num) ? "0" : num.toFixed(2);
+        })(),
+        dayOfWeek: r.dayOfWeek || null,
+        remarks: r.remarks || null,
+        daysOrHours: r.daysOrHours || "1.00 day",
+      }));
+
       if (replaceExisting) {
-        const years = Array.from(new Set(records.map(r => r.year)));
+        const years = Array.from(new Set(sanitizedRecords.map(r => r.year)));
         for (const year of years) {
           await storage.deleteLeaveHistoryByYear(year);
         }
       }
 
-      const created = await storage.bulkCreateLeaveHistory(records);
+      const CHUNK_SIZE = 200;
+      let allCreated: any[] = [];
+      const failedChunks: number[] = [];
+      const totalChunks = Math.ceil(sanitizedRecords.length / CHUNK_SIZE);
+      for (let i = 0; i < sanitizedRecords.length; i += CHUNK_SIZE) {
+        const chunkIdx = Math.floor(i / CHUNK_SIZE) + 1;
+        const chunk = sanitizedRecords.slice(i, i + CHUNK_SIZE);
+        try {
+          const created = await storage.bulkCreateLeaveHistory(chunk);
+          allCreated = allCreated.concat(created);
+          console.log(`[Leave Import] Inserted chunk ${chunkIdx}/${totalChunks}: ${created.length} records`);
+        } catch (chunkError: any) {
+          failedChunks.push(chunkIdx);
+          console.error(`[Leave Import] Chunk ${chunkIdx}/${totalChunks} failed:`, chunkError?.message || chunkError);
+          console.error(`[Leave Import] Sample record from failed chunk:`, JSON.stringify(chunk[0]));
+        }
+      }
+
+      if (failedChunks.length === totalChunks) {
+        return res.status(500).json({ message: `All ${totalChunks} batch(es) failed to import. Check server logs for details.` });
+      }
       
-      // Log the import action
       const adminUsername = req.session.userId || "admin";
-      const years = Array.from(new Set(records.map(r => r.year)));
+      const years = Array.from(new Set(sanitizedRecords.map(r => r.year)));
       await storage.createLeaveAuditLog({
         action: "import",
         tableName: "leave_history",
-        details: JSON.stringify({ count: created.length, years, replaceExisting }),
+        details: JSON.stringify({ count: allCreated.length, years, replaceExisting }),
         changedBy: adminUsername,
       });
 
+      console.log(`[Leave Import] Complete: ${allCreated.length}/${sanitizedRecords.length} records imported, ${failedChunks.length} chunk(s) failed`);
+
+      const partialFailure = failedChunks.length > 0;
       res.json({ 
         success: true, 
-        message: `Imported ${created.length} leave records`,
-        imported: created.length 
+        message: partialFailure 
+          ? `Imported ${allCreated.length} of ${sanitizedRecords.length} records (${failedChunks.length} batch(es) failed)`
+          : `Imported ${allCreated.length} leave records`,
+        imported: allCreated.length,
+        ...(partialFailure && { failedBatches: failedChunks.length, totalBatches: totalChunks })
       });
-    } catch (error) {
-      console.error("Import leave history error:", error);
-      res.status(500).json({ message: "Failed to import leave history" });
+    } catch (error: any) {
+      console.error("Import leave history error:", error?.message || error);
+      console.error("Import leave history stack:", error?.stack);
+      res.status(500).json({ message: `Failed to import leave history: ${error?.message || "Unknown error"}` });
     }
   });
 
