@@ -685,6 +685,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/users/delete", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
+    try {
+      const isSuper = await isSuperAdmin(req.session, storage);
+      if (!isSuper) {
+        return res.status(403).json({ message: "Only super admins can delete employees" });
+      }
+
+      const schema = z.object({
+        userId: z.string().min(1, "User ID is required"),
+        reason: z.string().optional(),
+      });
+
+      const { userId, reason } = schema.parse(req.body);
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      if (user.role === "admin") {
+        return res.status(403).json({ message: "Cannot delete admin users. Remove admin role first." });
+      }
+
+      const adminName = req.session.userId === "admin" ? "Master Admin" : (await storage.getUser(req.session.userId!))?.name || "Unknown";
+
+      const fullSnapshot = JSON.stringify(user);
+
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        await client.query(`
+          INSERT INTO employee_deletion_logs (employee_id, employee_code, employee_name, email, department, designation, section, role, join_date, resign_date, residency_status, basic_monthly_salary, nric_fin, mobile_number, full_snapshot, deleted_by, deleted_by_name, reason)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        `, [
+          user.id, user.employeeCode, user.name, user.email, user.department,
+          user.designation, user.section, user.role, user.joinDate, user.resignDate,
+          user.residencyStatus, user.basicMonthlySalary, user.nricFin, user.mobileNumber,
+          fullSnapshot, req.session.userId, adminName, reason || null,
+        ]);
+
+        await client.query(`UPDATE attendance_adjustments SET created_by = 'deleted' WHERE created_by = $1`, [userId]);
+        await client.query(`UPDATE employee_documents SET uploaded_by = NULL WHERE uploaded_by = $1`, [userId]);
+        await client.query(`UPDATE claims SET reviewed_by = NULL WHERE reviewed_by = $1`, [userId]);
+        await client.query(`UPDATE leave_applications SET uploaded_by = NULL WHERE uploaded_by = $1`, [userId]);
+        await client.query(`UPDATE employee_salary_adjustments SET created_by = NULL WHERE created_by = $1`, [userId]);
+
+        const tablesToClean = [
+          'attendance_records', 'daily_attendance_summary', 'attendance_adjustments',
+          'attendance_audit_logs', 'leave_balances', 'leave_applications', 'leave_history',
+          'payroll_records', 'payroll_loan_accounts', 'payroll_loan_repayments',
+          'payroll_adjustments', 'payslip_records', 'claims', 'claims_audit_log',
+          'employee_documents', 'employee_salary_adjustments', 'employee_data_audit_logs',
+          'employee_monthly_remarks', 'audit_logs', 'password_override_logs',
+          'email_logs', 'login_challenges', 'user_sessions',
+        ];
+        for (const table of tablesToClean) {
+          await client.query(`DELETE FROM ${table} WHERE user_id = $1`, [userId]);
+        }
+        await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: `Employee "${user.name}" has been permanently deleted` });
+      } catch (txError) {
+        await client.query('ROLLBACK');
+        throw txError;
+      } finally {
+        client.release();
+        await pool.end();
+      }
+    } catch (error) {
+      console.error("Delete employee error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to delete employee" });
+    }
+  });
+
+  app.get("/api/admin/employee-deletion-logs", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        const result = await pool.query(`SELECT * FROM employee_deletion_logs ORDER BY deleted_at DESC`);
+        res.json(result.rows);
+      } finally {
+        await pool.end();
+      }
+    } catch (error) {
+      console.error("Get deletion logs error:", error);
+      res.status(500).json({ message: "Failed to fetch deletion logs" });
+    }
+  });
+
   // Set user role to attendance_view_admin (super admin only)
   app.post("/api/admin/users/:id/set-attendance-view-admin", requireAdmin, requireWriteAccess, async (req: Request, res: Response) => {
     try {

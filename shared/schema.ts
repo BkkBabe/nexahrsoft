@@ -972,3 +972,28 @@ export const claimsAuditLog = pgTable("claims_audit_log", {
 });
 
 export type ClaimsAuditLog = typeof claimsAuditLog.$inferSelect;
+
+export const employeeDeletionLogs = pgTable("employee_deletion_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull(),
+  employeeCode: text("employee_code"),
+  employeeName: text("employee_name").notNull(),
+  email: text("email"),
+  department: text("department"),
+  designation: text("designation"),
+  section: text("section"),
+  role: text("role"),
+  joinDate: text("join_date"),
+  resignDate: text("resign_date"),
+  residencyStatus: text("residency_status"),
+  basicMonthlySalary: text("basic_monthly_salary"),
+  nricFin: text("nric_fin"),
+  mobileNumber: text("mobile_number"),
+  fullSnapshot: text("full_snapshot"),
+  deletedBy: text("deleted_by").notNull(),
+  deletedByName: text("deleted_by_name"),
+  reason: text("reason"),
+  deletedAt: timestamp("deleted_at").notNull().defaultNow(),
+});
+
+export type EmployeeDeletionLog = typeof employeeDeletionLogs.$inferSelect;

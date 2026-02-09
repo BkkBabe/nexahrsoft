@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -247,6 +248,10 @@ export default function AdminAttendancePage() {
   const [selectedHeatmapUsers, setSelectedHeatmapUsers] = useState<Set<string>>(new Set());
   const [showUnarchiveModal, setShowUnarchiveModal] = useState(false);
   const [selectedArchivedUsers, setSelectedArchivedUsers] = useState<Set<string>>(new Set());
+  const [showDeleteEmployeeDialog, setShowDeleteEmployeeDialog] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<User | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [showDeletionLogs, setShowDeletionLogs] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [showDailyReport, setShowDailyReport] = useState(false);
   
@@ -314,6 +319,12 @@ export default function AdminAttendancePage() {
     enabled: showUnarchiveModal,
   });
   const archivedUsers = archivedUsersData || [];
+
+  const { data: deletionLogsData, isLoading: deletionLogsLoading } = useQuery<any[]>({
+    queryKey: ['/api/admin/employee-deletion-logs'],
+    enabled: showDeletionLogs,
+  });
+  const deletionLogs = deletionLogsData || [];
 
   // Fetch attendance records for selected clock-ins date (only when viewing Clock-ins tab)
   const { data: clockInsRecordsData, isLoading: clockInsLoading } = useQuery<{ records: AttendanceRecord[] }>({
@@ -914,6 +925,33 @@ export default function AdminAttendancePage() {
     },
   });
   
+  const deleteEmployeeMutation = useMutation({
+    mutationFn: async ({ userId, reason }: { userId: string; reason?: string }) => {
+      const response = await apiRequest("POST", "/api/admin/users/delete", { userId, reason });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Employee Deleted",
+        description: data.message || "Employee has been permanently deleted",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users/archived'] });
+      setShowDeleteEmployeeDialog(false);
+      setEmployeeToDelete(null);
+      setDeleteReason("");
+      setSelectedHeatmapUsers(new Set());
+      setSelectedArchivedUsers(new Set());
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete employee",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Import attendance mutation
   const importAttendanceMutation = useMutation({
     mutationFn: async (data: { records: typeof importPreviewData, overwriteExisting: boolean }) => {
@@ -2360,6 +2398,32 @@ export default function AdminAttendancePage() {
                   </Button>
                 )}
                 
+                {isSuperAdmin && selectedHeatmapUsers.size > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive border-destructive/30"
+                    onClick={() => {
+                      if (selectedHeatmapUsers.size !== 1) {
+                        toast({ title: "Select One Employee", description: "Please select exactly one employee to delete.", variant: "destructive" });
+                        return;
+                      }
+                      const userId = Array.from(selectedHeatmapUsers)[0];
+                      const user = users.find(u => u.id === userId);
+                      if (user) {
+                        setEmployeeToDelete(user);
+                        setDeleteReason("");
+                        setShowDeleteEmployeeDialog(true);
+                      }
+                    }}
+                    disabled={deleteEmployeeMutation.isPending}
+                    data-testid="button-delete-selected"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                )}
+
                 {/* Unarchive button - super admin only, opens modal */}
                 {isSuperAdmin && (
                   <Button
@@ -2370,6 +2434,18 @@ export default function AdminAttendancePage() {
                   >
                     <ArchiveRestore className="h-4 w-4 mr-1" />
                     Unarchive Employees
+                  </Button>
+                )}
+                
+                {isSuperAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowDeletionLogs(true)}
+                    data-testid="button-deletion-history"
+                  >
+                    <History className="h-4 w-4 mr-1" />
+                    Deletion History
                   </Button>
                 )}
                 
@@ -3276,6 +3352,21 @@ export default function AdminAttendancePage() {
                       {user.employeeCode || 'No code'} | {user.department || 'No dept'}
                     </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive border-destructive/30"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEmployeeToDelete(user);
+                      setDeleteReason("");
+                      setShowDeleteEmployeeDialog(true);
+                    }}
+                    data-testid={`button-delete-archived-${user.id}`}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Delete
+                  </Button>
                 </div>
               ))
             )}
@@ -3295,6 +3386,131 @@ export default function AdminAttendancePage() {
         </DialogContent>
       </Dialog>
       
+      {/* Delete Employee Confirmation Dialog */}
+      <AlertDialog open={showDeleteEmployeeDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowDeleteEmployeeDialog(false);
+          setEmployeeToDelete(null);
+          setDeleteReason("");
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Permanently Delete Employee
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <span className="block">
+                This will permanently delete <strong>{employeeToDelete?.name}</strong> ({employeeToDelete?.employeeCode || 'No code'}) and all associated data including:
+              </span>
+              <span className="block text-sm">
+                Attendance records, leave data, payroll records, claims, documents, and audit logs.
+              </span>
+              <span className="block font-semibold text-destructive">
+                This action cannot be undone. A record of the deletion will be kept in the audit trail.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-reason">Reason for Deletion (optional)</Label>
+            <Textarea
+              id="delete-reason"
+              placeholder="Enter reason for deleting this employee..."
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              className="resize-none"
+              rows={3}
+              data-testid="input-delete-reason"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-employee">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground"
+              onClick={() => {
+                if (employeeToDelete) {
+                  deleteEmployeeMutation.mutate({
+                    userId: employeeToDelete.id,
+                    reason: deleteReason || undefined,
+                  });
+                }
+              }}
+              disabled={deleteEmployeeMutation.isPending}
+              data-testid="button-confirm-delete-employee"
+            >
+              {deleteEmployeeMutation.isPending ? "Deleting..." : "Permanently Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Deletion History Dialog */}
+      <Dialog open={showDeletionLogs} onOpenChange={setShowDeletionLogs}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Employee Deletion History
+            </DialogTitle>
+            <DialogDescription>
+              Audit trail of all permanently deleted employees with their details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {deletionLogsLoading ? (
+              <div className="text-center py-4 text-muted-foreground">Loading deletion logs...</div>
+            ) : deletionLogs.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No employees have been deleted yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {deletionLogs.map((log: any) => (
+                  <Card key={log.id}>
+                    <CardContent className="p-4">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div>
+                            <span className="font-semibold text-sm">{log.employee_name}</span>
+                            {log.employee_code && (
+                              <span className="text-xs text-muted-foreground ml-2">({log.employee_code})</span>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(log.deleted_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          {log.email && <div><span className="font-medium">Email:</span> {log.email}</div>}
+                          {log.department && <div><span className="font-medium">Dept:</span> {log.department}</div>}
+                          {log.designation && <div><span className="font-medium">Designation:</span> {log.designation}</div>}
+                          {log.section && <div><span className="font-medium">Section:</span> {log.section}</div>}
+                          {log.role && <div><span className="font-medium">Role:</span> {log.role}</div>}
+                          {log.join_date && <div><span className="font-medium">Join Date:</span> {log.join_date}</div>}
+                          {log.resign_date && <div><span className="font-medium">Resign Date:</span> {log.resign_date}</div>}
+                          {log.residency_status && <div><span className="font-medium">Residency:</span> {log.residency_status}</div>}
+                          {log.basic_monthly_salary && <div><span className="font-medium">Salary:</span> ${Number(log.basic_monthly_salary).toFixed(2)}</div>}
+                          {log.nric_fin && <div><span className="font-medium">NRIC/FIN:</span> {log.nric_fin}</div>}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t text-xs">
+                          <div className="text-muted-foreground">
+                            <span className="font-medium">Deleted by:</span> {log.deleted_by_name || log.deleted_by}
+                          </div>
+                          {log.reason && (
+                            <div className="text-muted-foreground">
+                              <span className="font-medium">Reason:</span> {log.reason}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Daily Report Dialog */}
       <Dialog open={showDailyReport} onOpenChange={setShowDailyReport}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">

@@ -336,6 +336,39 @@ async function ensureSchemaMigrations(pool: Pool) {
     
     await pool.query(`UPDATE payroll_records SET pay_mode = 'BANK' WHERE pay_mode = 'BANK DISK'`);
 
+    const deletionLogsExists = await pool.query(`
+      SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'employee_deletion_logs')
+    `);
+    if (!deletionLogsExists.rows[0].exists) {
+      await pool.query(`
+        CREATE TABLE employee_deletion_logs (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          employee_id varchar NOT NULL,
+          employee_code text,
+          employee_name text NOT NULL,
+          email text,
+          department text,
+          designation text,
+          section text,
+          role text,
+          join_date text,
+          resign_date text,
+          residency_status text,
+          basic_monthly_salary text,
+          nric_fin text,
+          mobile_number text,
+          full_snapshot text,
+          deleted_by text NOT NULL,
+          deleted_by_name text,
+          reason text,
+          deleted_at timestamp NOT NULL DEFAULT NOW()
+        )
+      `);
+      console.log("employee_deletion_logs table created");
+    } else {
+      console.log("employee_deletion_logs table already exists");
+    }
+
     log("Schema migrations verified successfully");
   } catch (error: any) {
     // Log detailed error for debugging - this is critical for production
