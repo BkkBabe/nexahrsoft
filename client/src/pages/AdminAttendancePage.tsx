@@ -2606,16 +2606,16 @@ export default function AdminAttendancePage() {
                                 // Cell content - shared between print and interactive modes
                                 const cellContent = (
                                   <>
-                                    {!isFuture && hasAdjustment && isLeaveAdjustment && (
+                                    {hasAdjustment && isLeaveAdjustment && (
                                       <span className="font-medium text-[10px]">{leaveCode}</span>
                                     )}
-                                    {!isFuture && hasAdjustment && !isLeaveAdjustment && (
+                                    {hasAdjustment && !isLeaveAdjustment && (
                                       <span className="font-medium">{formatHours((adjustment?.regularHours || 0) + (adjustment?.otHours || 0))}</span>
                                     )}
-                                    {!isFuture && !hasAdjustment && hasOpenSession && hours === 0 && (
+                                    {!hasAdjustment && !isFuture && hasOpenSession && hours === 0 && (
                                       <Clock className="h-3 w-3" />
                                     )}
-                                    {!isFuture && !hasAdjustment && hours > 0 && (
+                                    {!hasAdjustment && !isFuture && hours > 0 && (
                                       <span className="font-medium">{formatHours(hours)}</span>
                                     )}
                                   </>
@@ -2635,12 +2635,12 @@ export default function AdminAttendancePage() {
                                 };
                                 
                                 const getCellColor = () => {
-                                  if (isFuture) return 'bg-muted/30';
                                   if (hasAdjustment && isLeaveAdjustment) return getLeaveColor(leaveCode);
                                   if (hasAdjustment && !isLeaveAdjustment) {
                                     const adjTotal = (adjustment?.regularHours || 0) + (adjustment?.otHours || 0);
                                     return getHeatmapColor(adjTotal, false);
                                   }
+                                  if (isFuture && !hasAdjustment) return 'bg-muted/30';
                                   if (isWeekend && !hasRecord) return 'bg-muted/50';
                                   return getHeatmapColor(hours, hasOpenSession);
                                 };
@@ -2654,9 +2654,9 @@ export default function AdminAttendancePage() {
                                     return { color: '#fff' };
                                   }
                                   if (hasAdjustment && !isLeaveAdjustment) {
-                                    // Hours override - use adjusted total for normal clock-in color scheme
+                                    // Hours override - use adjusted total for normal clock-in color scheme (treat as non-future since adjustment exists)
                                     const adjTotal = (adjustment?.regularHours || 0) + (adjustment?.otHours || 0);
-                                    return getHeatmapInlineStyle(adjTotal, false, isWeekend, isFuture, true);
+                                    return getHeatmapInlineStyle(adjTotal, false, isWeekend, false, true);
                                   }
                                   return getHeatmapInlineStyle(hours, hasOpenSession, isWeekend, isFuture, hasRecord);
                                 };
@@ -2752,14 +2752,12 @@ export default function AdminAttendancePage() {
                                             )}
                                           </div>
                                         </div>
-                                      ) : !hasAdjustment && isFuture ? (
-                                        <div className="text-muted-foreground">Future date</div>
                                       ) : !hasAdjustment ? (
                                         <div className="text-muted-foreground">No record</div>
                                       ) : null}
                                       
-                                      {/* Edit button for admins (non-future dates) */}
-                                      {!isFuture && !cannotEdit && (
+                                      {/* Edit button for admins */}
+                                      {!cannotEdit && (
                                         <Button
                                           size="sm"
                                           variant="outline"
