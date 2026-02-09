@@ -230,42 +230,136 @@ export default function AdminLeavePage() {
     },
   });
 
-  // CSV Parser for multi-column format from leave management system
-  const parseCSV = (text: string): LeaveHistoryRecord[] => {
+  const parseDate = (dateStr: string): { formatted: string; year: number } | null => {
+    const ddmmyyyy = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (ddmmyyyy) {
+      const [, d, m, y] = ddmmyyyy;
+      return { formatted: `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`, year: parseInt(y) };
+    }
+    const yyyymmdd = dateStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (yyyymmdd) {
+      const [, y, m, d] = yyyymmdd;
+      return { formatted: `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`, year: parseInt(y) };
+    }
+    return null;
+  };
+
+  const normalizeLeaveType = (raw: string): string => {
+    const upper = raw.trim().toUpperCase();
+    const mapping: Record<string, string> = {
+      'ANNUAL LEAVE': 'AL', 'ANNUAL': 'AL',
+      'MEDICAL LEAVE': 'ML', 'MEDICAL': 'ML', 'SICK LEAVE': 'ML', 'SICK': 'ML',
+      'COMPASSIONATE LEAVE': 'CL', 'COMPASSIONATE': 'CL',
+      'OFF IN LIEU': 'OIL', 'OFF-IN-LIEU': 'OIL', 'TIME OFF IN LIEU': 'OIL',
+      'UNPAID LEAVE': 'UL', 'UNPAID': 'UL', 'NO PAY LEAVE': 'UL',
+      'MATERNITY LEAVE': 'MTL', 'MATERNITY': 'MTL',
+      'PATERNITY LEAVE': 'PL', 'PATERNITY': 'PL',
+      'HOSPITALIZATION LEAVE': 'HL', 'HOSPITALIZATION': 'HL',
+    };
+    if (/^[A-Z]{2,4}(FH|SH)?$/.test(upper)) return upper;
+    for (const [key, val] of Object.entries(mapping)) {
+      if (upper === key || upper.includes(key)) return val;
+    }
+    const abbrevMatch = upper.match(/^([A-Z]{2,4})\s*[-–]\s*/);
+    if (abbrevMatch) return abbrevMatch[1];
+    return upper.substring(0, 4);
+  };
+
+  const parseFlatCSV = (lines: string[]): LeaveHistoryRecord[] => {
     const records: LeaveHistoryRecord[] = [];
-    const lines = text.split('\n');
-    
+    if (lines.length < 2) return records;
+
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+
+    const findCol = (keywords: string[]): number => {
+      for (const kw of keywords) {
+        const idx = headers.findIndex(h => h.includes(kw));
+        if (idx >= 0) return idx;
+      }
+      return -1;
+    };
+
+    const codeCol = findCol(['emp code', 'employee code', 'emp_code', 'employee_code', 'empcode', 'code', 'emp no', 'emp_no', 'empno', 'employee no', 'employee_no', 'id']);
+    const nameCol = findCol(['emp name', 'employee name', 'emp_name', 'employee_name', 'empname', 'name']);
+    const typeCol = findCol(['leave type', 'leave_type', 'leavetype', 'type']);
+    const dateCol = findCol(['date', 'leave date', 'leave_date', 'leavedate', 'from', 'start']);
+    const daysCol = findCol(['days', 'day', 'hours', 'duration', 'days_or_hours', 'qty', 'quantity']);
+    const remarksCol = findCol(['remarks', 'remark', 'notes', 'note', 'comment', 'comments', 'reason']);
+
+    if (dateCol < 0 || typeCol < 0) return records;
+    if (codeCol < 0 && nameCol < 0) return records;
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const cols = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+
+      const dateStr = cols[dateCol] || '';
+      const parsed = parseDate(dateStr);
+      if (!parsed) continue;
+
+      const leaveTypeRaw = cols[typeCol] || '';
+      if (!leaveTypeRaw) continue;
+      const leaveType = normalizeLeaveType(leaveTypeRaw);
+
+      const empCode = codeCol >= 0 ? (cols[codeCol] || '') : '';
+      const empName = nameCol >= 0 ? (cols[nameCol] || '') : '';
+      if (!empCode && !empName) continue;
+
+      let daysOrHours = '1.00 day';
+      if (daysCol >= 0 && cols[daysCol]) {
+        const val = cols[daysCol].trim();
+        if (/^\d+\.?\d*$/.test(val)) {
+          daysOrHours = `${parseFloat(val).toFixed(2)} day`;
+        } else {
+          daysOrHours = val;
+        }
+      }
+
+      const remarks = remarksCol >= 0 ? (cols[remarksCol] || undefined) : undefined;
+
+      records.push({
+        employeeCode: empCode,
+        employeeName: empName,
+        leaveType,
+        leaveDate: parsed.formatted,
+        dayOfWeek: '',
+        remarks,
+        daysOrHours,
+        year: parsed.year,
+      });
+    }
+    return records;
+  };
+
+  const parse3SICSV = (lines: string[]): LeaveHistoryRecord[] => {
+    const records: LeaveHistoryRecord[] = [];
     let currentEmployeeCode = "";
     let currentEmployeeName = "";
     let currentLeaveType = "";
     
     for (const line of lines) {
-      // Parse as CSV - split by comma
       const columns = line.split(',').map(col => col.trim());
       const fullLine = columns.join(' ');
       
-      // Skip empty lines
       if (!fullLine.replace(/,/g, '').trim()) continue;
       
-      // Parse employee header: "Emp Code: 07001   Employee: NAME   Leave Calculation Date: 01-10-2024"
       if (fullLine.includes("Emp Code:") && fullLine.includes("Employee:")) {
-        const empCodeMatch = fullLine.match(/Emp Code:\s*(\d+)/);
-        const empNameMatch = fullLine.match(/Employee:\s*([A-Z\s@]+?)(?:\s{2,}|Leave)/i);
+        const empCodeMatch = fullLine.match(/Emp Code:\s*(\w+)/);
+        const empNameMatch = fullLine.match(/Employee:\s*([A-Z\s@.]+?)(?:\s{2,}|Leave)/i);
         
         if (empCodeMatch) currentEmployeeCode = empCodeMatch[1];
         if (empNameMatch) currentEmployeeName = empNameMatch[1].trim();
         continue;
       }
       
-      // Parse leave type header from columns - look for "Leave Type:" and then find the type code
       if (fullLine.includes("Leave Type:")) {
-        // Look for pattern like "AL - ANNUAL LEAVE" or "ML - MEDICAL LEAVE"
-        const typeMatch = fullLine.match(/([A-Z]{2,4})\s*-\s*[A-Z\s]+LEAVE/i);
+        const typeMatch = fullLine.match(/([A-Z]{2,4})\s*-\s*[A-Z\s]+/i);
         if (typeMatch) currentLeaveType = typeMatch[1].toUpperCase();
         continue;
       }
       
-      // Skip header, total, and summary lines
       if (fullLine.includes("S No.") || fullLine.includes("Total :") || 
           fullLine.includes("ML Claims") || fullLine.includes("Total Leave:") ||
           fullLine.includes("Eligible") || fullLine.includes("Credit") ||
@@ -276,23 +370,16 @@ export default function AdminLeavePage() {
         continue;
       }
       
-      // Parse leave entry - look for date pattern DD-MM-YYYY in columns
       const dateMatch = fullLine.match(/(\d{2})-(\d{2})-(\d{4})/);
       const daysMatch = fullLine.match(/([\d.]+)\s*day/i);
-      
-      // Check if first column is a number (row number) and we have a date
       const rowNum = parseInt(columns[1] || columns[0]);
       
-      if (dateMatch && daysMatch && currentEmployeeCode && currentLeaveType && !isNaN(rowNum)) {
+      if (dateMatch && currentEmployeeCode && currentLeaveType && !isNaN(rowNum)) {
         const [, day, month, year] = dateMatch;
         const leaveDate = `${year}-${month}-${day}`;
-        const daysOrHours = daysMatch[0];
+        const daysOrHours = daysMatch ? daysMatch[0].trim() : '1.00 day';
         
-        // Extract day of week and remarks from columns
         let dayOfWeek = "";
-        let remarks = "";
-        
-        // Day of week is typically in column 9-10 area
         for (const col of columns) {
           if (/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i.test(col)) {
             dayOfWeek = col;
@@ -300,14 +387,12 @@ export default function AdminLeavePage() {
           }
         }
         
-        // Remarks are typically after the day of week, look for text content
         const remarksCol = columns.find((col, idx) => 
           idx > 10 && col.length > 2 && 
           !/^\d/.test(col) && 
           !/day$/i.test(col) &&
           !/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i.test(col)
         );
-        if (remarksCol) remarks = remarksCol;
         
         records.push({
           employeeCode: currentEmployeeCode,
@@ -315,14 +400,38 @@ export default function AdminLeavePage() {
           leaveType: currentLeaveType,
           leaveDate,
           dayOfWeek,
-          remarks: remarks || undefined,
-          daysOrHours: daysOrHours.trim(),
+          remarks: remarksCol || undefined,
+          daysOrHours,
           year: parseInt(year),
         });
       }
     }
-    
     return records;
+  };
+
+  const parseCSV = (text: string): LeaveHistoryRecord[] => {
+    const lines = text.split('\n').filter(l => l.trim());
+    if (lines.length === 0) return [];
+
+    const firstFewLines = lines.slice(0, 5).join(' ').toLowerCase();
+    const is3SI = firstFewLines.includes('emp code:') || 
+                  firstFewLines.includes('leave history report') ||
+                  firstFewLines.includes('leave type:') ||
+                  firstFewLines.includes('period from:');
+
+    if (is3SI) {
+      const result = parse3SICSV(lines);
+      if (result.length > 0) return result;
+    }
+
+    const flatResult = parseFlatCSV(lines);
+    if (flatResult.length > 0) return flatResult;
+
+    if (!is3SI) {
+      return parse3SICSV(lines);
+    }
+
+    return [];
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -994,7 +1103,7 @@ export default function AdminLeavePage() {
                   <SelectValue placeholder="Select year" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[2020, 2021, 2022, 2023, 2024, 2025].map(year => (
+                  {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1313,9 +1422,10 @@ export default function AdminLeavePage() {
                   <p className="font-medium mb-2">Supported Formats:</p>
                   <ul className="list-disc list-inside space-y-1">
                     <li><strong>Excel (.xls, .xlsx)</strong> - 3SI Leave History Report format</li>
-                    <li><strong>CSV</strong> - Custom leave data with employee code, name, leave type, date</li>
-                    <li>Leave types: AL, ML, OIL, UL, CL, and variants (ALFH, ALSH, etc.)</li>
-                    <li>Dates in DD-MM-YYYY format</li>
+                    <li><strong>CSV (3SI)</strong> - 3SI Leave History Report exported as CSV</li>
+                    <li><strong>CSV (Flat)</strong> - Simple CSV with column headers: Employee Code, Employee Name, Leave Type, Date, Days (optional), Remarks (optional)</li>
+                    <li>Leave types: AL, ML, OIL, UL, CL, and variants (ALFH, ALSH, etc.) or full names (Annual Leave, Medical Leave, etc.)</li>
+                    <li>Dates in DD-MM-YYYY or YYYY-MM-DD format</li>
                   </ul>
                 </div>
               </div>

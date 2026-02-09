@@ -3815,7 +3815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Parse Excel leave history file (3SI format)
+  // Admin: Parse Excel leave history file (3SI format + flat tabular)
   app.post("/api/admin/leave/history/parse-excel", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -3830,7 +3830,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[Leave Import] Parsing file: ${fileName}, base64 length: ${fileBase64?.length || 0}`);
       
-      // Decode base64 file
       let buffer: Buffer;
       try {
         buffer = Buffer.from(fileBase64, "base64");
@@ -3849,15 +3848,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: `Failed to parse Excel file: ${xlsxError.message || "Unknown error"}` });
       }
       
-      // Read first sheet
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
       
       console.log(`[Leave Import] Raw data rows: ${data.length}`);
+      if (data.length > 0) {
+        console.log(`[Leave Import] First row sample:`, JSON.stringify(data[0]?.slice(0, 10)));
+        if (data.length > 1) console.log(`[Leave Import] Second row sample:`, JSON.stringify(data[1]?.slice(0, 10)));
+      }
+
+      const parseExcelDate = (val: any): { formatted: string; year: number } | null => {
+        if (val === null || val === undefined) return null;
+        const str = val.toString().trim();
+        const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+        if (ddmmyyyy) {
+          const [, d, m, y] = ddmmyyyy;
+          return { formatted: `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`, year: parseInt(y) };
+        }
+        const yyyymmdd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+        if (yyyymmdd) {
+          const [, y, m, d] = yyyymmdd;
+          return { formatted: `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`, year: parseInt(y) };
+        }
+        if (typeof val === 'number' && val > 25000 && val < 60000) {
+          const date = new Date((val - 25569) * 86400 * 1000);
+          if (!isNaN(date.getTime())) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return { formatted: `${y}-${m}-${d}`, year: y };
+          }
+        }
+        return null;
+      };
+
+      const normalizeLeaveType = (raw: string): string => {
+        const upper = raw.trim().toUpperCase();
+        if (/^[A-Z]{2,4}(FH|SH)?$/.test(upper)) return upper;
+        const mapping: Record<string, string> = {
+          'ANNUAL LEAVE': 'AL', 'ANNUAL': 'AL',
+          'MEDICAL LEAVE': 'ML', 'MEDICAL': 'ML', 'SICK LEAVE': 'ML',
+          'COMPASSIONATE LEAVE': 'CL', 'COMPASSIONATE': 'CL',
+          'OFF IN LIEU': 'OIL', 'OFF-IN-LIEU': 'OIL', 'TIME OFF IN LIEU': 'OIL',
+          'UNPAID LEAVE': 'UL', 'UNPAID': 'UL', 'NO PAY LEAVE': 'UL',
+          'MATERNITY LEAVE': 'MTL', 'MATERNITY': 'MTL',
+          'PATERNITY LEAVE': 'PL', 'PATERNITY': 'PL',
+          'HOSPITALIZATION LEAVE': 'HL', 'HOSPITALIZATION': 'HL',
+        };
+        for (const [key, val] of Object.entries(mapping)) {
+          if (upper === key || upper.includes(key)) return val;
+        }
+        const abbrevMatch = upper.match(/^([A-Z]{2,4})\s*[-–]\s*/);
+        if (abbrevMatch) return abbrevMatch[1];
+        return upper.substring(0, 4);
+      };
       
-      // Parse leave records from 3SI format
-      const records: any[] = [];
+      let records: any[] = [];
+
+      // Try 3SI format first
       let currentEmployee: { code: string; name: string } | null = null;
       let currentLeaveType: string | null = null;
       
@@ -3865,57 +3914,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const row = data[i];
         if (!row || row.length === 0) continue;
         
-        // Check for employee header: "Emp Code: XXXXX   Employee: NAME   Leave Calculation Date: DD-MM-YYYY"
-        if (row[1] && typeof row[1] === 'string' && row[1].includes('Emp Code:')) {
-          const match = row[1].match(/Emp Code:\s*(\w+)\s+Employee:\s*(.+?)\s+Leave Calculation Date/);
+        const rowStr = row.map((c: any) => c?.toString() || '').join(' ');
+        
+        if (rowStr.includes('Emp Code:') && rowStr.includes('Employee:')) {
+          const match = rowStr.match(/Emp Code:\s*(\w+)\s+Employee:\s*(.+?)(?:\s{2,}|Leave Calculation)/);
           if (match) {
             currentEmployee = { code: match[1], name: match[2].trim() };
           }
+          continue;
         }
         
-        // Check for leave type: row[1] = "Leave Type: ", row[7] = "XX - DESCRIPTION"
-        if (row[1] === 'Leave Type: ' && row[7]) {
-          const leaveTypeStr = row[7].toString();
-          currentLeaveType = leaveTypeStr.split(' - ')[0].trim();
+        if (rowStr.includes('Leave Type:') || (row[1] && row[1].toString().includes('Leave Type'))) {
+          const typeMatch = rowStr.match(/([A-Z]{2,4})\s*-\s*[A-Z\s]+/i);
+          if (typeMatch) currentLeaveType = typeMatch[1].toUpperCase();
+          continue;
         }
         
-        // Check for leave record (S.No as number in column 1, date in column 3)
         if (currentEmployee && currentLeaveType && typeof row[1] === 'number' && row[3]) {
-          const dateStr = row[3].toString(); // DD-MM-YYYY format
-          const dayOfWeek = row[9]?.toString() || '';
-          const remarks = row[13]?.toString() || null;
-          const daysOrHours = row[24]?.toString() || '1.00 day';
-          const mlClaimAmt = row[31]?.toString() || null;
-          
-          // Parse year from date (format: DD-MM-YYYY)
-          const dateParts = dateStr.split('-');
-          let year = new Date().getFullYear();
-          let formattedDate = dateStr;
-          
-          if (dateParts.length === 3) {
-            year = parseInt(dateParts[2]);
-            // Convert to YYYY-MM-DD format for storage
-            formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+          const parsed = parseExcelDate(row[3]);
+          if (parsed) {
+            const dayOfWeek = row[9]?.toString() || '';
+            const remarks = row[13]?.toString() || null;
+            const daysOrHours = row[24]?.toString() || '1.00 day';
+            const mlClaimAmt = row[31]?.toString() || null;
+            
+            records.push({
+              employeeCode: currentEmployee.code,
+              employeeName: currentEmployee.name,
+              leaveType: currentLeaveType,
+              leaveDate: parsed.formatted,
+              dayOfWeek: dayOfWeek || null,
+              remarks: remarks,
+              daysOrHours: daysOrHours,
+              mlClaimAmount: mlClaimAmt,
+              year: parsed.year
+            });
           }
-          
-          records.push({
-            employeeCode: currentEmployee.code,
-            employeeName: currentEmployee.name,
-            leaveType: currentLeaveType,
-            leaveDate: formattedDate,
-            dayOfWeek: dayOfWeek || null,
-            remarks: remarks,
-            daysOrHours: daysOrHours,
-            mlClaimAmount: mlClaimAmt,
-            year: year
-          });
         }
       }
       
-      console.log(`[Leave Import] Parsed ${records.length} leave records`);
+      console.log(`[Leave Import] 3SI parser found ${records.length} records`);
+
+      if (records.length === 0 && data.length >= 2) {
+        console.log(`[Leave Import] Trying flat tabular format...`);
+        const headerRow = data[0]?.map((h: any) => h?.toString().trim().toLowerCase() || '') || [];
+        console.log(`[Leave Import] Headers detected: ${JSON.stringify(headerRow)}`);
+
+        const findCol = (keywords: string[]): number => {
+          for (const kw of keywords) {
+            const idx = headerRow.findIndex((h: string) => h.includes(kw));
+            if (idx >= 0) return idx;
+          }
+          return -1;
+        };
+
+        const codeCol = findCol(['emp code', 'employee code', 'emp_code', 'employee_code', 'empcode', 'code', 'emp no', 'emp_no', 'empno', 'employee no', 'employee_no', 's/no', 's.no']);
+        const nameCol = findCol(['emp name', 'employee name', 'emp_name', 'employee_name', 'empname', 'name', 'employee']);
+        const typeCol = findCol(['leave type', 'leave_type', 'leavetype', 'type', 'leave code', 'leave_code']);
+        const dateCol = findCol(['date', 'leave date', 'leave_date', 'leavedate', 'from', 'start', 'from date']);
+        const daysCol = findCol(['days', 'day', 'hours', 'duration', 'days_or_hours', 'qty', 'quantity', 'no of day', 'no. of day']);
+        const remarksCol = findCol(['remarks', 'remark', 'notes', 'note', 'comment', 'comments', 'reason', 'description']);
+
+        console.log(`[Leave Import] Flat CSV column mapping: code=${codeCol}, name=${nameCol}, type=${typeCol}, date=${dateCol}, days=${daysCol}, remarks=${remarksCol}`);
+
+        if (dateCol >= 0 && typeCol >= 0 && (codeCol >= 0 || nameCol >= 0)) {
+          for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            if (!row || row.length === 0) continue;
+
+            const dateVal = row[dateCol];
+            const parsed = parseExcelDate(dateVal);
+            if (!parsed) continue;
+
+            const leaveTypeRaw = row[typeCol]?.toString().trim() || '';
+            if (!leaveTypeRaw) continue;
+            const leaveType = normalizeLeaveType(leaveTypeRaw);
+
+            const empCode = codeCol >= 0 ? (row[codeCol]?.toString().trim() || '') : '';
+            const empName = nameCol >= 0 ? (row[nameCol]?.toString().trim() || '') : '';
+            if (!empCode && !empName) continue;
+
+            let daysOrHours = '1.00 day';
+            if (daysCol >= 0 && row[daysCol] != null) {
+              const val = row[daysCol].toString().trim();
+              if (/^\d+\.?\d*$/.test(val)) {
+                daysOrHours = `${parseFloat(val).toFixed(2)} day`;
+              } else if (val) {
+                daysOrHours = val;
+              }
+            }
+
+            const remarks = remarksCol >= 0 ? (row[remarksCol]?.toString().trim() || null) : null;
+
+            records.push({
+              employeeCode: empCode,
+              employeeName: empName,
+              leaveType,
+              leaveDate: parsed.formatted,
+              dayOfWeek: null,
+              remarks,
+              daysOrHours,
+              mlClaimAmount: null,
+              year: parsed.year
+            });
+          }
+          console.log(`[Leave Import] Flat tabular parser found ${records.length} records`);
+        } else {
+          console.log(`[Leave Import] Could not identify required columns (date, type, code/name) in header row`);
+        }
+      }
       
-      // Get unique employees and leave types for summary
-      const uniqueEmployees = new Set(records.map(r => r.employeeCode));
+      console.log(`[Leave Import] Total parsed ${records.length} leave records`);
+      
+      const uniqueEmployees = new Set(records.map(r => r.employeeCode || r.employeeName));
       const leaveTypeCounts: Record<string, number> = {};
       records.forEach(r => {
         leaveTypeCounts[r.leaveType] = (leaveTypeCounts[r.leaveType] || 0) + 1;
