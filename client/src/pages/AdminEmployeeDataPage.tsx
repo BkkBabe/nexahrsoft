@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -119,6 +120,15 @@ export default function AdminEmployeeDataPage() {
 
   const isEmployeeDataAdmin = sessionData?.isEmployeeDataAdmin || false;
 
+  const { data: superAdminData } = useQuery<{ isSuperAdmin: boolean }>({
+    queryKey: ['/api/admin/is-super-admin'],
+  });
+  const isSuperAdmin = superAdminData?.isSuperAdmin === true;
+
+  const [showDeleteEmployeeDialog, setShowDeleteEmployeeDialog] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<User | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+
   // Document upload state
   const [documentUploadState, setDocumentUploadState] = useState({
     isUploading: false,
@@ -142,6 +152,31 @@ export default function AdminEmployeeDataPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
       setLocation("/admin");
+    },
+  });
+
+  const deleteEmployeeMutation = useMutation({
+    mutationFn: async ({ userId, reason }: { userId: string; reason?: string }) => {
+      const response = await apiRequest("POST", "/api/admin/users/delete", { userId, reason });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Employee Deleted",
+        description: data.message || "Employee has been permanently deleted",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users/archived'] });
+      setShowDeleteEmployeeDialog(false);
+      setEmployeeToDelete(null);
+      setDeleteReason("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete employee",
+        variant: "destructive",
+      });
     },
   });
 
@@ -653,6 +688,20 @@ export default function AdminEmployeeDataPage() {
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export
+              </Button>
+            )}
+            {isSuperAdmin && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEmployeeToDelete(null);
+                  setDeleteReason("");
+                  setShowDeleteEmployeeDialog(true);
+                }}
+                data-testid="button-delete-employee"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Employee
               </Button>
             )}
             <Button
@@ -1705,6 +1754,99 @@ export default function AdminEmployeeDataPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Delete Employee Dialog */}
+      <AlertDialog open={showDeleteEmployeeDialog} onOpenChange={(open) => {
+        if (!open && !deleteEmployeeMutation.isPending) {
+          setShowDeleteEmployeeDialog(false);
+          setEmployeeToDelete(null);
+          setDeleteReason("");
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Permanently Delete Employee
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              {!employeeToDelete ? (
+                <span className="block">Select an employee to permanently delete.</span>
+              ) : (
+                <>
+                  <span className="block">
+                    This will permanently delete <strong>{toTitleCase(employeeToDelete.name)}</strong> ({employeeToDelete.employeeCode || 'No code'}) and all associated data including:
+                  </span>
+                  <span className="block text-sm">
+                    Attendance records, leave data, payroll records, claims, documents, and audit logs.
+                  </span>
+                  <span className="block font-semibold text-destructive">
+                    This action cannot be undone. A record of the deletion will be kept in the audit trail.
+                  </span>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-2">
+              <Label>Select Employee</Label>
+              <Select
+                value={employeeToDelete?.id || ""}
+                onValueChange={(val) => {
+                  const user = users.find((u: User) => u.id === val);
+                  setEmployeeToDelete(user || null);
+                }}
+              >
+                <SelectTrigger data-testid="select-delete-employee">
+                  <SelectValue placeholder="Choose an employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {users
+                    .filter((u: User) => u.role !== 'admin')
+                    .sort((a: User, b: User) => (a.name || '').localeCompare(b.name || ''))
+                    .map((u: User) => (
+                      <SelectItem key={u.id} value={u.id} data-testid={`select-item-employee-${u.id}`}>
+                        {toTitleCase(u.name)} {u.employeeCode ? `(${u.employeeCode})` : ''} - {u.department || 'No dept'}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {employeeToDelete && (
+              <div className="space-y-2">
+                <Label htmlFor="delete-reason-emp">Reason for Deletion (optional)</Label>
+                <Textarea
+                  id="delete-reason-emp"
+                  placeholder="Enter reason for deleting this employee..."
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  className="resize-none"
+                  rows={3}
+                  data-testid="input-delete-reason"
+                />
+              </div>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteEmployeeMutation.isPending} data-testid="button-cancel-delete-employee">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground"
+              onClick={() => {
+                if (employeeToDelete) {
+                  deleteEmployeeMutation.mutate({
+                    userId: employeeToDelete.id,
+                    reason: deleteReason || undefined,
+                  });
+                }
+              }}
+              disabled={!employeeToDelete || deleteEmployeeMutation.isPending}
+              data-testid="button-confirm-delete-employee"
+            >
+              {deleteEmployeeMutation.isPending ? "Deleting..." : "Permanently Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
