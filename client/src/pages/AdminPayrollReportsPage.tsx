@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil, UserPlus, CheckCircle2, Copy, Check, CreditCard, Calculator, ClipboardEdit, Settings, BarChart3 } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil, UserPlus, CheckCircle2, Copy, Check, CreditCard, Calculator, ClipboardEdit, Settings, BarChart3, Clock } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -151,6 +152,13 @@ export default function AdminPayrollReportsPage() {
   const [noCpfDialogOpen, setNoCpfDialogOpen] = useState(false);
   const [noCpfRecord, setNoCpfRecord] = useState<PayrollRecord | null>(null);
 
+  // OT Calculator dialog state
+  const [otDialogOpen, setOtDialogOpen] = useState(false);
+  const [otRecord, setOtRecord] = useState<PayrollRecord | null>(null);
+  const [otHours15, setOtHours15] = useState("");
+  const [otHours20, setOtHours20] = useState("");
+  const [otDaysPerWeek, setOtDaysPerWeek] = useState("5");
+
   const applyNoCpfMutation = useMutation({
     mutationFn: async (record: PayrollRecord) => {
       const response = await apiRequest("PATCH", `/api/admin/payroll/records/${record.id}`, {
@@ -173,6 +181,37 @@ export default function AdminPayrollReportsPage() {
       toast({
         title: "Error",
         description: error.message || "Failed to apply No CPF",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const applyOtMutation = useMutation({
+    mutationFn: async ({ record, ot15Amount, ot20Amount }: { record: PayrollRecord; ot15Amount: number; ot20Amount: number }) => {
+      const updates: Record<string, any> = {
+        reason: "OT recalculated via OT Calculator",
+        recalculateCpf: true,
+      };
+      updates.ot15 = Math.round(ot15Amount * 100) / 100;
+      updates.ot20 = Math.round(ot20Amount * 100) / 100;
+      const response = await apiRequest("PATCH", `/api/admin/payroll/records/${record.id}`, updates);
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "OT Updated",
+        description: "Overtime amounts have been updated and payslip recalculated.",
+      });
+      setOtDialogOpen(false);
+      setOtRecord(null);
+      setOtHours15("");
+      setOtHours20("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payroll/records"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update OT",
         variant: "destructive",
       });
     },
@@ -1034,70 +1073,113 @@ export default function AdminPayrollReportsPage() {
                         <td className="p-2 text-right font-mono" data-testid={`cell-employee-cpf-${idx}`}>{formatCurrency(row.employeeCpf)}</td>
                         <td className="p-2 text-right font-mono font-medium" data-testid={`cell-nett-${idx}`}>{formatCurrency(row.nett)}</td>
                         <td className="p-2 text-center">
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedPayslip(row);
-                                setPayslipDialogOpen(true);
-                              }}
-                              data-testid={`button-view-payslip-${idx}`}
-                            >
-                              <FileText className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                if (row.userId) {
-                                  setAdjustmentsRecord(row);
-                                  setAdjustmentsDialogOpen(true);
-                                } else {
-                                  toast({
-                                    title: "Cannot Add Adjustments",
-                                    description: "This payroll record is not linked to an employee account.",
-                                    variant: "destructive",
-                                  });
-                                }
-                              }}
-                              data-testid={`button-adjustments-payslip-${idx}`}
-                            >
-                              <ClipboardEdit className="h-4 w-4 mr-1" />
-                              Adjustments
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setNoCpfRecord(row);
-                                setNoCpfDialogOpen(true);
-                              }}
-                              data-testid={`button-no-cpf-${idx}`}
-                            >
-                              <Calculator className="h-4 w-4 mr-1" />
-                              No CPF
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                if (row.userId) {
-                                  setLocation(`/admin/payroll/employees?employeeId=${row.userId}`);
-                                } else {
-                                  toast({
-                                    title: "Cannot Edit",
-                                    description: "This payroll record is not linked to an employee account.",
-                                    variant: "destructive",
-                                  });
-                                }
-                              }}
-                              data-testid={`button-edit-payslip-${idx}`}
-                            >
-                              <Settings className="h-4 w-4 mr-1" />
-                              Settings
-                            </Button>
+                          <div className="flex gap-1 justify-center">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedPayslip(row);
+                                    setPayslipDialogOpen(true);
+                                  }}
+                                  data-testid={`button-view-payslip-${idx}`}
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>View Payslip</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => {
+                                    if (row.userId) {
+                                      setAdjustmentsRecord(row);
+                                      setAdjustmentsDialogOpen(true);
+                                    } else {
+                                      toast({
+                                        title: "Cannot Add Adjustments",
+                                        description: "This payroll record is not linked to an employee account.",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }}
+                                  data-testid={`button-adjustments-payslip-${idx}`}
+                                >
+                                  <ClipboardEdit className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Adjustments</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setOtRecord(row);
+                                    const daysPerWeek = 5;
+                                    setOtDaysPerWeek(String(daysPerWeek));
+                                    const basicAmt = parseAmount(row.basicSalary);
+                                    const dailyRate = (basicAmt * 12) / (daysPerWeek * 52);
+                                    const hourlyRate = dailyRate / 8;
+                                    const currentOt15 = parseAmount(row.ot15);
+                                    const currentOt20 = parseAmount(row.ot20);
+                                    const rate15 = hourlyRate * 1.5;
+                                    const rate20 = hourlyRate * 2.0;
+                                    setOtHours15(rate15 > 0 ? (currentOt15 / rate15).toFixed(2) : "0");
+                                    setOtHours20(rate20 > 0 ? (currentOt20 / rate20).toFixed(2) : "0");
+                                    setOtDialogOpen(true);
+                                  }}
+                                  data-testid={`button-ot-calc-${idx}`}
+                                >
+                                  <Clock className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>OT Calculator</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setNoCpfRecord(row);
+                                    setNoCpfDialogOpen(true);
+                                  }}
+                                  data-testid={`button-no-cpf-${idx}`}
+                                >
+                                  <Calculator className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>No CPF</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => {
+                                    if (row.userId) {
+                                      setLocation(`/admin/payroll/employees?employeeId=${row.userId}`);
+                                    } else {
+                                      toast({
+                                        title: "Cannot Edit",
+                                        description: "This payroll record is not linked to an employee account.",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }}
+                                  data-testid={`button-edit-payslip-${idx}`}
+                                >
+                                  <Settings className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Settings</TooltipContent>
+                            </Tooltip>
                           </div>
                         </td>
                       </tr>
@@ -1435,6 +1517,169 @@ export default function AdminPayrollReportsPage() {
                       </Button>
                     )}
                   </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* OT Calculator Dialog */}
+      <Dialog open={otDialogOpen} onOpenChange={(open) => {
+        setOtDialogOpen(open);
+        if (!open) {
+          setOtRecord(null);
+          setOtHours15("");
+          setOtHours20("");
+        }
+      }}>
+        <DialogContent className="max-w-lg" data-testid="dialog-ot-calc">
+          {otRecord && (() => {
+            const basicAmt = parseAmount(otRecord.basicSalary);
+            const daysPerWeek = parseFloat(otDaysPerWeek) || 5;
+            const dailyRate = (basicAmt * 12) / (daysPerWeek * 52);
+            const hourlyRate = dailyRate / 8;
+            const rate15 = hourlyRate * 1.5;
+            const rate20 = hourlyRate * 2.0;
+            const currentOt15Amt = parseAmount(otRecord.ot15);
+            const currentOt20Amt = parseAmount(otRecord.ot20);
+            const hours15 = parseFloat(otHours15) || 0;
+            const hours20 = parseFloat(otHours20) || 0;
+            const newOt15Amt = Math.round(hours15 * rate15 * 100) / 100;
+            const newOt20Amt = Math.round(hours20 * rate20 * 100) / 100;
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2" data-testid="text-ot-calc-title">
+                    <Clock className="h-5 w-5" />
+                    OT Calculator
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {toTitleCase(otRecord.employeeName)} — {otRecord.payPeriod}
+                  </p>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  <Card>
+                    <CardContent className="pt-4 space-y-3">
+                      <div className="flex justify-between items-center text-sm">
+                        <span>Basic Salary</span>
+                        <span className="font-mono font-medium">{formatCurrency(basicAmt)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span>Work Days Per Week</span>
+                        <Select value={otDaysPerWeek} onValueChange={(val) => {
+                          setOtDaysPerWeek(val);
+                          const newDays = parseFloat(val);
+                          const newDaily = (basicAmt * 12) / (newDays * 52);
+                          const newHourly = newDaily / 8;
+                          const newRate15 = newHourly * 1.5;
+                          const newRate20 = newHourly * 2.0;
+                          setOtHours15(newRate15 > 0 ? (currentOt15Amt / newRate15).toFixed(2) : "0");
+                          setOtHours20(newRate20 > 0 ? (currentOt20Amt / newRate20).toFixed(2) : "0");
+                        }}>
+                          <SelectTrigger className="w-24" data-testid="select-ot-days">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5 days</SelectItem>
+                            <SelectItem value="5.5">5.5 days</SelectItem>
+                            <SelectItem value="6">6 days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>MOM Formula: (Monthly x 12) / ({daysPerWeek} x 52) / 8</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Hourly Rate</span>
+                        <span className="font-mono">${hourlyRate.toFixed(4)}/hr</span>
+                      </div>
+                      <div className="flex justify-between text-sm border-t pt-2">
+                        <span>OT 1.5x Rate</span>
+                        <span className="font-mono font-medium">${rate15.toFixed(4)}/hr</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>OT 2.0x Rate</span>
+                        <span className="font-mono font-medium">${rate20.toFixed(4)}/hr</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-4 space-y-2">
+                      <h4 className="text-sm font-medium mb-1">Current OT</h4>
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>OT 1.5x Amount</span>
+                        <span className="font-mono">{formatCurrency(currentOt15Amt)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>OT 2.0x Amount</span>
+                        <span className="font-mono">{formatCurrency(currentOt20Amt)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-4 space-y-4">
+                      <h4 className="text-sm font-medium">Override OT Hours</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label className="text-xs">OT 1.5x Hours</Label>
+                          <Input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={otHours15}
+                            onChange={(e) => setOtHours15(e.target.value)}
+                            data-testid="input-ot15-hours"
+                          />
+                          <p className="text-xs text-muted-foreground font-mono">
+                            = {formatCurrency(newOt15Amt)}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">OT 2.0x Hours</Label>
+                          <Input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={otHours20}
+                            onChange={(e) => setOtHours20(e.target.value)}
+                            data-testid="input-ot20-hours"
+                          />
+                          <p className="text-xs text-muted-foreground font-mono">
+                            = {formatCurrency(newOt20Amt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-sm font-medium border-t pt-2">
+                        <span>New OT Total</span>
+                        <span className="font-mono">{formatCurrency(newOt15Amt + newOt20Amt)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Button
+                    className="w-full"
+                    variant="default"
+                    onClick={() => applyOtMutation.mutate({ record: otRecord, ot15Amount: newOt15Amt, ot20Amount: newOt20Amt })}
+                    disabled={applyOtMutation.isPending}
+                    data-testid="button-apply-ot"
+                  >
+                    {applyOtMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Applying...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Confirm & Update Payslip
+                      </>
+                    )}
+                  </Button>
                 </div>
               </>
             );
