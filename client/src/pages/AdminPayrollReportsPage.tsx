@@ -996,14 +996,19 @@ export default function AdminPayrollReportsPage() {
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="text-center p-2 font-medium w-12">#</th>
-                      <th className="text-left p-2 font-medium">Name</th>
-                      <th className="text-left p-2 font-medium">Department</th>
-                      <th className="text-right p-2 font-medium">Basic</th>
+                      <th className="text-left p-2 font-medium">Employee</th>
+                      <th className="text-right p-2 font-medium">Basic Salary</th>
+                      <th className="text-right p-2 font-medium">Mobile</th>
+                      <th className="text-right p-2 font-medium">Transport</th>
+                      <th className="text-right p-2 font-medium">Loan</th>
+                      <th className="text-right p-2 font-medium">Shift</th>
+                      <th className="text-right p-2 font-medium">Other</th>
+                      <th className="text-right p-2 font-medium">House Rental</th>
+                      <th className="text-right p-2 font-medium">Salary Adj</th>
                       <th className="text-right p-2 font-medium">Gross</th>
-                      <th className="text-right p-2 font-medium">CPF (Emp)</th>
-                      <th className="text-right p-2 font-medium">Leave Enc.</th>
-                      <th className="text-right p-2 font-medium">No Pay</th>
-                      <th className="text-right p-2 font-medium">Nett</th>
+                      <th className="text-right p-2 font-medium">Employer CPF</th>
+                      <th className="text-right p-2 font-medium">Employee CPF</th>
+                      <th className="text-right p-2 font-medium">Nett Salary</th>
                       <th className="text-center p-2 font-medium">Actions</th>
                     </tr>
                   </thead>
@@ -1015,17 +1020,18 @@ export default function AdminPayrollReportsPage() {
                         data-testid={`row-payroll-${idx}`}
                       >
                         <td className="p-2 text-center text-muted-foreground" data-testid={`cell-serial-${idx}`}>{idx + 1}</td>
-                        <td className="p-2" data-testid={`cell-name-${idx}`}>{row.employeeName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')}</td>
-                        <td className="p-2" data-testid={`cell-dept-${idx}`}>{row.deptName || '-'}</td>
+                        <td className="p-2 whitespace-nowrap" data-testid={`cell-name-${idx}`}>{row.employeeName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-basic-${idx}`}>{formatCurrency(row.basicSalary)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-mobile-${idx}`}>{formatCurrency(row.mobileAllowance)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-transport-${idx}`}>{formatCurrency(row.transportAllowance)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-loan-${idx}`}>{formatCurrency(row.loanRepaymentTotal)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-shift-${idx}`}>{formatCurrency(row.shiftAllowance)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-other-${idx}`}>{formatCurrency(row.otherAllowance)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-house-rental-${idx}`}>{formatCurrency(row.houseRentalAllowances)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-salary-adj-${idx}`}>{formatCurrency(row.monthlyVariablesComponent)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-gross-${idx}`}>{formatCurrency(row.grossWages)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-cpf-${idx}`}>{formatCurrency(row.employeeCpf)}</td>
-                        <td className="p-2 text-right font-mono text-green-600 dark:text-green-400" data-testid={`cell-encash-${idx}`}>
-                          {parseAmount(row.annualLeaveEncashment) > 0 ? formatCurrency(row.annualLeaveEncashment) : '-'}
-                        </td>
-                        <td className="p-2 text-right font-mono text-red-600 dark:text-red-400" data-testid={`cell-nopay-${idx}`}>
-                          {parseAmount(row.noPayDay) > 0 ? formatCurrency(row.noPayDay) : '-'}
-                        </td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-employer-cpf-${idx}`}>{formatCurrency(row.employerCpf)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-employee-cpf-${idx}`}>{formatCurrency(row.employeeCpf)}</td>
                         <td className="p-2 text-right font-mono font-medium" data-testid={`cell-nett-${idx}`}>{formatCurrency(row.nett)}</td>
                         <td className="p-2 text-center">
                           <div className="flex gap-2">
