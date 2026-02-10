@@ -3,6 +3,7 @@ import { toTitleCase } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,6 +146,10 @@ export default function AdminPayrollReportsPage() {
   // Adjustments dialog state
   const [adjustmentsDialogOpen, setAdjustmentsDialogOpen] = useState(false);
   const [adjustmentsRecord, setAdjustmentsRecord] = useState<PayrollRecord | null>(null);
+
+  // No CPF dialog state
+  const [noCpfDialogOpen, setNoCpfDialogOpen] = useState(false);
+  const [noCpfRecord, setNoCpfRecord] = useState<PayrollRecord | null>(null);
 
   const buildQueryUrl = () => {
     let url = `/api/admin/payroll/records?year=${selectedYear}`;
@@ -1033,6 +1038,18 @@ export default function AdminPayrollReportsPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => {
+                                setNoCpfRecord(row);
+                                setNoCpfDialogOpen(true);
+                              }}
+                              data-testid={`button-no-cpf-${idx}`}
+                            >
+                              <Calculator className="h-4 w-4 mr-1" />
+                              No CPF
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
                                 if (row.userId) {
                                   setLocation(`/admin/payroll/employees?employeeId=${row.userId}`);
                                 } else {
@@ -1115,10 +1132,7 @@ export default function AdminPayrollReportsPage() {
         onOpenChange={setAdjustmentsDialogOpen}
         record={adjustmentsRecord}
         onAdjustmentSaved={async () => {
-          // Refresh payroll records data
           const result = await refetch();
-          
-          // Update the selected payslip if viewing one with the fresh data
           if (selectedPayslip && result.data?.records) {
             const updatedRecord = result.data.records.find(r => r.id === selectedPayslip.id);
             if (updatedRecord) {
@@ -1127,6 +1141,243 @@ export default function AdminPayrollReportsPage() {
           }
         }}
       />
+
+      {/* No CPF Impact Analysis Dialog */}
+      <Dialog open={noCpfDialogOpen} onOpenChange={setNoCpfDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-no-cpf">
+          {noCpfRecord && (() => {
+            const employeeCpfAmt = Math.abs(parseAmount(noCpfRecord.employeeCpf));
+            const employerCpfAmt = parseAmount(noCpfRecord.employerCpf);
+            const currentNett = parseAmount(noCpfRecord.nett);
+            const grossWages = parseAmount(noCpfRecord.grossWages);
+            const totalCpfAmt = employeeCpfAmt + employerCpfAmt;
+
+            const noCpfNett = currentNett + employeeCpfAmt;
+            const companySavings = employerCpfAmt;
+            const employeeGain = employeeCpfAmt;
+
+            const basicSalary = parseAmount(noCpfRecord.basicSalary);
+            const monthlyVariables = parseAmount(noCpfRecord.monthlyVariablesComponent);
+            const otTotal = parseAmount(noCpfRecord.flat) + parseAmount(noCpfRecord.ot10) + parseAmount(noCpfRecord.ot15) + parseAmount(noCpfRecord.ot20) + parseAmount(noCpfRecord.ot30) + parseAmount(noCpfRecord.totRestPhAmount);
+            const shiftAllowance = parseAmount(noCpfRecord.shiftAllowance);
+            const allowancesWithCpf = parseAmount(noCpfRecord.mobileAllowance) + parseAmount(noCpfRecord.transportAllowance) + parseAmount(noCpfRecord.annualLeaveEncashment) + parseAmount(noCpfRecord.serviceCallAllowances);
+            const allowancesWithoutCpf = parseAmount(noCpfRecord.otherAllowance) + parseAmount(noCpfRecord.houseRentalAllowances);
+            const bonusAmt = parseAmount(noCpfRecord.bonus);
+            const claimsReimbursement = parseAmount(noCpfRecord.claimsReimbursement);
+            const deductions = parseAmount(noCpfRecord.loanRepaymentTotal) + parseAmount(noCpfRecord.noPayDay);
+            const communityFunds = parseAmount(noCpfRecord.cdac) + parseAmount(noCpfRecord.ecf) + parseAmount(noCpfRecord.mbmf) + parseAmount(noCpfRecord.sinda) + parseAmount(noCpfRecord.cc);
+            const allAllowances = shiftAllowance + allowancesWithCpf + allowancesWithoutCpf;
+
+            const currentEmployerCost = grossWages + employerCpfAmt + parseAmount(noCpfRecord.sdf) + parseAmount(noCpfRecord.fwl);
+            const noCpfEmployerCost = grossWages + parseAmount(noCpfRecord.sdf) + parseAmount(noCpfRecord.fwl);
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2" data-testid="text-no-cpf-title">
+                    <Calculator className="h-5 w-5" />
+                    No CPF Impact Analysis
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {toTitleCase(noCpfRecord.employeeName)} — {noCpfRecord.payPeriod}
+                  </p>
+                </DialogHeader>
+
+                <div className="space-y-5">
+                  {/* Salary Breakdown */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Salary Breakdown</h4>
+                    <Card>
+                      <CardContent className="pt-4 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Basic Salary</span>
+                          <span className="font-mono">{formatCurrency(basicSalary)}</span>
+                        </div>
+                        {monthlyVariables > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span>Monthly Variables</span>
+                            <span className="font-mono">{formatCurrency(monthlyVariables)}</span>
+                          </div>
+                        )}
+                        {otTotal > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span>Overtime / Rest Day / PH</span>
+                            <span className="font-mono">{formatCurrency(otTotal)}</span>
+                          </div>
+                        )}
+                        {shiftAllowance > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span>Shift Allowance</span>
+                            <span className="font-mono">{formatCurrency(shiftAllowance)}</span>
+                          </div>
+                        )}
+                        {allowancesWithCpf > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span>Allowances (with CPF)</span>
+                            <span className="font-mono">{formatCurrency(allowancesWithCpf)}</span>
+                          </div>
+                        )}
+                        {allowancesWithoutCpf > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span>Allowances (no CPF)</span>
+                            <span className="font-mono">{formatCurrency(allowancesWithoutCpf)}</span>
+                          </div>
+                        )}
+                        {bonusAmt > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span>Bonus</span>
+                            <span className="font-mono">{formatCurrency(bonusAmt)}</span>
+                          </div>
+                        )}
+                        {claimsReimbursement > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span>Claims Reimbursement</span>
+                            <span className="font-mono">{formatCurrency(claimsReimbursement)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-sm font-medium border-t pt-2">
+                          <span>Gross Wages</span>
+                          <span className="font-mono">{formatCurrency(grossWages)}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Side-by-side Comparison */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Current - With CPF */}
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Current (With CPF)</h4>
+                      <Card>
+                        <CardContent className="pt-4 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Gross Wages</span>
+                            <span className="font-mono">{formatCurrency(grossWages)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-red-600 dark:text-red-400">
+                            <span>Employee CPF</span>
+                            <span className="font-mono">-{formatCurrency(employeeCpfAmt)}</span>
+                          </div>
+                          {deductions > 0 && (
+                            <div className="flex justify-between text-sm text-red-600 dark:text-red-400">
+                              <span>Deductions</span>
+                              <span className="font-mono">-{formatCurrency(deductions)}</span>
+                            </div>
+                          )}
+                          {communityFunds > 0 && (
+                            <div className="flex justify-between text-sm text-red-600 dark:text-red-400">
+                              <span>Community Funds</span>
+                              <span className="font-mono">-{formatCurrency(communityFunds)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-sm font-medium border-t pt-2">
+                            <span>Net Pay</span>
+                            <span className="font-mono">{formatCurrency(currentNett)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Without CPF */}
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Without CPF</h4>
+                      <Card className="border-green-200 dark:border-green-900">
+                        <CardContent className="pt-4 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Gross Wages</span>
+                            <span className="font-mono">{formatCurrency(grossWages)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-muted-foreground line-through">
+                            <span>Employee CPF</span>
+                            <span className="font-mono">$0.00</span>
+                          </div>
+                          {deductions > 0 && (
+                            <div className="flex justify-between text-sm text-red-600 dark:text-red-400">
+                              <span>Deductions</span>
+                              <span className="font-mono">-{formatCurrency(deductions)}</span>
+                            </div>
+                          )}
+                          {communityFunds > 0 && (
+                            <div className="flex justify-between text-sm text-red-600 dark:text-red-400">
+                              <span>Community Funds</span>
+                              <span className="font-mono">-{formatCurrency(communityFunds)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-sm font-medium border-t pt-2 text-green-600 dark:text-green-400">
+                            <span>Net Pay</span>
+                            <span className="font-mono">{formatCurrency(noCpfNett)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+
+                  {/* Impact Summary */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Impact Summary</h4>
+                    <Card>
+                      <CardContent className="pt-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="text-sm font-medium">Employee Take-Home Increase</p>
+                            <p className="text-xs text-muted-foreground">Employee CPF contribution removed</p>
+                          </div>
+                          <Badge variant="outline" className="text-green-600 border-green-300 dark:border-green-800 dark:text-green-400" data-testid="badge-employee-gain">
+                            +{formatCurrency(employeeGain)}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="text-sm font-medium">Company Savings</p>
+                            <p className="text-xs text-muted-foreground">Employer CPF contribution removed</p>
+                          </div>
+                          <Badge variant="outline" className="text-green-600 border-green-300 dark:border-green-800 dark:text-green-400" data-testid="badge-company-savings">
+                            +{formatCurrency(companySavings)}
+                          </Badge>
+                        </div>
+                        <div className="border-t pt-3">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-sm font-medium">Total CPF Eliminated</p>
+                              <p className="text-xs text-muted-foreground">Employee + Employer contributions</p>
+                            </div>
+                            <Badge variant="outline" data-testid="badge-total-cpf">
+                              {formatCurrency(totalCpfAmt)}
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Employer Cost Comparison */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Employer Total Cost</h4>
+                    <Card>
+                      <CardContent className="pt-4 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Current employer cost</span>
+                          <span className="font-mono">{formatCurrency(currentEmployerCost)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                          <span>Without CPF employer cost</span>
+                          <span className="font-mono">{formatCurrency(noCpfEmployerCost)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-medium border-t pt-2">
+                          <span>Monthly savings</span>
+                          <span className="font-mono text-green-600 dark:text-green-400">
+                            {formatCurrency(currentEmployerCost - noCpfEmployerCost)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
