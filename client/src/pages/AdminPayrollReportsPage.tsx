@@ -1039,10 +1039,8 @@ export default function AdminPayrollReportsPage() {
                       <th className="text-right p-2 font-medium">Basic Salary</th>
                       <th className="text-right p-2 font-medium">Mobile</th>
                       <th className="text-right p-2 font-medium">Transport</th>
-                      <th className="text-right p-2 font-medium">Loan</th>
                       <th className="text-right p-2 font-medium">Shift</th>
                       <th className="text-right p-2 font-medium">Other</th>
-                      <th className="text-right p-2 font-medium">House Rental</th>
                       <th className="text-right p-2 font-medium">Salary Adj</th>
                       <th className="text-right p-2 font-medium">Gross</th>
                       <th className="text-right p-2 font-medium">Employer CPF</th>
@@ -1063,10 +1061,8 @@ export default function AdminPayrollReportsPage() {
                         <td className="p-2 text-right font-mono" data-testid={`cell-basic-${idx}`}>{formatCurrency(row.basicSalary)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-mobile-${idx}`}>{formatCurrency(row.mobileAllowance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-transport-${idx}`}>{formatCurrency(row.transportAllowance)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-loan-${idx}`}>{formatCurrency(row.loanRepaymentTotal)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-shift-${idx}`}>{formatCurrency(row.shiftAllowance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-other-${idx}`}>{formatCurrency(row.otherAllowance)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-house-rental-${idx}`}>{formatCurrency(row.houseRentalAllowances)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-salary-adj-${idx}`}>{formatCurrency(row.monthlyVariablesComponent)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-gross-${idx}`}>{formatCurrency(row.grossWages)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-employer-cpf-${idx}`}>{formatCurrency(row.employerCpf)}</td>
