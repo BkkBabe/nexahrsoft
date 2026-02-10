@@ -151,6 +151,33 @@ export default function AdminPayrollReportsPage() {
   const [noCpfDialogOpen, setNoCpfDialogOpen] = useState(false);
   const [noCpfRecord, setNoCpfRecord] = useState<PayrollRecord | null>(null);
 
+  const applyNoCpfMutation = useMutation({
+    mutationFn: async (record: PayrollRecord) => {
+      const response = await apiRequest("PATCH", `/api/admin/payroll/records/${record.id}`, {
+        employerCpf: 0,
+        employeeCpf: 0,
+        reason: "No CPF applied - CPF contributions removed via impact analysis",
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "No CPF Applied",
+        description: "CPF contributions have been removed and net pay recalculated.",
+      });
+      setNoCpfDialogOpen(false);
+      setNoCpfRecord(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payroll/records"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to apply No CPF",
+        variant: "destructive",
+      });
+    },
+  });
+
   const buildQueryUrl = () => {
     let url = `/api/admin/payroll/records?year=${selectedYear}`;
     if (selectedMonth && selectedMonth !== "") {
@@ -1371,6 +1398,36 @@ export default function AdminPayrollReportsPage() {
                         </div>
                       </CardContent>
                     </Card>
+                  </div>
+
+                  {/* Apply No CPF Button */}
+                  <div className="pt-2 border-t">
+                    {employeeCpfAmt === 0 && employerCpfAmt === 0 ? (
+                      <div className="flex items-center gap-2 justify-center text-sm text-muted-foreground py-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        No CPF is already applied for this record
+                      </div>
+                    ) : (
+                      <Button
+                        className="w-full"
+                        variant="default"
+                        onClick={() => applyNoCpfMutation.mutate(noCpfRecord)}
+                        disabled={applyNoCpfMutation.isPending}
+                        data-testid="button-apply-no-cpf"
+                      >
+                        {applyNoCpfMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Applying...
+                          </>
+                        ) : (
+                          <>
+                            <Calculator className="h-4 w-4 mr-2" />
+                            Apply No CPF for This Employee
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </>
