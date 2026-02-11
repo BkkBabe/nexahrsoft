@@ -15,7 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PayrollRecord, CompanySettings } from "@shared/schema";
 import PayslipView from "@/components/PayslipView";
 import EditPayslipModal from "@/components/EditPayslipModal";
-import PayrollAdjustmentsDialog from "@/components/PayrollAdjustmentsDialog";
+import PayrollAdjustmentsDialog, { type PayrollAdjustment, ADJUSTMENT_TYPE_LABELS } from "@/components/PayrollAdjustmentsDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -240,6 +240,35 @@ export default function AdminPayrollReportsPage() {
     queryKey: ['/api/company/settings'],
   });
 
+  const { data: adjustmentsData } = useQuery<{ adjustments: PayrollAdjustment[] }>({
+    queryKey: ['/api/admin/payroll/adjustments', selectedYear, selectedMonth || 'all'],
+    queryFn: async () => {
+      let url = `/api/admin/payroll/adjustments?year=${selectedYear}`;
+      if (selectedMonth) url += `&month=${selectedMonth}`;
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) return { adjustments: [] };
+      return res.json();
+    },
+  });
+
+  const getAdjKey = (userId: string, year: number, month: number) => `${userId}_${year}_${month}`;
+
+  const adjustmentsByUserPeriod = useMemo(() => {
+    const map: Record<string, { net: number; items: PayrollAdjustment[] }> = {};
+    (adjustmentsData?.adjustments || []).forEach(adj => {
+      const key = getAdjKey(adj.userId, adj.payPeriodYear, adj.payPeriodMonth);
+      if (!map[key]) map[key] = { net: 0, items: [] };
+      map[key].items.push(adj);
+      const amt = adj.amount ? parseFloat(adj.amount) : 0;
+      if (adj.adjustmentType === 'deduction') {
+        map[key].net -= amt;
+      } else if (adj.adjustmentType === 'addition') {
+        map[key].net += amt;
+      }
+    });
+    return map;
+  }, [adjustmentsData]);
+
   const deleteMutation = useMutation({
     mutationFn: async ({ year, month }: { year: number; month: number }) => {
       return apiRequest("DELETE", `/api/admin/payroll/records/${year}/${month}`);
@@ -378,6 +407,7 @@ export default function AdminPayrollReportsPage() {
 
     const headers = [
       "Pay Period", "Employee Code", "Employee Name", "Department", "Section",
+      "Adj Total", "Adj Details",
       "Basic Salary", "Total Salary", "OT 1.0x", "OT 1.5x", "OT 2.0x", "OT 3.0x",
       "Shift Allowance", "Mobile Allowance", "Transport Allowance",
       "Annual Leave Encashment", "Other Allowance", "Bonus",
@@ -388,12 +418,24 @@ export default function AdminPayrollReportsPage() {
     const csvRows = [headers.join(",")];
 
     records.forEach(r => {
+      const adjKey = r.userId ? getAdjKey(r.userId, r.payPeriodYear, r.payPeriodMonth) : null;
+      const userAdj = adjKey ? adjustmentsByUserPeriod[adjKey] : null;
+      const adjNet = userAdj ? userAdj.net.toFixed(2) : "0.00";
+      const adjDetails = userAdj?.items.map(a => {
+        const typeLabel = ADJUSTMENT_TYPE_LABELS[a.adjustmentType] || a.adjustmentType;
+        const amt = a.amount ? parseFloat(a.amount).toFixed(2) : "0.00";
+        const note = a.notes || a.description || "";
+        return `${typeLabel}: $${amt}${note ? ` (${note})` : ""}`;
+      }).join("; ") || "";
+
       const row = [
         escapeCsvField(r.payPeriod),
         escapeCsvField(r.employeeCode),
         escapeCsvField(toTitleCase(r.employeeName)),
         escapeCsvField(r.deptName || ""),
         escapeCsvField(r.secName || ""),
+        adjNet,
+        escapeCsvField(adjDetails),
         parseAmount(r.basicSalary).toFixed(2),
         parseAmount(r.totSalary).toFixed(2),
         parseAmount(r.ot10).toFixed(2),
@@ -1042,6 +1084,7 @@ export default function AdminPayrollReportsPage() {
                       <th className="text-right p-2 font-medium">Shift</th>
                       <th className="text-right p-2 font-medium">Other</th>
                       <th className="text-right p-2 font-medium">Salary Adj</th>
+                      <th className="text-right p-2 font-medium">Adj</th>
                       <th className="text-right p-2 font-medium">Gross</th>
                       <th className="text-right p-2 font-medium">Employer CPF</th>
                       <th className="text-right p-2 font-medium">Employee CPF</th>
@@ -1064,6 +1107,14 @@ export default function AdminPayrollReportsPage() {
                         <td className="p-2 text-right font-mono" data-testid={`cell-shift-${idx}`}>{formatCurrency(row.shiftAllowance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-other-${idx}`}>{formatCurrency(row.otherAllowance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-salary-adj-${idx}`}>{formatCurrency(row.monthlyVariablesComponent)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-adj-${idx}`}>
+                          {(() => {
+                            const adjKey = row.userId ? getAdjKey(row.userId, row.payPeriodYear, row.payPeriodMonth) : null;
+                            const userAdj = adjKey ? adjustmentsByUserPeriod[adjKey] : null;
+                            if (!userAdj || userAdj.net === 0) return <span className="text-muted-foreground">-</span>;
+                            return <span className={userAdj.net < 0 ? "text-destructive" : "text-green-600"}>{formatCurrency(userAdj.net)}</span>;
+                          })()}
+                        </td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-gross-${idx}`}>{formatCurrency(row.grossWages)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-employer-cpf-${idx}`}>{formatCurrency(row.employerCpf)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-employee-cpf-${idx}`}>{formatCurrency(row.employeeCpf)}</td>

@@ -6676,6 +6676,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ adjustments });
       }
       
+      if (year) {
+        const allAdjustments: any[] = [];
+        for (let m = 1; m <= 12; m++) {
+          const monthAdj = await storage.getPayrollAdjustmentsByPeriod(parseInt(year as string), m);
+          allAdjustments.push(...monthAdj);
+        }
+        return res.json({ adjustments: allAdjustments });
+      }
+      
       res.status(400).json({ message: "Please provide year/month or userId" });
     } catch (error) {
       console.error("Get payroll adjustments error:", error);
