@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { toTitleCase } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import ExcelJS from "exceljs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -480,6 +481,141 @@ export default function AdminPayrollReportsPage() {
     });
   };
 
+  const exportToExcel = async () => {
+    if (records.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No payroll records to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Payroll Records");
+
+    const headers = [
+      "Pay Period", "Employee Code", "Employee Name", "Department", "Section",
+      "Adj Total", "Adj Details",
+      "Basic Salary", "Total Salary", "OT 1.0x", "OT 1.5x", "OT 2.0x", "OT 3.0x",
+      "Shift Allowance", "Mobile Allowance", "Transport Allowance",
+      "Annual Leave Encashment", "Other Allowance", "Bonus",
+      "Gross Wages", "CPF Wages", "Employer CPF", "Employee CPF",
+      "No Pay Day Deduction", "Loan Repayment", "Nett Pay", "Pay Mode"
+    ];
+
+    const headerRow = worksheet.addRow(headers);
+    const headerFill: ExcelJS.Fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF1F2937" },
+    };
+    headerRow.eachCell((cell) => {
+      cell.fill = headerFill;
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFD1D5DB" } },
+        bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+        left: { style: "thin", color: { argb: "FFD1D5DB" } },
+        right: { style: "thin", color: { argb: "FFD1D5DB" } },
+      };
+    });
+    headerRow.height = 28;
+
+    const currencyCols = [6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26];
+
+    records.forEach((r, idx) => {
+      const adjKey = r.userId ? getAdjKey(r.userId, r.payPeriodYear, r.payPeriodMonth) : null;
+      const userAdj = adjKey ? adjustmentsByUserPeriod[adjKey] : null;
+      const adjNet = userAdj ? Math.round(userAdj.net * 100) / 100 : 0;
+      const adjDetails = userAdj?.items.map(a => {
+        const typeLabel = ADJUSTMENT_TYPE_LABELS[a.adjustmentType] || a.adjustmentType;
+        const amt = a.amount ? parseFloat(a.amount).toFixed(2) : "0.00";
+        const note = a.notes || a.description || "";
+        return `${typeLabel}: $${amt}${note ? ` (${note})` : ""}`;
+      }).join("; ") || "";
+
+      const row = worksheet.addRow([
+        r.payPeriod,
+        r.employeeCode,
+        toTitleCase(r.employeeName),
+        r.deptName || "",
+        r.secName || "",
+        adjNet,
+        adjDetails,
+        parseAmount(r.basicSalary),
+        parseAmount(r.totSalary),
+        parseAmount(r.ot10),
+        parseAmount(r.ot15),
+        parseAmount(r.ot20),
+        parseAmount(r.ot30),
+        parseAmount(r.shiftAllowance),
+        parseAmount(r.mobileAllowance),
+        parseAmount(r.transportAllowance),
+        parseAmount(r.annualLeaveEncashment),
+        parseAmount(r.otherAllowance),
+        parseAmount(r.bonus),
+        parseAmount(r.grossWages),
+        parseAmount(r.cpfWages),
+        parseAmount(r.employerCpf),
+        parseAmount(r.employeeCpf),
+        parseAmount(r.noPayDay),
+        parseAmount(r.loanRepaymentTotal),
+        parseAmount(r.nett),
+        r.payMode || "",
+      ]);
+
+      const isEven = idx % 2 === 0;
+      const rowFill: ExcelJS.Fill = isEven
+        ? { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+        : { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+
+      row.eachCell((cell, colNumber) => {
+        cell.fill = rowFill;
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+        if (currencyCols.includes(colNumber)) {
+          cell.numFmt = '#,##0.00';
+          cell.alignment = { horizontal: "right" };
+        }
+      });
+    });
+
+    worksheet.columns.forEach((col, i) => {
+      const headerLen = headers[i]?.length || 10;
+      let maxLen = headerLen;
+      worksheet.getColumn(i + 1).eachCell({ includeEmpty: false }, (cell) => {
+        const val = cell.value?.toString() || "";
+        maxLen = Math.max(maxLen, Math.min(val.length, 50));
+      });
+      col.width = maxLen + 3;
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const filename = selectedMonth
+      ? `payroll_${selectedYear}_${selectedMonth}.xlsx`
+      : `payroll_${selectedYear}.xlsx`;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export Complete",
+      description: `Exported ${records.length} records to ${filename}`,
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 flex-wrap">
@@ -609,6 +745,15 @@ export default function AdminPayrollReportsPage() {
             >
               <Download className="h-4 w-4 mr-2" />
               Export CSV
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={exportToExcel}
+              disabled={records.length === 0}
+              data-testid="button-export-excel"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Export Excel
             </Button>
           </div>
         </CardContent>
