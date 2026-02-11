@@ -5488,10 +5488,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all approved employees
       const allUsers = await storage.getAllUsers();
       const employees = allUsers.filter(u => {
-        if (u.role === 'admin' || u.role === 'viewonly_admin') return false;
         if (u.isArchived) return false;
         if (!u.isApproved) return false;
         if (employeeIds && !employeeIds.includes(u.id)) return false;
+        
+        if (u.role === 'admin' || u.role === 'viewonly_admin') {
+          const hasPayrollSettings = 
+            (u.basicMonthlySalary && parseFloat(u.basicMonthlySalary) > 0) ||
+            (u.hourlyRate && parseFloat(u.hourlyRate) > 0) ||
+            (u.dailyRate && parseFloat(u.dailyRate) > 0);
+          return hasPayrollSettings;
+        }
+        
         return true;
       });
 
