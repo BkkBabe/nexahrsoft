@@ -311,6 +311,7 @@ export default function PayslipView({
   const totalOtherDeductions =
     parseAmount(record.loanRepaymentTotal) +
     parseAmount(record.noPayDay) +
+    parseAmount(record.advance) +
     totalCommunityFund;
   
   const totalDeductionsEmployee =
@@ -564,14 +565,15 @@ export default function PayslipView({
         )}
 
         {/* Section D: Other Deductions */}
-        {(parseAmount(record.loanRepaymentTotal) > 0 || parseAmount(record.noPayDay) > 0 || totalCommunityFund > 0) && (
+        {(parseAmount(record.loanRepaymentTotal) > 0 || parseAmount(record.noPayDay) > 0 || parseAmount(record.advance) > 0 || totalCommunityFund > 0) && (
           <Section
             title="Other Deductions"
             sectionLetter="D"
-            subtotal={{ label: "Total Other Deductions", value: parseAmount(record.loanRepaymentTotal) + parseAmount(record.noPayDay) + totalCommunityFund }}
+            subtotal={{ label: "Total Other Deductions", value: totalOtherDeductions }}
           >
             <LineItem label="Loan Repayments" value={record.loanRepaymentTotal} isNegative />
             <LineItem label="No Pay Day Deduction" value={record.noPayDay} isNegative />
+            <LineItem label="Advance" value={record.advance} isNegative />
             {totalCommunityFund > 0 && (
               <>
                 <div className="text-xs text-muted-foreground mt-1 mb-0.5 print:text-[10px]">

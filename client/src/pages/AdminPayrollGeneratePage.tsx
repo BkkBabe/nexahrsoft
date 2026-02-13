@@ -80,6 +80,8 @@ interface PreviewEmployee {
   payType: string;
   hourlyRate: number;
   basicPay: number;
+  ot15Pay: number;
+  ot20Pay: number;
   overtimePay: number;
   mobileAllowance: number;
   transportAllowance: number;
@@ -235,38 +237,36 @@ export default function AdminPayrollGeneratePage() {
     if (!previewData || previewData.preview.length === 0) return;
     
     const headers = [
-      'Employee Code',
+      'No',
       'Employee Name',
       'Basic Salary',
-      'Mobile Allowance',
-      'Transport Allowance',
-      'Loan',
-      'Shift Allowance',
-      'Other Allowance',
-      'House Rental',
-      'Salary Adj',
+      'OT 1.5x',
+      'OT 2.0x',
+      'Shift',
+      'Mobile',
+      'Transport',
+      'Other All',
       'Gross',
-      'Employer CPF',
-      'Employee CPF',
-      'Nett Salary'
+      'Emp CPF',
+      'Loan',
+      'Nett Pay'
     ];
     
     const rows = [...previewData.preview]
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
-      .map(emp => [
-        emp.employeeCode,
+      .map((emp, idx) => [
+        String(idx + 1),
         toTitleCase(emp.employeeName),
         emp.basicPay.toFixed(2),
+        (emp.ot15Pay || 0).toFixed(2),
+        (emp.ot20Pay || 0).toFixed(2),
+        (emp.shiftAllowance || 0).toFixed(2),
         (emp.mobileAllowance || 0).toFixed(2),
         (emp.transportAllowance || 0).toFixed(2),
-        (emp.loanDeduction || 0).toFixed(2),
-        (emp.shiftAllowance || 0).toFixed(2),
         (emp.otherAllowance || 0).toFixed(2),
-        (emp.houseRentalAllowance || 0).toFixed(2),
-        (emp.salaryAdjustments || 0).toFixed(2),
         emp.grossWages.toFixed(2),
-        emp.employerCPF.toFixed(2),
         emp.employeeCPF.toFixed(2),
+        (emp.loanDeduction || 0).toFixed(2),
         emp.netPay.toFixed(2)
       ]);
     
@@ -294,20 +294,20 @@ export default function AdminPayrollGeneratePage() {
     
     const tableRows = [...previewData.preview]
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
-      .map(emp => `
+      .map((emp, idx) => `
         <tr>
-          <td style="padding: 8px; border: 1px solid #ddd;">${emp.employeeCode}<br><small>${toTitleCase(emp.employeeName)}</small></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${idx + 1}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${toTitleCase(emp.employeeName)}<br><small>${emp.employeeCode}</small></td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.basicPay.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ot15Pay || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ot20Pay || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shiftAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mobileAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.transportAllowance || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.loanDeduction || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shiftAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.otherAllowance || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.houseRentalAllowance || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right; ${(emp.salaryAdjustments || 0) < 0 ? 'color: red;' : (emp.salaryAdjustments || 0) > 0 ? 'color: green;' : ''}">$${(emp.salaryAdjustments || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${emp.grossWages.toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.employerCPF.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.employeeCPF.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.loanDeduction || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: green;">$${emp.netPay.toFixed(2)}</td>
         </tr>
       `).join('');
@@ -330,19 +330,19 @@ export default function AdminPayrollGeneratePage() {
         <table>
           <thead>
             <tr>
-              <th>Employee</th>
+              <th>No</th>
+              <th>Employee Name</th>
               <th style="text-align: right;">Basic Salary</th>
+              <th style="text-align: right;">OT 1.5x</th>
+              <th style="text-align: right;">OT 2.0x</th>
+              <th style="text-align: right;">Shift</th>
               <th style="text-align: right;">Mobile</th>
               <th style="text-align: right;">Transport</th>
-              <th style="text-align: right;">Loan</th>
-              <th style="text-align: right;">Shift</th>
-              <th style="text-align: right;">Other</th>
-              <th style="text-align: right;">House Rental</th>
-              <th style="text-align: right;">Salary Adj</th>
+              <th style="text-align: right;">Other All</th>
               <th style="text-align: right;">Gross</th>
-              <th style="text-align: right;">Employer CPF</th>
-              <th style="text-align: right;">Employee CPF</th>
-              <th style="text-align: right;">Nett Salary</th>
+              <th style="text-align: right;">Emp CPF</th>
+              <th style="text-align: right;">Loan</th>
+              <th style="text-align: right;">Nett Pay</th>
             </tr>
           </thead>
           <tbody>
@@ -635,19 +635,19 @@ export default function AdminPayrollGeneratePage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Employee</TableHead>
+                        <TableHead className="w-10">No</TableHead>
+                        <TableHead>Employee Name</TableHead>
                         <TableHead className="text-right">Basic Salary</TableHead>
+                        <TableHead className="text-right">OT 1.5x</TableHead>
+                        <TableHead className="text-right">OT 2.0x</TableHead>
+                        <TableHead className="text-right">Shift</TableHead>
                         <TableHead className="text-right">Mobile</TableHead>
                         <TableHead className="text-right">Transport</TableHead>
+                        <TableHead className="text-right">Other All</TableHead>
+                        <TableHead className="text-right font-semibold">Gross</TableHead>
+                        <TableHead className="text-right">Emp CPF</TableHead>
                         <TableHead className="text-right">Loan</TableHead>
-                        <TableHead className="text-right">Shift</TableHead>
-                        <TableHead className="text-right">Other</TableHead>
-                        <TableHead className="text-right">House Rental</TableHead>
-                        <TableHead className="text-right">Salary Adj</TableHead>
-                        <TableHead className="text-right">Gross</TableHead>
-                        <TableHead className="text-right">Employer CPF</TableHead>
-                        <TableHead className="text-right">Employee CPF</TableHead>
-                        <TableHead className="text-right">Nett Salary</TableHead>
+                        <TableHead className="text-right font-semibold">Nett Pay</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -655,6 +655,7 @@ export default function AdminPayrollGeneratePage() {
                         .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
                         .map((emp, idx) => (
                         <TableRow key={idx}>
+                          <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell>
                             <div>
                               <p className="font-medium">{toTitleCase(emp.employeeName)}</p>
@@ -662,18 +663,15 @@ export default function AdminPayrollGeneratePage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.basicPay)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.ot15Pay || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.ot20Pay || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.shiftAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.mobileAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.transportAllowance || 0)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.loanDeduction || 0)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.shiftAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.otherAllowance || 0)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.houseRentalAllowance || 0)}</TableCell>
-                          <TableCell className={`text-right ${(emp.salaryAdjustments || 0) < 0 ? 'text-red-600' : (emp.salaryAdjustments || 0) > 0 ? 'text-green-600' : ''}`}>
-                            {(emp.salaryAdjustments || 0) !== 0 ? formatCurrency(emp.salaryAdjustments || 0) : '-'}
-                          </TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(emp.grossWages)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.employerCPF)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.employeeCPF)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.loanDeduction || 0)}</TableCell>
                           <TableCell className="text-right font-bold text-green-600">{formatCurrency(emp.netPay)}</TableCell>
                         </TableRow>
                       ))}

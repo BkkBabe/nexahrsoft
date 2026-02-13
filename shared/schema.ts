@@ -524,6 +524,7 @@ export const payrollRecords = pgTable("payroll_records", {
   
   // Deductions without CPF
   noPayDay: numeric("no_pay_day", { precision: 12, scale: 2 }).notNull().default("0"), // deduction for unpaid leave
+  advance: numeric("advance", { precision: 12, scale: 2 }).notNull().default("0"), // salary advance deduction
   
   // Community Contributions
   cc: numeric("cc", { precision: 12, scale: 2 }).notNull().default("0"), // Chinese Development Assistance Council

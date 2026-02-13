@@ -59,6 +59,12 @@ const MONTH_NAMES: Record<number, string> = {
   9: "September", 10: "October", 11: "November", 12: "December"
 };
 
+const MONTH_ABBR: Record<number, string> = {
+  1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr",
+  5: "May", 6: "Jun", 7: "Jul", 8: "Aug",
+  9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+};
+
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 const YEARS = Array.from({ length: 5 }, (_, i) => ({
@@ -406,57 +412,40 @@ export default function AdminPayrollReportsPage() {
       return;
     }
 
+    const monthPrefix = selectedMonth ? `${MONTH_ABBR[parseInt(selectedMonth)]} ` : '';
     const headers = [
-      "Pay Period", "Employee Code", "Employee Name", "Department", "Section",
-      "Adj Total", "Adj Details",
-      "Basic Salary", "Total Salary", "OT 1.0x", "OT 1.5x", "OT 2.0x", "OT 3.0x",
-      "Shift Allowance", "Mobile Allowance", "Transport Allowance",
-      "Annual Leave Encashment", "Other Allowance", "Bonus",
-      "Gross Wages", "CPF Wages", "Employer CPF", "Employee CPF",
-      "No Pay Day Deduction", "Loan Repayment", "Nett Pay", "Pay Mode"
+      "No", "Employee Name", "Basic Salary",
+      `${monthPrefix}OT 1.5x`, `${monthPrefix}OT 2.0x`,
+      "Shift", "Mobile", "Transport", "Other All",
+      "Gross", "Emp CPF", "Advance", "A/L",
+      "SINDA", "CDAC", "MBMF", "ECF",
+      "Loan", "Nett Pay", "REMARKS"
     ];
 
     const csvRows = [headers.join(",")];
 
-    records.forEach(r => {
-      const adjKey = r.userId ? getAdjKey(r.userId, r.payPeriodYear, r.payPeriodMonth) : null;
-      const userAdj = adjKey ? adjustmentsByUserPeriod[adjKey] : null;
-      const adjNet = userAdj ? userAdj.net.toFixed(2) : "0.00";
-      const adjDetails = userAdj?.items.map(a => {
-        const typeLabel = ADJUSTMENT_TYPE_LABELS[a.adjustmentType] || a.adjustmentType;
-        const amt = a.amount ? parseFloat(a.amount).toFixed(2) : "0.00";
-        const note = a.notes || a.description || "";
-        return `${typeLabel}: $${amt}${note ? ` (${note})` : ""}`;
-      }).join("; ") || "";
-
+    records.forEach((r, idx) => {
       const row = [
-        escapeCsvField(r.payPeriod),
-        escapeCsvField(r.employeeCode),
+        String(idx + 1),
         escapeCsvField(toTitleCase(r.employeeName)),
-        escapeCsvField(r.deptName || ""),
-        escapeCsvField(r.secName || ""),
-        adjNet,
-        escapeCsvField(adjDetails),
         parseAmount(r.basicSalary).toFixed(2),
-        parseAmount(r.totSalary).toFixed(2),
-        parseAmount(r.ot10).toFixed(2),
         parseAmount(r.ot15).toFixed(2),
         parseAmount(r.ot20).toFixed(2),
-        parseAmount(r.ot30).toFixed(2),
         parseAmount(r.shiftAllowance).toFixed(2),
         parseAmount(r.mobileAllowance).toFixed(2),
         parseAmount(r.transportAllowance).toFixed(2),
-        parseAmount(r.annualLeaveEncashment).toFixed(2),
         parseAmount(r.otherAllowance).toFixed(2),
-        parseAmount(r.bonus).toFixed(2),
         parseAmount(r.grossWages).toFixed(2),
-        parseAmount(r.cpfWages).toFixed(2),
-        parseAmount(r.employerCpf).toFixed(2),
         parseAmount(r.employeeCpf).toFixed(2),
-        parseAmount(r.noPayDay).toFixed(2),
+        parseAmount(r.advance).toFixed(2),
+        parseAmount(r.annualLeaveEncashment).toFixed(2),
+        parseAmount(r.sinda).toFixed(2),
+        parseAmount(r.cdac).toFixed(2),
+        parseAmount(r.mbmf).toFixed(2),
+        parseAmount(r.ecf).toFixed(2),
         parseAmount(r.loanRepaymentTotal).toFixed(2),
         parseAmount(r.nett).toFixed(2),
-        escapeCsvField(r.payMode || ""),
+        "",
       ];
       csvRows.push(row.join(","));
     });
@@ -494,17 +483,17 @@ export default function AdminPayrollReportsPage() {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Payroll Records");
 
-    const headers = [
-      "Pay Period", "Employee Code", "Employee Name", "Department", "Section",
-      "Adj Total", "Adj Details",
-      "Basic Salary", "Total Salary", "OT 1.0x", "OT 1.5x", "OT 2.0x", "OT 3.0x",
-      "Shift Allowance", "Mobile Allowance", "Transport Allowance",
-      "Annual Leave Encashment", "Other Allowance", "Bonus",
-      "Gross Wages", "CPF Wages", "Employer CPF", "Employee CPF",
-      "No Pay Day Deduction", "Loan Repayment", "Nett Pay", "Pay Mode"
+    const xlMonthPrefix = selectedMonth ? `${MONTH_ABBR[parseInt(selectedMonth)]} ` : '';
+    const xlHeaders = [
+      "No", "Employee Name", "Basic Salary",
+      `${xlMonthPrefix}OT 1.5x`, `${xlMonthPrefix}OT 2.0x`,
+      "Shift", "Mobile", "Transport", "Other All",
+      "Gross", "Emp CPF", "Advance", "A/L",
+      "SINDA", "CDAC", "MBMF", "ECF",
+      "Loan", "Nett Pay", "REMARKS"
     ];
 
-    const headerRow = worksheet.addRow(headers);
+    const headerRow = worksheet.addRow(xlHeaders);
     const headerFill: ExcelJS.Fill = {
       type: "pattern",
       pattern: "solid",
@@ -523,47 +512,30 @@ export default function AdminPayrollReportsPage() {
     });
     headerRow.height = 28;
 
-    const currencyCols = [6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26];
+    const currencyCols = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 
     records.forEach((r, idx) => {
-      const adjKey = r.userId ? getAdjKey(r.userId, r.payPeriodYear, r.payPeriodMonth) : null;
-      const userAdj = adjKey ? adjustmentsByUserPeriod[adjKey] : null;
-      const adjNet = userAdj ? Math.round(userAdj.net * 100) / 100 : 0;
-      const adjDetails = userAdj?.items.map(a => {
-        const typeLabel = ADJUSTMENT_TYPE_LABELS[a.adjustmentType] || a.adjustmentType;
-        const amt = a.amount ? parseFloat(a.amount).toFixed(2) : "0.00";
-        const note = a.notes || a.description || "";
-        return `${typeLabel}: $${amt}${note ? ` (${note})` : ""}`;
-      }).join("; ") || "";
-
       const row = worksheet.addRow([
-        r.payPeriod,
-        r.employeeCode,
+        idx + 1,
         toTitleCase(r.employeeName),
-        r.deptName || "",
-        r.secName || "",
-        adjNet,
-        adjDetails,
         parseAmount(r.basicSalary),
-        parseAmount(r.totSalary),
-        parseAmount(r.ot10),
         parseAmount(r.ot15),
         parseAmount(r.ot20),
-        parseAmount(r.ot30),
         parseAmount(r.shiftAllowance),
         parseAmount(r.mobileAllowance),
         parseAmount(r.transportAllowance),
-        parseAmount(r.annualLeaveEncashment),
         parseAmount(r.otherAllowance),
-        parseAmount(r.bonus),
         parseAmount(r.grossWages),
-        parseAmount(r.cpfWages),
-        parseAmount(r.employerCpf),
         parseAmount(r.employeeCpf),
-        parseAmount(r.noPayDay),
+        parseAmount(r.advance),
+        parseAmount(r.annualLeaveEncashment),
+        parseAmount(r.sinda),
+        parseAmount(r.cdac),
+        parseAmount(r.mbmf),
+        parseAmount(r.ecf),
         parseAmount(r.loanRepaymentTotal),
         parseAmount(r.nett),
-        r.payMode || "",
+        "",
       ]);
 
       const isEven = idx % 2 === 0;
@@ -587,7 +559,7 @@ export default function AdminPayrollReportsPage() {
     });
 
     worksheet.columns.forEach((col, i) => {
-      const headerLen = headers[i]?.length || 10;
+      const headerLen = xlHeaders[i]?.length || 10;
       let maxLen = headerLen;
       worksheet.getColumn(i + 1).eachCell({ includeEmpty: false }, (cell) => {
         const val = cell.value?.toString() || "";
@@ -1221,19 +1193,26 @@ export default function AdminPayrollReportsPage() {
                 <table className="w-full text-sm" data-testid="table-payroll-records">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="text-center p-2 font-medium w-12">#</th>
-                      <th className="text-left p-2 font-medium">Employee</th>
+                      <th className="text-center p-2 font-medium w-10">No</th>
+                      <th className="text-left p-2 font-medium">Employee Name</th>
                       <th className="text-right p-2 font-medium">Basic Salary</th>
+                      <th className="text-right p-2 font-medium">{selectedMonth ? `${MONTH_ABBR[parseInt(selectedMonth)]} ` : ''}OT 1.5x</th>
+                      <th className="text-right p-2 font-medium">{selectedMonth ? `${MONTH_ABBR[parseInt(selectedMonth)]} ` : ''}OT 2.0x</th>
+                      <th className="text-right p-2 font-medium">Shift</th>
                       <th className="text-right p-2 font-medium">Mobile</th>
                       <th className="text-right p-2 font-medium">Transport</th>
-                      <th className="text-right p-2 font-medium">Shift</th>
-                      <th className="text-right p-2 font-medium">Other</th>
-                      <th className="text-right p-2 font-medium">Salary Adj</th>
-                      <th className="text-right p-2 font-medium">Adj</th>
+                      <th className="text-right p-2 font-medium">Other All</th>
                       <th className="text-right p-2 font-medium">Gross</th>
-                      <th className="text-right p-2 font-medium">Employer CPF</th>
-                      <th className="text-right p-2 font-medium">Employee CPF</th>
-                      <th className="text-right p-2 font-medium">Nett Salary</th>
+                      <th className="text-right p-2 font-medium">Emp CPF</th>
+                      <th className="text-right p-2 font-medium">Advance</th>
+                      <th className="text-right p-2 font-medium">A/L</th>
+                      <th className="text-right p-2 font-medium">SINDA</th>
+                      <th className="text-right p-2 font-medium">CDAC</th>
+                      <th className="text-right p-2 font-medium">MBMF</th>
+                      <th className="text-right p-2 font-medium">ECF</th>
+                      <th className="text-right p-2 font-medium">Loan</th>
+                      <th className="text-right p-2 font-medium">Nett Pay</th>
+                      <th className="text-left p-2 font-medium">REMARKS</th>
                       <th className="text-center p-2 font-medium">Actions</th>
                     </tr>
                   </thead>
@@ -1247,23 +1226,23 @@ export default function AdminPayrollReportsPage() {
                         <td className="p-2 text-center text-muted-foreground" data-testid={`cell-serial-${idx}`}>{idx + 1}</td>
                         <td className="p-2 whitespace-nowrap" data-testid={`cell-name-${idx}`}>{row.employeeName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-basic-${idx}`}>{formatCurrency(row.basicSalary)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-ot15-${idx}`}>{formatCurrency(row.ot15)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-ot20-${idx}`}>{formatCurrency(row.ot20)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-shift-${idx}`}>{formatCurrency(row.shiftAllowance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-mobile-${idx}`}>{formatCurrency(row.mobileAllowance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-transport-${idx}`}>{formatCurrency(row.transportAllowance)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-shift-${idx}`}>{formatCurrency(row.shiftAllowance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-other-${idx}`}>{formatCurrency(row.otherAllowance)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-salary-adj-${idx}`}>{formatCurrency(row.monthlyVariablesComponent)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-adj-${idx}`}>
-                          {(() => {
-                            const adjKey = row.userId ? getAdjKey(row.userId, row.payPeriodYear, row.payPeriodMonth) : null;
-                            const userAdj = adjKey ? adjustmentsByUserPeriod[adjKey] : null;
-                            if (!userAdj || userAdj.net === 0) return <span className="text-muted-foreground">-</span>;
-                            return <span className={userAdj.net < 0 ? "text-destructive" : "text-green-600"}>{formatCurrency(userAdj.net)}</span>;
-                          })()}
-                        </td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-gross-${idx}`}>{formatCurrency(row.grossWages)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-employer-cpf-${idx}`}>{formatCurrency(row.employerCpf)}</td>
+                        <td className="p-2 text-right font-mono font-medium" data-testid={`cell-gross-${idx}`}>{formatCurrency(row.grossWages)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-employee-cpf-${idx}`}>{formatCurrency(row.employeeCpf)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-advance-${idx}`}>{formatCurrency(row.advance)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-al-${idx}`}>{formatCurrency(row.annualLeaveEncashment)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-sinda-${idx}`}>{formatCurrency(row.sinda)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-cdac-${idx}`}>{formatCurrency(row.cdac)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-mbmf-${idx}`}>{formatCurrency(row.mbmf)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-ecf-${idx}`}>{formatCurrency(row.ecf)}</td>
+                        <td className="p-2 text-right font-mono" data-testid={`cell-loan-${idx}`}>{formatCurrency(row.loanRepaymentTotal)}</td>
                         <td className="p-2 text-right font-mono font-medium" data-testid={`cell-nett-${idx}`}>{formatCurrency(row.nett)}</td>
+                        <td className="p-2 text-left text-xs text-muted-foreground" data-testid={`cell-remarks-${idx}`}>-</td>
                         <td className="p-2 text-center">
                           <div className="flex gap-1 justify-center">
                             <Tooltip>

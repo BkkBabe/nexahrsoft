@@ -369,6 +369,20 @@ async function ensureSchemaMigrations(pool: Pool) {
       console.log("employee_deletion_logs table already exists");
     }
 
+    // Add advance column to payroll_records if it doesn't exist
+    const advanceCol = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.columns 
+        WHERE table_name = 'payroll_records' AND column_name = 'advance'
+      )
+    `);
+    if (!advanceCol.rows[0].exists) {
+      await pool.query(`ALTER TABLE payroll_records ADD COLUMN advance numeric(12,2) NOT NULL DEFAULT '0'`);
+      console.log("payroll_records advance column added");
+    } else {
+      console.log("payroll_records advance column already exists");
+    }
+
     // Add userId column to leave_history if it doesn't exist
     const leaveHistoryUserIdCol = await pool.query(`
       SELECT EXISTS (

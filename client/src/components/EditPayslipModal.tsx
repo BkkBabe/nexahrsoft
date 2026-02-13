@@ -77,6 +77,7 @@ const EDITABLE_FIELDS: FieldConfig[] = [
   { key: "fwl", label: "FWL", section: "levies" },
   { key: "loanRepaymentTotal", label: "Loan Repayments", section: "deductions" },
   { key: "noPayDay", label: "No Pay Day Deduction", section: "deductions" },
+  { key: "advance", label: "Advance", section: "deductions" },
   { key: "cc", label: "CC (Community Contribution)", section: "community" },
   { key: "cdac", label: "CDAC", section: "community" },
   { key: "ecf", label: "ECF", section: "community" },

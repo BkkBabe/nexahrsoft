@@ -1613,6 +1613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const sinda = parseNumeric(mergedRecord.sinda);
             const loanRepaymentTotal = parseNumeric(mergedRecord.loanRepaymentTotal);
             const noPayDay = parseNumeric(mergedRecord.noPayDay);
+            const advance = parseNumeric(mergedRecord.advance);
             
             const totSalary = roundToDollars(basicSalary + monthlyVariablesComponent);
             const overtimeTotal = roundToDollars(flat + ot10 + ot15 + ot20 + ot30 + shiftAllowance + totRestPhAmount);
@@ -1623,7 +1624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const totalCpf = roundToDollars(employerCpf + Math.abs(employeeCpf));
             const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
             const effectiveLoanRepayment = roundToDollars(loanRepaymentTotal + mealAllowance);
-            const totalDeductions = roundToDollars(effectiveLoanRepayment + noPayDay + communityDeductions + Math.abs(employeeCpf));
+            const totalDeductions = roundToDollars(effectiveLoanRepayment + noPayDay + advance + communityDeductions + Math.abs(employeeCpf));
             const nett = roundToDollars(grossWages - totalDeductions);
             
             const recalculated = {
@@ -5426,6 +5427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ecf: toNumericString(0),
           mbmf: toNumericString(0),
           sinda: toNumericString(0),
+          advance: toNumericString(0),
           bonus: toNumericString(0),
           grossWages: toNumericString(grossWages),
           cpfWages: toNumericString(cpfResult.cpfWages),
@@ -5783,6 +5785,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           payType,
           hourlyRate,
           basicPay,
+          ot15Pay: finalOt15Pay,
+          ot20Pay: finalOt20Pay,
           overtimePay: finalOvertimePay,
           mobileAllowance,
           transportAllowance,
@@ -5977,7 +5981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'basicSalary', 'monthlyVariablesComponent', 'flat', 'ot10', 'ot15', 'ot20', 'ot30',
         'shiftAllowance', 'mobileAllowance', 'transportAllowance', 'serviceCallAllowances',
         'otherAllowance', 'houseRentalAllowances', 'annualLeaveEncashment', 'totRestPhAmount',
-        'bonus', 'sdf', 'fwl', 'cc', 'cdac', 'ecf', 'mbmf', 'sinda', 'noPayDay',
+        'bonus', 'sdf', 'fwl', 'cc', 'cdac', 'ecf', 'mbmf', 'sinda', 'noPayDay', 'advance',
         'loanRepaymentTotal', 'employerCpf', 'employeeCpf'
       ];
       
@@ -6035,6 +6039,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const sinda = parseNumeric(record.sinda);
         const loanRepaymentTotal = parseNumeric(record.loanRepaymentTotal);
         const noPayDay = parseNumeric(record.noPayDay);
+        const advance = parseNumeric(record.advance);
         
         // Apply consistent 2-decimal rounding to all calculated totals
         const totSalary = roundToDollars(basicSalary + monthlyVariablesComponent);
@@ -6096,7 +6101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Note: employeeCpf is stored as negative, use Math.abs for total
         const totalCpf = roundToDollars(employerCpf + Math.abs(employeeCpf));
         const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
-        const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(employeeCpf));
+        const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + advance + communityDeductions + Math.abs(employeeCpf));
         const nett = roundToDollars(grossWages - totalDeductions);
         
         const result: Record<string, any> = { 
@@ -6262,8 +6267,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sinda = parseNumeric(existingRecord.sinda);
       const loanRepaymentTotal = parseNumeric(existingRecord.loanRepaymentTotal);
       const noPayDay = parseNumeric(existingRecord.noPayDay);
+      const advance = parseNumeric(existingRecord.advance);
       const communityDeductions = roundToDollars(cc + cdac + ecf + mbmf + sinda);
-      const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + communityDeductions + Math.abs(originalEmployeeCpf));
+      const totalDeductions = roundToDollars(loanRepaymentTotal + noPayDay + advance + communityDeductions + Math.abs(originalEmployeeCpf));
       const nett = roundToDollars(grossWages - totalDeductions);
       
       // Update the record
