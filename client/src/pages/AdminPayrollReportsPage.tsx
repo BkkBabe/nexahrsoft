@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil, UserPlus, CheckCircle2, Copy, Check, CreditCard, Calculator, ClipboardEdit, Settings, BarChart3, Clock } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Users, DollarSign, Calendar, Trash2, Loader2, TrendingUp, AlertTriangle, FileText, X, Search, Pencil, UserPlus, CheckCircle2, Copy, Check, CreditCard, Calculator, ClipboardEdit, Settings, BarChart3, Clock, Eye, EyeOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -278,6 +279,33 @@ export default function AdminPayrollReportsPage() {
     return map;
   }, [adjustmentsData]);
 
+  const bulkAllowEmployeeViewMutation = useMutation({
+    mutationFn: async ({ year, month, allowEmployeeView }: { year: number; month: number; allowEmployeeView: boolean }) => {
+      return apiRequest("PATCH", "/api/admin/payroll/bulk-allow-employee-view", {
+        year, month, allowEmployeeView,
+      });
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: variables.allowEmployeeView ? "Payslips Visible to Employees" : "Payslips Hidden from Employees",
+        description: variables.allowEmployeeView 
+          ? "All employees can now view their payslips for this period."
+          : "Payslips are now hidden from all employees for this period.",
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/admin/payroll/records'],
+        exact: false,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async ({ year, month }: { year: number; month: number }) => {
       return apiRequest("DELETE", `/api/admin/payroll/records/${year}/${month}`);
@@ -360,6 +388,16 @@ export default function AdminPayrollReportsPage() {
         r.employeeCode.toLowerCase().includes(query)
     );
   }, [allRecords, searchQuery]);
+
+  const allEmployeeViewEnabled = useMemo(() => {
+    if (allRecords.length === 0) return false;
+    return allRecords.every(r => r.allowEmployeeView === true);
+  }, [allRecords]);
+
+  const someEmployeeViewEnabled = useMemo(() => {
+    if (allRecords.length === 0) return false;
+    return allRecords.some(r => r.allowEmployeeView === true);
+  }, [allRecords]);
 
   // Helper to safely parse numeric values (API returns strings from PostgreSQL numeric type)
   const parseAmount = (value: string | number | null | undefined): number => {
@@ -1161,18 +1199,51 @@ export default function AdminPayrollReportsPage() {
                   </CardDescription>
                 </div>
                 {records.length > 0 && selectedMonth && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="text-red-600 hover:text-red-700 border-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
-                        data-testid="button-delete-current-period"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete All Records
-                      </Button>
-                    </AlertDialogTrigger>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 border rounded-md px-3 py-1.5">
+                      {allEmployeeViewEnabled ? (
+                        <Eye className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <Switch
+                        checked={allEmployeeViewEnabled}
+                        onCheckedChange={(checked) => {
+                          bulkAllowEmployeeViewMutation.mutate({
+                            year: parseInt(selectedYear),
+                            month: parseInt(selectedMonth),
+                            allowEmployeeView: checked,
+                          });
+                        }}
+                        disabled={bulkAllowEmployeeViewMutation.isPending}
+                        data-testid="switch-bulk-employee-view"
+                      />
+                      <span className="text-sm whitespace-nowrap">
+                        {bulkAllowEmployeeViewMutation.isPending ? (
+                          <span className="flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Updating...
+                          </span>
+                        ) : allEmployeeViewEnabled ? (
+                          "Visible to employees"
+                        ) : someEmployeeViewEnabled ? (
+                          "Partially visible"
+                        ) : (
+                          "Hidden from employees"
+                        )}
+                      </span>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 border-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                          data-testid="button-delete-current-period"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete All Records
+                        </Button>
+                      </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
@@ -1198,7 +1269,8 @@ export default function AdminPayrollReportsPage() {
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
-                  </AlertDialog>
+                    </AlertDialog>
+                  </div>
                 )}
               </div>
             </CardHeader>

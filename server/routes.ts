@@ -3588,6 +3588,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Bulk toggle allow employee view for all payroll records in a period
+  app.patch("/api/admin/payroll/bulk-allow-employee-view", requireAdmin, requireWriteAccess, requireFullAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        year: z.number().min(2020).max(2100),
+        month: z.number().min(1).max(12),
+        allowEmployeeView: z.boolean(),
+      });
+      const { year, month, allowEmployeeView } = schema.parse(req.body);
+      
+      const records = await storage.getPayrollRecords(year, month);
+      if (records.length === 0) {
+        return res.status(404).json({ message: "No payroll records found for this period" });
+      }
+      
+      let updatedCount = 0;
+      for (const record of records) {
+        await storage.updatePayrollRecord(record.id, { allowEmployeeView });
+        updatedCount++;
+      }
+      
+      res.json({ 
+        success: true, 
+        updatedCount,
+        allowEmployeeView,
+        message: `Updated ${updatedCount} payroll records` 
+      });
+    } catch (error) {
+      console.error("Bulk toggle allow employee view error:", error);
+      res.status(500).json({ message: "Failed to bulk update payroll records" });
+    }
+  });
+
   // Employee: Get their own viewable payroll records (payslips)
   app.get("/api/employee/payroll", async (req: Request, res: Response) => {
     if (!req.session?.userId) {
