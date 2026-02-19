@@ -87,6 +87,9 @@ interface EmployeePayrollSettings {
   defaultHouseRentalAllowance: number | null;
   salaryAdjustment: number | null;
   salaryAdjustmentReason: string | null;
+  ethnicity: string | null;
+  religion: string | null;
+  shgOptOut: boolean;
 }
 
 interface SalaryAdjustment {
@@ -677,6 +680,15 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
       if (formState.defaultHouseRentalAllowance !== undefined) {
         updates.defaultHouseRentalAllowance = formState.defaultHouseRentalAllowance;
       }
+      if (formState.ethnicity !== undefined) {
+        updates.ethnicity = formState.ethnicity || null;
+      }
+      if (formState.religion !== undefined) {
+        updates.religion = formState.religion || null;
+      }
+      if (formState.shgOptOut !== undefined) {
+        updates.shgOptOut = formState.shgOptOut;
+      }
 
       const response = await apiRequest("PATCH", `/api/admin/employees/${employeeId}/payroll-settings`, updates);
       return response.json();
@@ -903,6 +915,90 @@ function EditEmployeeDialog({ employeeId, employeeName, employeeCode, open, onOp
                                 </div>
                               </div>
                             )}
+                          </div>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">SHG Contribution</CardTitle>
+                      <CardDescription>Self-Help Group fund based on ethnicity/religion</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Ethnicity</Label>
+                          <Select
+                            value={getValue("ethnicity") || ""}
+                            onValueChange={(v) => updateField("ethnicity", v || null)}
+                          >
+                            <SelectTrigger data-testid="select-ethnicity">
+                              <SelectValue placeholder="Select ethnicity" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="chinese">Chinese</SelectItem>
+                              <SelectItem value="indian">Indian</SelectItem>
+                              <SelectItem value="malay">Malay</SelectItem>
+                              <SelectItem value="eurasian">Eurasian</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Religion</Label>
+                          <Select
+                            value={getValue("religion") || ""}
+                            onValueChange={(v) => updateField("religion", v || null)}
+                          >
+                            <SelectTrigger data-testid="select-religion">
+                              <SelectValue placeholder="Select religion" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="muslim">Muslim</SelectItem>
+                              <SelectItem value="other">Other / Non-Muslim</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={getValue("shgOptOut") === true}
+                          onCheckedChange={(v) => updateField("shgOptOut", v)}
+                          data-testid="switch-shg-optout"
+                        />
+                        <div>
+                          <Label>Opt out of SHG contribution</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Does not apply to MBMF (mandatory for Muslim employees)
+                          </p>
+                        </div>
+                      </div>
+                      {(() => {
+                        const eth = getValue("ethnicity") as string | null;
+                        const rel = getValue("religion") as string | null;
+                        const res = getValue("residencyStatus") as string | null;
+                        const isSingaporean = res === 'SC' || res === 'SPR';
+                        const isForeigner = !isSingaporean;
+                        let fund = 'None';
+                        if (rel === 'muslim') fund = 'MBMF';
+                        else if (eth === 'chinese' && !isForeigner) fund = 'CDAC';
+                        else if (eth === 'indian') fund = 'SINDA';
+                        else if (eth === 'eurasian' && !isForeigner) fund = 'ECF';
+                        const optOut = getValue("shgOptOut") === true && fund !== 'MBMF';
+                        return fund !== 'None' ? (
+                          <div className="p-3 bg-muted rounded-lg">
+                            <p className="text-sm">
+                              Applicable fund: <span className="font-semibold">{fund}</span>
+                              {optOut && <span className="text-muted-foreground ml-2">(Opted out)</span>}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-muted rounded-lg">
+                            <p className="text-sm text-muted-foreground">
+                              {!eth && !rel ? 'Set ethnicity/religion to determine SHG fund' : 'No SHG fund applicable'}
+                            </p>
                           </div>
                         );
                       })()}

@@ -1477,6 +1477,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Salary adjustment
         salaryAdjustment: user.salaryAdjustment,
         salaryAdjustmentReason: user.salaryAdjustmentReason,
+        // SHG fields
+        ethnicity: user.ethnicity,
+        religion: user.religion,
+        shgOptOut: user.shgOptOut,
       });
     } catch (error) {
       console.error("Get employee payroll settings error:", error);
@@ -1511,6 +1515,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Salary adjustment
         salaryAdjustment: z.number().nullable().optional(),
         salaryAdjustmentReason: z.string().nullable().optional(),
+        // SHG fields
+        ethnicity: z.enum(['chinese', 'indian', 'malay', 'eurasian', 'other']).nullable().optional(),
+        religion: z.enum(['muslim', 'other']).nullable().optional(),
+        shgOptOut: z.boolean().optional(),
       });
 
       const updates = schema.parse(req.body);
@@ -5381,8 +5389,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
 
-        // Calculate net pay (after CPF and loan deduction)
-        const nett = cpfResult.netPay - loanDeduction;
+        // Calculate SHG contribution
+        const { calculateSHG } = await import("./shg-calculator");
+        const shgResult = calculateSHG(
+          employee.ethnicity,
+          employee.religion,
+          residencyStatus,
+          grossWages,
+          employee.shgOptOut || false,
+        );
+        const shgCdac = shgResult.fund === 'CDAC' ? shgResult.contribution : 0;
+        const shgSinda = shgResult.fund === 'SINDA' ? shgResult.contribution : 0;
+        const shgMbmf = shgResult.fund === 'MBMF' ? shgResult.contribution : 0;
+        const shgEcf = shgResult.fund === 'ECF' ? shgResult.contribution : 0;
+        const totalShg = shgCdac + shgSinda + shgMbmf + shgEcf;
+
+        // Calculate net pay (after CPF, loan deduction, and SHG)
+        const nett = cpfResult.netPay - loanDeduction - totalShg;
 
         // Create payroll record - convert all numeric values to strings for PostgreSQL
         const record = {
@@ -5423,10 +5446,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           loanRepaymentDetails: loanDeduction > 0 ? `Recurring loan deduction: $${loanDeduction.toFixed(2)}` : null,
           noPayDay: toNumericString(0),
           cc: toNumericString(0),
-          cdac: toNumericString(0),
-          ecf: toNumericString(0),
-          mbmf: toNumericString(0),
-          sinda: toNumericString(0),
+          cdac: toNumericString(shgCdac),
+          ecf: toNumericString(shgEcf),
+          mbmf: toNumericString(shgMbmf),
+          sinda: toNumericString(shgSinda),
           advance: toNumericString(0),
           bonus: toNumericString(0),
           grossWages: toNumericString(grossWages),
@@ -5772,7 +5795,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
 
-        const previewNetPay = cpfResult.netPay - loanDeduction;
+        // Calculate SHG for preview
+        const { calculateSHG } = await import("./shg-calculator");
+        const previewShg = calculateSHG(
+          employee.ethnicity,
+          employee.religion,
+          residencyStatus,
+          grossWages,
+          employee.shgOptOut || false,
+        );
+        const previewShgTotal = previewShg.contribution;
+
+        const previewNetPay = cpfResult.netPay - loanDeduction - previewShgTotal;
 
         preview.push({
           employeeCode: employee.employeeCode || 'N/A',
@@ -5802,6 +5836,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           netPay: previewNetPay,
           residencyStatus: residencyStatus || 'NOT_SET',
           cpfEligible: cpfResult.isEligible,
+          shgFund: previewShg.fund,
+          shgAmount: previewShg.contribution,
         });
       }
 

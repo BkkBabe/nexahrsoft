@@ -97,6 +97,8 @@ interface PreviewEmployee {
   netPay: number;
   residencyStatus: string;
   cpfEligible: boolean;
+  shgFund: string | null;
+  shgAmount: number;
 }
 
 interface SkippedEmployee {
@@ -248,6 +250,7 @@ export default function AdminPayrollGeneratePage() {
       'Other All',
       'Gross',
       'Emp CPF',
+      'SHG',
       'Loan',
       'Nett Pay'
     ];
@@ -266,6 +269,7 @@ export default function AdminPayrollGeneratePage() {
         (emp.otherAllowance || 0).toFixed(2),
         emp.grossWages.toFixed(2),
         emp.employeeCPF.toFixed(2),
+        (emp.shgAmount || 0).toFixed(2),
         (emp.loanDeduction || 0).toFixed(2),
         emp.netPay.toFixed(2)
       ]);
@@ -307,6 +311,7 @@ export default function AdminPayrollGeneratePage() {
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.otherAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${emp.grossWages.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.employeeCPF.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shgAmount || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.loanDeduction || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: green;">$${emp.netPay.toFixed(2)}</td>
         </tr>
@@ -341,6 +346,7 @@ export default function AdminPayrollGeneratePage() {
               <th style="text-align: right;">Other All</th>
               <th style="text-align: right;">Gross</th>
               <th style="text-align: right;">Emp CPF</th>
+              <th style="text-align: right;">SHG</th>
               <th style="text-align: right;">Loan</th>
               <th style="text-align: right;">Nett Pay</th>
             </tr>
@@ -646,6 +652,7 @@ export default function AdminPayrollGeneratePage() {
                         <TableHead className="text-right">Other All</TableHead>
                         <TableHead className="text-right font-semibold">Gross</TableHead>
                         <TableHead className="text-right">Emp CPF</TableHead>
+                        <TableHead className="text-right">SHG</TableHead>
                         <TableHead className="text-right">Loan</TableHead>
                         <TableHead className="text-right font-semibold">Nett Pay</TableHead>
                       </TableRow>
@@ -671,6 +678,7 @@ export default function AdminPayrollGeneratePage() {
                           <TableCell className="text-right">{formatCurrency(emp.otherAllowance || 0)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(emp.grossWages)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.employeeCPF)}</TableCell>
+                          <TableCell className="text-right" title={emp.shgFund || ''}>{formatCurrency(emp.shgAmount || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.loanDeduction || 0)}</TableCell>
                           <TableCell className="text-right font-bold text-green-600">{formatCurrency(emp.netPay)}</TableCell>
                         </TableRow>
