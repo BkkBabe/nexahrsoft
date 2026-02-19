@@ -190,7 +190,7 @@ export default function PayslipView({
     },
     onSuccess: (_, allow) => {
       setAllowEmployeeView(allow);
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/payroll/records'] });
       toast({
         title: allow ? "Employee can now view this payslip" : "Payslip hidden from employee",
         description: allow 
