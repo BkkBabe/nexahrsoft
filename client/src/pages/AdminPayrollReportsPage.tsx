@@ -165,6 +165,7 @@ export default function AdminPayrollReportsPage() {
   const [otHours15, setOtHours15] = useState("");
   const [otHours20, setOtHours20] = useState("");
   const [otDaysPerWeek, setOtDaysPerWeek] = useState("5");
+  const [otCalculated, setOtCalculated] = useState(false);
 
   const applyNoCpfMutation = useMutation({
     mutationFn: async (record: PayrollRecord) => {
@@ -213,6 +214,7 @@ export default function AdminPayrollReportsPage() {
       setOtRecord(null);
       setOtHours15("");
       setOtHours20("");
+      setOtCalculated(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payroll/records"] });
     },
     onError: (error: Error) => {
@@ -1317,6 +1319,7 @@ export default function AdminPayrollReportsPage() {
                                     const rate20 = hourlyRate * 2.0;
                                     setOtHours15(rate15 > 0 ? (currentOt15 / rate15).toFixed(2) : "0");
                                     setOtHours20(rate20 > 0 ? (currentOt20 / rate20).toFixed(2) : "0");
+                                    setOtCalculated(false);
                                     setOtDialogOpen(true);
                                   }}
                                   data-testid={`button-ot-calc-${idx}`}
@@ -1716,6 +1719,7 @@ export default function AdminPayrollReportsPage() {
           setOtRecord(null);
           setOtHours15("");
           setOtHours20("");
+          setOtCalculated(false);
         }
       }}>
         <DialogContent className="max-w-lg" data-testid="dialog-ot-calc">
@@ -1763,6 +1767,7 @@ export default function AdminPayrollReportsPage() {
                           const newRate20 = newHourly * 2.0;
                           setOtHours15(newRate15 > 0 ? (currentOt15Amt / newRate15).toFixed(2) : "0");
                           setOtHours20(newRate20 > 0 ? (currentOt20Amt / newRate20).toFixed(2) : "0");
+                          setOtCalculated(false);
                         }}>
                           <SelectTrigger className="w-24" data-testid="select-ot-days">
                             <SelectValue />
@@ -1813,36 +1818,53 @@ export default function AdminPayrollReportsPage() {
                         <div className="space-y-1">
                           <Label className="text-xs">OT 1.5x Hours</Label>
                           <Input
-                            type="number"
-                            step="0.5"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
                             value={otHours15}
-                            onChange={(e) => setOtHours15(e.target.value)}
+                            onChange={(e) => { setOtHours15(e.target.value); setOtCalculated(false); }}
                             data-testid="input-ot15-hours"
                           />
-                          <p className="text-xs text-muted-foreground font-mono">
-                            = {formatCurrency(newOt15Amt)}
-                          </p>
+                          {otCalculated && (
+                            <p className="text-xs text-muted-foreground font-mono">
+                              = {formatCurrency(newOt15Amt)}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">OT 2.0x Hours</Label>
                           <Input
-                            type="number"
-                            step="0.5"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
                             value={otHours20}
-                            onChange={(e) => setOtHours20(e.target.value)}
+                            onChange={(e) => { setOtHours20(e.target.value); setOtCalculated(false); }}
                             data-testid="input-ot20-hours"
                           />
-                          <p className="text-xs text-muted-foreground font-mono">
-                            = {formatCurrency(newOt20Amt)}
-                          </p>
+                          {otCalculated && (
+                            <p className="text-xs text-muted-foreground font-mono">
+                              = {formatCurrency(newOt20Amt)}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <div className="flex justify-between text-sm font-medium border-t pt-2">
-                        <span>New OT Total</span>
-                        <span className="font-mono">{formatCurrency(newOt15Amt + newOt20Amt)}</span>
-                      </div>
+
+                      <Button
+                        className="w-full"
+                        variant="outline"
+                        onClick={() => setOtCalculated(true)}
+                        data-testid="button-calculate-ot"
+                      >
+                        <Calculator className="h-4 w-4 mr-2" />
+                        Calculate
+                      </Button>
+
+                      {otCalculated && (
+                        <div className="flex justify-between text-sm font-medium border-t pt-2">
+                          <span>New OT Total</span>
+                          <span className="font-mono">{formatCurrency(newOt15Amt + newOt20Amt)}</span>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -1850,7 +1872,7 @@ export default function AdminPayrollReportsPage() {
                     className="w-full"
                     variant="default"
                     onClick={() => applyOtMutation.mutate({ record: otRecord, ot15Amount: newOt15Amt, ot20Amount: newOt20Amt })}
-                    disabled={applyOtMutation.isPending}
+                    disabled={applyOtMutation.isPending || !otCalculated}
                     data-testid="button-apply-ot"
                   >
                     {applyOtMutation.isPending ? (
