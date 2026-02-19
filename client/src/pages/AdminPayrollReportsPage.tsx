@@ -1792,26 +1792,7 @@ export default function AdminPayrollReportsPage() {
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span>Work Days Per Week</span>
-                        <Select value={otDaysPerWeek} onValueChange={(val) => {
-                          setOtDaysPerWeek(val);
-                          const newDays = parseFloat(val);
-                          const newDaily = (basicAmt * 12) / (newDays * 52);
-                          const newHourly = newDaily / 8;
-                          const newRate15 = newHourly * 1.5;
-                          const newRate20 = newHourly * 2.0;
-                          setOtHours15(newRate15 > 0 ? (currentOt15Amt / newRate15).toFixed(2) : "0");
-                          setOtHours20(newRate20 > 0 ? (currentOt20Amt / newRate20).toFixed(2) : "0");
-                          setOtCalculated(false);
-                        }}>
-                          <SelectTrigger className="w-24" data-testid="select-ot-days">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="5">5 days</SelectItem>
-                            <SelectItem value="5.5">5.5 days</SelectItem>
-                            <SelectItem value="6">6 days</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <span className="font-mono font-medium text-muted-foreground" data-testid="label-ot-days">{otDaysPerWeek} days <span className="text-xs">(from Employee Settings)</span></span>
                       </div>
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>MOM Formula: (Monthly x 12) / ({daysPerWeek} x 52) / 8</span>
