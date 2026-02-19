@@ -67,6 +67,10 @@ export const users = pgTable("users", {
   employeeType: text("employee_type"), // 'local', 'foreigner', 'pr'
   passportNumber: text("passport_number"),
   passportExpiry: text("passport_expiry"), // YYYY-MM-DD format
+  // SHG (Self-Help Group) contribution fields
+  ethnicity: text("ethnicity"), // 'chinese', 'indian', 'malay', 'eurasian', 'other'
+  religion: text("religion"), // 'muslim', 'other', null
+  shgOptOut: boolean("shg_opt_out").notNull().default(false), // Opt-out of SHG (not applicable to MBMF)
 });
 
 // Employee documents table for storing compliance documents
