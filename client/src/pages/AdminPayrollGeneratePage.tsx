@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toTitleCase } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History, Settings, Download, Printer, Ban } from "lucide-react";
+import { ArrowLeft, Calculator, Loader2, Users, DollarSign, Clock, AlertTriangle, CheckCircle2, Play, History, Settings, Download, Printer, Ban, Search } from "lucide-react";
 import { useLocation } from "wouter";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
@@ -157,6 +158,7 @@ export default function AdminPayrollGeneratePage() {
   const [previewData, setPreviewData] = useState<PreviewResponse | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [suppressAllOT, setSuppressAllOT] = useState(false);
+  const [previewSearchQuery, setPreviewSearchQuery] = useState("");
 
   const { data: masterAdminData } = useQuery<{ isMasterAdmin: boolean }>({
     queryKey: ["/api/admin/is-master-admin"],
@@ -409,6 +411,17 @@ export default function AdminPayrollGeneratePage() {
   const totalNetPay = previewData?.preview.reduce((sum, emp) => sum + emp.netPay, 0) || 0;
   const totalHours = previewData?.preview.reduce((sum, emp) => sum + emp.totalHoursWorked, 0) || 0;
 
+  const filteredPreview = useMemo(() => {
+    if (!previewData?.preview) return [];
+    if (!previewSearchQuery.trim()) return previewData.preview;
+    const query = previewSearchQuery.toLowerCase();
+    return previewData.preview.filter(
+      (emp) =>
+        emp.employeeName.toLowerCase().includes(query) ||
+        emp.employeeCode.toLowerCase().includes(query)
+    );
+  }, [previewData?.preview, previewSearchQuery]);
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -606,14 +619,15 @@ export default function AdminPayrollGeneratePage() {
           )}
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
-              <div>
-                <CardTitle>Payroll Preview - {previewData.period}</CardTitle>
-                <CardDescription>
-                  Period: {previewData.periodStart} to {previewData.periodEnd}
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
+            <CardHeader className="flex flex-col gap-4">
+              <div className="flex flex-row items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle>Payroll Preview - {previewData.period}</CardTitle>
+                  <CardDescription>
+                    Period: {previewData.periodStart} to {previewData.periodEnd} ({previewData.preview.length} employees)
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
                 {previewData.preview.length > 0 && (
                   <>
                     <Button
@@ -670,12 +684,27 @@ export default function AdminPayrollGeneratePage() {
                   )}
                 </Button>
                 )}
+                </div>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by employee name or code..."
+                  value={previewSearchQuery}
+                  onChange={(e) => setPreviewSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-preview-search"
+                />
               </div>
             </CardHeader>
             <CardContent>
               {previewData.preview.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No employees with attendance data found for this period
+                </div>
+              ) : filteredPreview.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No employees matching "{previewSearchQuery}" found
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -706,7 +735,7 @@ export default function AdminPayrollGeneratePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {[...previewData.preview]
+                      {[...filteredPreview]
                         .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
                         .map((emp, idx) => (
                         <TableRow key={idx}>
