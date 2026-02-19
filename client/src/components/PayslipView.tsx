@@ -494,7 +494,9 @@ export default function PayslipView({
               <LineItem label="Flat Rate Overtime" value={record.flat} />
               <LineItem label="OT 1.0x" value={record.ot10} />
               <LineItem label="OT 1.5x" value={record.ot15} />
+              <HoursItem label="OT 1.5x Hours" hours={record.ot15Hours} />
               <LineItem label="OT 2.0x" value={record.ot20} />
+              <HoursItem label="OT 2.0x Hours" hours={record.ot20Hours} />
               <LineItem label="OT 3.0x" value={record.ot30} />
               <LineItem label="Shift Allowance" value={record.shiftAllowance} />
               <LineItem label="Rest/PH Amount" value={record.totRestPhAmount} />

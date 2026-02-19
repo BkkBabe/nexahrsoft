@@ -5324,6 +5324,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let finalOt15Amount = otAmount; // Standard OT goes into 1.5x by default
         let finalOt20Amount = 0; // 2.0x OT (usually from adjustments or weekend work)
         let finalOtHours = overtimeHours;
+        let finalOt15Hours = overtimeHours; // All OT hours default to 1.5x
+        let finalOt20Hours = 0;
         
         // Apply OT suppression based on global flag or individual adjustment type
         const shouldSuppressOt15 = suppressAllOT || suppressOt15Employees.has(employee.id);
@@ -5331,6 +5333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (shouldSuppressOt15) {
           finalOt15Amount = 0;
+          finalOt15Hours = 0;
           // Only zero hours if both OT types are suppressed
           if (shouldSuppressOt20) {
             finalOtHours = 0;
@@ -5338,6 +5341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (shouldSuppressOt20) {
           finalOt20Amount = 0;
+          finalOt20Hours = 0;
         }
         
         // Total OT amount for gross wages calculation
@@ -5426,6 +5430,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Hours worked (for employer view only)
           basicHoursWorked: regularHours,
           otHoursWorked: finalOtHours,
+          ot15Hours: finalOt15Hours,
+          ot20Hours: finalOt20Hours,
           totSalary: toNumericString(calculatedBasicPay),
           basicSalary: toNumericString(configuredMonthlySalary),
           monthlyVariablesComponent: toNumericString(0),
