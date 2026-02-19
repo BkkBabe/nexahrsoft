@@ -90,15 +90,23 @@ interface PreviewEmployee {
   otherAllowance: number;
   houseRentalAllowance: number;
   loanDeduction: number;
+  advance: number;
+  annualLeaveEncashment: number;
   salaryAdjustments: number;
   grossWages: number;
   employeeCPF: number;
   employerCPF: number;
   netPay: number;
+  salaryBeforeOT: number;
+  finalSal: number;
   residencyStatus: string;
   cpfEligible: boolean;
   shgFund: string | null;
   shgAmount: number;
+  sinda: number;
+  cdac: number;
+  mbmf: number;
+  ecf: number;
 }
 
 interface SkippedEmployee {
@@ -242,37 +250,54 @@ export default function AdminPayrollGeneratePage() {
       'No',
       'Employee Name',
       'Basic Salary',
-      'OT 1.5x',
-      'OT 2.0x',
       'Shift',
       'Mobile',
       'Transport',
       'Other All',
       'Gross',
       'Emp CPF',
-      'SHG',
+      'Advance',
+      'A/L',
+      'SINDA',
+      'CDAC',
+      'MBMF',
+      'ECF',
       'Loan',
-      'Nett Pay'
+      'Salary',
+      'OT 1.5x',
+      'OT 2.0x',
+      'Final Sal',
+      'REMARKS'
     ];
     
     const rows = [...previewData.preview]
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
-      .map((emp, idx) => [
-        String(idx + 1),
-        toTitleCase(emp.employeeName),
-        emp.basicPay.toFixed(2),
-        (emp.ot15Pay || 0).toFixed(2),
-        (emp.ot20Pay || 0).toFixed(2),
-        (emp.shiftAllowance || 0).toFixed(2),
-        (emp.mobileAllowance || 0).toFixed(2),
-        (emp.transportAllowance || 0).toFixed(2),
-        (emp.otherAllowance || 0).toFixed(2),
-        emp.grossWages.toFixed(2),
-        emp.employeeCPF.toFixed(2),
-        (emp.shgAmount || 0).toFixed(2),
-        (emp.loanDeduction || 0).toFixed(2),
-        emp.netPay.toFixed(2)
-      ]);
+      .map((emp, idx) => {
+        const salaryBeforeOT = emp.netPay - (emp.ot15Pay || 0) - (emp.ot20Pay || 0);
+        return [
+          String(idx + 1),
+          toTitleCase(emp.employeeName),
+          emp.basicPay.toFixed(2),
+          (emp.shiftAllowance || 0).toFixed(2),
+          (emp.mobileAllowance || 0).toFixed(2),
+          (emp.transportAllowance || 0).toFixed(2),
+          (emp.otherAllowance || 0).toFixed(2),
+          emp.grossWages.toFixed(2),
+          emp.employeeCPF.toFixed(2),
+          (emp.advance || 0).toFixed(2),
+          (emp.annualLeaveEncashment || 0).toFixed(2),
+          (emp.sinda || 0).toFixed(2),
+          (emp.cdac || 0).toFixed(2),
+          (emp.mbmf || 0).toFixed(2),
+          (emp.ecf || 0).toFixed(2),
+          (emp.loanDeduction || 0).toFixed(2),
+          salaryBeforeOT.toFixed(2),
+          (emp.ot15Pay || 0).toFixed(2),
+          (emp.ot20Pay || 0).toFixed(2),
+          emp.netPay.toFixed(2),
+          '',
+        ];
+      });
     
     const csvContent = [
       headers.join(','),
@@ -298,24 +323,33 @@ export default function AdminPayrollGeneratePage() {
     
     const tableRows = [...previewData.preview]
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
-      .map((emp, idx) => `
+      .map((emp, idx) => {
+        const salaryBeforeOT = emp.netPay - (emp.ot15Pay || 0) - (emp.ot20Pay || 0);
+        return `
         <tr>
           <td style="padding: 8px; border: 1px solid #ddd;">${idx + 1}</td>
           <td style="padding: 8px; border: 1px solid #ddd;">${toTitleCase(emp.employeeName)}<br><small>${emp.employeeCode}</small></td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.basicPay.toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ot15Pay || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ot20Pay || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shiftAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mobileAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.transportAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.otherAllowance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${emp.grossWages.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${emp.employeeCPF.toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.shgAmount || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.advance || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.annualLeaveEncashment || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.sinda || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.cdac || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mbmf || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ecf || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.loanDeduction || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${salaryBeforeOT.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ot15Pay || 0).toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ot20Pay || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: green;">$${emp.netPay.toFixed(2)}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;"></td>
         </tr>
-      `).join('');
+      `}).join('');
     
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -338,17 +372,24 @@ export default function AdminPayrollGeneratePage() {
               <th>No</th>
               <th>Employee Name</th>
               <th style="text-align: right;">Basic Salary</th>
-              <th style="text-align: right;">OT 1.5x</th>
-              <th style="text-align: right;">OT 2.0x</th>
               <th style="text-align: right;">Shift</th>
               <th style="text-align: right;">Mobile</th>
               <th style="text-align: right;">Transport</th>
               <th style="text-align: right;">Other All</th>
               <th style="text-align: right;">Gross</th>
               <th style="text-align: right;">Emp CPF</th>
-              <th style="text-align: right;">SHG</th>
+              <th style="text-align: right;">Advance</th>
+              <th style="text-align: right;">A/L</th>
+              <th style="text-align: right;">SINDA</th>
+              <th style="text-align: right;">CDAC</th>
+              <th style="text-align: right;">MBMF</th>
+              <th style="text-align: right;">ECF</th>
               <th style="text-align: right;">Loan</th>
-              <th style="text-align: right;">Nett Pay</th>
+              <th style="text-align: right;">Salary</th>
+              <th style="text-align: right;">OT 1.5x</th>
+              <th style="text-align: right;">OT 2.0x</th>
+              <th style="text-align: right;">Final Sal</th>
+              <th>REMARKS</th>
             </tr>
           </thead>
           <tbody>
@@ -644,17 +685,24 @@ export default function AdminPayrollGeneratePage() {
                         <TableHead className="w-10">No</TableHead>
                         <TableHead>Employee Name</TableHead>
                         <TableHead className="text-right">Basic Salary</TableHead>
-                        <TableHead className="text-right">OT 1.5x</TableHead>
-                        <TableHead className="text-right">OT 2.0x</TableHead>
                         <TableHead className="text-right">Shift</TableHead>
                         <TableHead className="text-right">Mobile</TableHead>
                         <TableHead className="text-right">Transport</TableHead>
                         <TableHead className="text-right">Other All</TableHead>
                         <TableHead className="text-right font-semibold">Gross</TableHead>
                         <TableHead className="text-right">Emp CPF</TableHead>
-                        <TableHead className="text-right">SHG</TableHead>
+                        <TableHead className="text-right">Advance</TableHead>
+                        <TableHead className="text-right">A/L</TableHead>
+                        <TableHead className="text-right">SINDA</TableHead>
+                        <TableHead className="text-right">CDAC</TableHead>
+                        <TableHead className="text-right">MBMF</TableHead>
+                        <TableHead className="text-right">ECF</TableHead>
                         <TableHead className="text-right">Loan</TableHead>
-                        <TableHead className="text-right font-semibold">Nett Pay</TableHead>
+                        <TableHead className="text-right font-semibold">Salary</TableHead>
+                        <TableHead className="text-right">OT 1.5x</TableHead>
+                        <TableHead className="text-right">OT 2.0x</TableHead>
+                        <TableHead className="text-right font-semibold">Final Sal</TableHead>
+                        <TableHead>REMARKS</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -670,17 +718,24 @@ export default function AdminPayrollGeneratePage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.basicPay)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.ot15Pay || 0)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.ot20Pay || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.shiftAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.mobileAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.transportAllowance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.otherAllowance || 0)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(emp.grossWages)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.employeeCPF)}</TableCell>
-                          <TableCell className="text-right" title={emp.shgFund || ''}>{formatCurrency(emp.shgAmount || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.advance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.annualLeaveEncashment || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.sinda || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.cdac || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.mbmf || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.ecf || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.loanDeduction || 0)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(emp.netPay - (emp.ot15Pay || 0) - (emp.ot20Pay || 0))}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.ot15Pay || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.ot20Pay || 0)}</TableCell>
                           <TableCell className="text-right font-bold text-green-600">{formatCurrency(emp.netPay)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">-</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

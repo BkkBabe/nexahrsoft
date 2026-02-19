@@ -5808,6 +5808,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const previewNetPay = cpfResult.netPay - loanDeduction - previewShgTotal;
 
+        const previewSalaryBeforeOT = previewNetPay - finalOvertimePay;
+        const previewFinalSal = previewNetPay;
+
         preview.push({
           employeeCode: employee.employeeCode || 'N/A',
           employeeName: employee.name,
@@ -5829,15 +5832,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           otherAllowance,
           houseRentalAllowance,
           loanDeduction,
+          advance: 0,
+          annualLeaveEncashment: 0,
           salaryAdjustments: salaryAdjustmentsTotal,
           grossWages,
           employeeCPF: cpfResult.employeeCPF,
           employerCPF: cpfResult.employerCPF,
           netPay: previewNetPay,
+          salaryBeforeOT: previewSalaryBeforeOT,
+          finalSal: previewFinalSal,
           residencyStatus: residencyStatus || 'NOT_SET',
           cpfEligible: cpfResult.isEligible,
           shgFund: previewShg.fund,
           shgAmount: previewShg.contribution,
+          sinda: previewShg.fund === 'SINDA' ? previewShg.contribution : 0,
+          cdac: previewShg.fund === 'CDAC' ? previewShg.contribution : 0,
+          mbmf: previewShg.fund === 'MBMF' ? previewShg.contribution : 0,
+          ecf: previewShg.fund === 'ECF' ? previewShg.contribution : 0,
         });
       }
 
