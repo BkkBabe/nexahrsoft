@@ -45,6 +45,7 @@ interface EditableFields {
   // Salary calculation fields
   basicMonthlySalary: string;
   weeklyContractHours: string;
+  regularDaysPerWeek: string;
   hourlyRate: string;
   ot15Rate: string;
   ot20Rate: string;
@@ -99,6 +100,7 @@ export default function AdminEmployeeDataPage() {
     passportExpiry: "",
     basicMonthlySalary: "",
     weeklyContractHours: "44",
+    regularDaysPerWeek: "5",
     hourlyRate: "",
     ot15Rate: "",
     ot20Rate: "",
@@ -446,6 +448,7 @@ export default function AdminEmployeeDataPage() {
       passportExpiry: user.passportExpiry || "",
       basicMonthlySalary: user.basicMonthlySalary || "",
       weeklyContractHours: user.weeklyContractHours?.toString() || "44",
+      regularDaysPerWeek: user.regularDaysPerWeek?.toString() || "5",
       hourlyRate: user.hourlyRate || "",
       ot15Rate: user.ot15Rate || "",
       ot20Rate: user.ot20Rate || "",
@@ -1216,6 +1219,18 @@ export default function AdminEmployeeDataPage() {
                         Calculate
                       </Button>
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-regularDaysPerWeek">Working Days Per Week</Label>
+                    <Input
+                      id="edit-regularDaysPerWeek"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="5"
+                      value={editFormData.regularDaysPerWeek}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, regularDaysPerWeek: e.target.value }))}
+                      data-testid="input-edit-regularDaysPerWeek"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-hourlyRate">Hourly Basic Rate (MOM-compliant)</Label>
