@@ -261,9 +261,7 @@ export default function AdminPayrollGeneratePage() {
       'Advance',
       'A/L',
       'SINDA',
-      'CDAC',
       'MBMF',
-      'ECF',
       'Loan',
       'Salary',
       'OT 1.5x',
@@ -289,9 +287,7 @@ export default function AdminPayrollGeneratePage() {
           (emp.advance || 0).toFixed(2),
           (emp.annualLeaveEncashment || 0).toFixed(2),
           (emp.sinda || 0).toFixed(2),
-          (emp.cdac || 0).toFixed(2),
           (emp.mbmf || 0).toFixed(2),
-          (emp.ecf || 0).toFixed(2),
           (emp.loanDeduction || 0).toFixed(2),
           salaryBeforeOT.toFixed(2),
           (emp.ot15Pay || 0).toFixed(2),
@@ -341,9 +337,7 @@ export default function AdminPayrollGeneratePage() {
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.advance || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.annualLeaveEncashment || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.sinda || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.cdac || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.mbmf || 0).toFixed(2)}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ecf || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.loanDeduction || 0).toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${salaryBeforeOT.toFixed(2)}</td>
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${(emp.ot15Pay || 0).toFixed(2)}</td>
@@ -383,9 +377,7 @@ export default function AdminPayrollGeneratePage() {
               <th style="text-align: right;">Advance</th>
               <th style="text-align: right;">A/L</th>
               <th style="text-align: right;">SINDA</th>
-              <th style="text-align: right;">CDAC</th>
               <th style="text-align: right;">MBMF</th>
-              <th style="text-align: right;">ECF</th>
               <th style="text-align: right;">Loan</th>
               <th style="text-align: right;">Salary</th>
               <th style="text-align: right;">OT 1.5x</th>
@@ -723,9 +715,7 @@ export default function AdminPayrollGeneratePage() {
                         <TableHead className="text-right">Advance</TableHead>
                         <TableHead className="text-right">A/L</TableHead>
                         <TableHead className="text-right">SINDA</TableHead>
-                        <TableHead className="text-right">CDAC</TableHead>
                         <TableHead className="text-right">MBMF</TableHead>
-                        <TableHead className="text-right">ECF</TableHead>
                         <TableHead className="text-right">Loan</TableHead>
                         <TableHead className="text-right font-semibold">Salary</TableHead>
                         <TableHead className="text-right">OT 1.5x</TableHead>
@@ -756,9 +746,7 @@ export default function AdminPayrollGeneratePage() {
                           <TableCell className="text-right">{formatCurrency(emp.advance || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.annualLeaveEncashment || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.sinda || 0)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.cdac || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.mbmf || 0)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(emp.ecf || 0)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.loanDeduction || 0)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(emp.netPay - (emp.ot15Pay || 0) - (emp.ot20Pay || 0))}</TableCell>
                           <TableCell className="text-right">{formatCurrency(emp.ot15Pay || 0)}</TableCell>

@@ -457,7 +457,7 @@ export default function AdminPayrollReportsPage() {
       "No", "Employee Name", "Basic Salary",
       "Shift", "Mobile", "Transport", "Other All",
       "Gross", "Emp CPF", "Advance", "A/L",
-      "SINDA", "CDAC", "MBMF", "ECF",
+      "SINDA", "MBMF",
       "Loan", "Salary",
       `${monthPrefix}OT 1.5x`, `${monthPrefix}OT 2.0x`,
       "Final Sal", "REMARKS"
@@ -483,9 +483,7 @@ export default function AdminPayrollReportsPage() {
         parseAmount(r.advance).toFixed(2),
         parseAmount(r.annualLeaveEncashment).toFixed(2),
         parseAmount(r.sinda).toFixed(2),
-        parseAmount(r.cdac).toFixed(2),
         parseAmount(r.mbmf).toFixed(2),
-        parseAmount(r.ecf).toFixed(2),
         parseAmount(r.loanRepaymentTotal).toFixed(2),
         salaryBeforeOT.toFixed(2),
         ot15.toFixed(2),
@@ -534,7 +532,7 @@ export default function AdminPayrollReportsPage() {
       "No", "Employee Name", "Basic Salary",
       "Shift", "Mobile", "Transport", "Other All",
       "Gross", "Emp CPF", "Advance", "A/L",
-      "SINDA", "CDAC", "MBMF", "ECF",
+      "SINDA", "MBMF",
       "Loan", "Salary",
       `${xlMonthPrefix}OT 1.5x`, `${xlMonthPrefix}OT 2.0x`,
       "Final Sal", "REMARKS"
@@ -559,7 +557,7 @@ export default function AdminPayrollReportsPage() {
     });
     headerRow.height = 28;
 
-    const currencyCols = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+    const currencyCols = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 
     records.forEach((r, idx) => {
       const nett = parseAmount(r.nett);
@@ -579,9 +577,7 @@ export default function AdminPayrollReportsPage() {
         parseAmount(r.advance),
         parseAmount(r.annualLeaveEncashment),
         parseAmount(r.sinda),
-        parseAmount(r.cdac),
         parseAmount(r.mbmf),
-        parseAmount(r.ecf),
         parseAmount(r.loanRepaymentTotal),
         salaryBeforeOT,
         ot15,
@@ -1253,9 +1249,7 @@ export default function AdminPayrollReportsPage() {
                       <th className="text-right p-2 font-medium">Advance</th>
                       <th className="text-right p-2 font-medium">A/L</th>
                       <th className="text-right p-2 font-medium">SINDA</th>
-                      <th className="text-right p-2 font-medium">CDAC</th>
                       <th className="text-right p-2 font-medium">MBMF</th>
-                      <th className="text-right p-2 font-medium">ECF</th>
                       <th className="text-right p-2 font-medium">Loan</th>
                       <th className="text-right p-2 font-medium">Salary</th>
                       <th className="text-right p-2 font-medium">{selectedMonth ? `${MONTH_ABBR[parseInt(selectedMonth)]} ` : ''}OT 1.5x</th>
@@ -1284,9 +1278,7 @@ export default function AdminPayrollReportsPage() {
                         <td className="p-2 text-right font-mono" data-testid={`cell-advance-${idx}`}>{formatCurrency(row.advance)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-al-${idx}`}>{formatCurrency(row.annualLeaveEncashment)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-sinda-${idx}`}>{formatCurrency(row.sinda)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-cdac-${idx}`}>{formatCurrency(row.cdac)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-mbmf-${idx}`}>{formatCurrency(row.mbmf)}</td>
-                        <td className="p-2 text-right font-mono" data-testid={`cell-ecf-${idx}`}>{formatCurrency(row.ecf)}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-loan-${idx}`}>{formatCurrency(row.loanRepaymentTotal)}</td>
                         <td className="p-2 text-right font-mono font-medium" data-testid={`cell-salary-${idx}`}>{formatCurrency(parseAmount(row.nett) - parseAmount(row.ot15) - parseAmount(row.ot20))}</td>
                         <td className="p-2 text-right font-mono" data-testid={`cell-ot15-${idx}`}>{formatCurrency(row.ot15)}</td>
