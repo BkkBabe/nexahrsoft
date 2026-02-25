@@ -1268,11 +1268,17 @@ export default function AdminAttendancePage() {
     const dayOfWeekRow = ['', '', '', '', ...heatmapDays.map(d => getDayOfWeek(d)), '', ''];
     
     const rows = filteredUsers.map((user, idx) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       const totalHours = heatmapDays.reduce((sum, day) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
         if (day > today) return sum;
         const dateKey = getDateKey(day);
+        const adjustment = adjustmentsMap.get(`${user.id}-${dateKey}`);
+        if (adjustment) {
+          if (adjustment.adjustmentType === 'leave') return sum + 9;
+          return sum + (adjustment.regularHours || 0) + (adjustment.otHours || 0);
+        }
         const aggData = heatmapDataMap[user.id]?.[dateKey];
         return sum + (aggData?.totalHours || 0);
       }, 0);
@@ -1285,10 +1291,14 @@ export default function AdminAttendancePage() {
         user.employeeCode || '',
         user.department || '',
         ...heatmapDays.map(day => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
           if (day > today) return '';
           const dateKey = getDateKey(day);
+          const adjustment = adjustmentsMap.get(`${user.id}-${dateKey}`);
+          if (adjustment) {
+            if (adjustment.adjustmentType === 'leave') return adjustment.leaveType || 'Leave';
+            const adjHrs = (adjustment.regularHours || 0) + (adjustment.otHours || 0);
+            return adjHrs > 0 ? formatHours(adjHrs) : 0;
+          }
           const aggData = heatmapDataMap[user.id]?.[dateKey];
           const hrs = aggData?.totalHours || 0;
           return hrs > 0 ? formatHours(hrs) : 0;
@@ -1414,11 +1424,17 @@ export default function AdminAttendancePage() {
     
     // Data rows
     filteredUsers.forEach((user, idx) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       const totalHours = heatmapDays.reduce((sum, day) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
         if (day > today) return sum;
         const dateKey = getDateKey(day);
+        const adjustment = adjustmentsMap.get(`${user.id}-${dateKey}`);
+        if (adjustment) {
+          if (adjustment.adjustmentType === 'leave') return sum + 9;
+          return sum + (adjustment.regularHours || 0) + (adjustment.otHours || 0);
+        }
         const aggData = heatmapDataMap[user.id]?.[dateKey];
         return sum + (aggData?.totalHours || 0);
       }, 0);
@@ -1433,13 +1449,21 @@ export default function AdminAttendancePage() {
       ];
       
       heatmapDays.forEach(day => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
         if (day <= today) {
           const dateKey = getDateKey(day);
-          const aggData = heatmapDataMap[user.id]?.[dateKey];
-          const hrs = aggData?.totalHours || 0;
-          rowData.push(hrs > 0 ? parseFloat(formatHours(hrs)) : 0);
+          const adjustment = adjustmentsMap.get(`${user.id}-${dateKey}`);
+          if (adjustment) {
+            if (adjustment.adjustmentType === 'leave') {
+              rowData.push(adjustment.leaveType || 'Leave');
+            } else {
+              const adjHrs = (adjustment.regularHours || 0) + (adjustment.otHours || 0);
+              rowData.push(adjHrs > 0 ? parseFloat(formatHours(adjHrs)) : 0);
+            }
+          } else {
+            const aggData = heatmapDataMap[user.id]?.[dateKey];
+            const hrs = aggData?.totalHours || 0;
+            rowData.push(hrs > 0 ? parseFloat(formatHours(hrs)) : 0);
+          }
         } else {
           rowData.push('');
         }
