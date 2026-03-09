@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, integer, real, unique, numeric } from "drizzle-orm/pg-core";
+import { pgSchema, text, varchar, boolean, timestamp, integer, real, unique, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
+const appSchema = pgSchema("app_nexahrsoft");
+
+export const users = appSchema.table("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   username: text("username").unique(), // Username for login (nullable for OAuth users)
@@ -74,7 +76,7 @@ export const users = pgTable("users", {
 });
 
 // Employee documents table for storing compliance documents
-export const employeeDocuments = pgTable("employee_documents", {
+export const employeeDocuments = appSchema.table("employee_documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   documentType: text("document_type").notNull(), // 'passport', 'work_pass', 'certificate', 'other'
@@ -88,7 +90,7 @@ export const employeeDocuments = pgTable("employee_documents", {
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
 
-export const companySettings = pgTable("company_settings", {
+export const companySettings = appSchema.table("company_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyName: text("company_name").notNull().default("NexaHR"),
   companyAddress: text("company_address"), // Company address for payslip header
@@ -112,7 +114,7 @@ export const companySettings = pgTable("company_settings", {
 });
 
 // Email logs for tracking sent emails
-export const emailLogs = pgTable("email_logs", {
+export const emailLogs = appSchema.table("email_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   emailType: text("email_type").notNull(), // 'welcome', 'password_reset', etc.
@@ -124,7 +126,7 @@ export const emailLogs = pgTable("email_logs", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const attendanceRecords = pgTable("attendance_records", {
+export const attendanceRecords = appSchema.table("attendance_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   date: text("date").notNull(), // Format: YYYY-MM-DD for easy querying
@@ -140,7 +142,7 @@ export const attendanceRecords = pgTable("attendance_records", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const dailyAttendanceSummary = pgTable("daily_attendance_summary", {
+export const dailyAttendanceSummary = appSchema.table("daily_attendance_summary", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   date: text("date").notNull(), // Format: YYYY-MM-DD
   userId: varchar("user_id").notNull().references(() => users.id),
@@ -158,7 +160,7 @@ export const dailyAttendanceSummary = pgTable("daily_attendance_summary", {
 ]);
 
 // Attendance adjustments for leave and OT override
-export const attendanceAdjustments = pgTable("attendance_adjustments", {
+export const attendanceAdjustments = appSchema.table("attendance_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   date: text("date").notNull(), // Format: YYYY-MM-DD
@@ -174,7 +176,7 @@ export const attendanceAdjustments = pgTable("attendance_adjustments", {
   unique("attendance_adjustments_user_date_unique").on(table.userId, table.date),
 ]);
 
-export const userSessions = pgTable("user_sessions", {
+export const userSessions = appSchema.table("user_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // Internal DB ID
   sessionId: text("session_id").notNull().unique(), // Express session ID
   userId: varchar("user_id").notNull().references(() => users.id),
@@ -185,7 +187,7 @@ export const userSessions = pgTable("user_sessions", {
   revokedAt: timestamp("revoked_at"), // Null if active, timestamp if revoked
 });
 
-export const loginChallenges = pgTable("login_challenges", {
+export const loginChallenges = appSchema.table("login_challenges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   challengeToken: text("challenge_token").notNull().unique(), // Signed token for validation
@@ -286,7 +288,7 @@ export type InsertAttendanceAdjustment = z.infer<typeof insertAttendanceAdjustme
 export type AttendanceAdjustment = typeof attendanceAdjustments.$inferSelect;
 
 // Employee monthly remarks for heatmap
-export const employeeMonthlyRemarks = pgTable("employee_monthly_remarks", {
+export const employeeMonthlyRemarks = appSchema.table("employee_monthly_remarks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   year: integer("year").notNull(),
@@ -324,7 +326,7 @@ export type InsertLoginChallenge = z.infer<typeof insertLoginChallengeSchema>;
 export type LoginChallenge = typeof loginChallenges.$inferSelect;
 
 // Payslip Management
-export const payslipRecords = pgTable("payslip_records", {
+export const payslipRecords = appSchema.table("payslip_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   periodStart: text("period_start").notNull(), // Format: YYYY-MM-DD
@@ -347,7 +349,7 @@ export type InsertPayslipRecord = z.infer<typeof insertPayslipRecordSchema>;
 export type PayslipRecord = typeof payslipRecords.$inferSelect;
 
 // Leave Management
-export const leaveBalances = pgTable("leave_balances", {
+export const leaveBalances = appSchema.table("leave_balances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   employeeCode: text("employee_code"), // Denormalized for quick reference
@@ -363,7 +365,7 @@ export const leaveBalances = pgTable("leave_balances", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const leaveApplications = pgTable("leave_applications", {
+export const leaveApplications = appSchema.table("leave_applications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   employeeCode: text("employee_code"), // Denormalized for quick reference
@@ -403,7 +405,7 @@ export type InsertLeaveApplication = z.infer<typeof insertLeaveApplicationSchema
 export type LeaveApplication = typeof leaveApplications.$inferSelect;
 
 // Leave History (for imported historical leave data)
-export const leaveHistory = pgTable("leave_history", {
+export const leaveHistory = appSchema.table("leave_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id"), // Linked system user ID (from matching)
   employeeCode: text("employee_code").notNull(),
@@ -436,7 +438,7 @@ export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
 export type EmailLog = typeof emailLogs.$inferSelect;
 
 // Audit logs for tracking admin changes to user data
-export const auditLogs = pgTable("audit_logs", {
+export const auditLogs = appSchema.table("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id), // User whose data was changed
   changedBy: text("changed_by").notNull(), // Admin username/email who made the change
@@ -456,7 +458,7 @@ export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 
 // Password override logs for tracking admin password resets
-export const passwordOverrideLogs = pgTable("password_override_logs", {
+export const passwordOverrideLogs = appSchema.table("password_override_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id), // User whose password was reset
   changedBy: text("changed_by").notNull(), // Admin who made the change
@@ -473,7 +475,7 @@ export type InsertPasswordOverrideLog = z.infer<typeof insertPasswordOverrideLog
 export type PasswordOverrideLog = typeof passwordOverrideLogs.$inferSelect;
 
 // Comprehensive Payroll Records (from CSV import)
-export const payrollRecords = pgTable("payroll_records", {
+export const payrollRecords = appSchema.table("payroll_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id), // Link to user (nullable if employee not in system)
   payPeriod: text("pay_period").notNull(), // e.g., "NOV 2025", "JAN 2025"
@@ -590,7 +592,7 @@ export type InsertPayrollRecord = z.infer<typeof insertPayrollRecordSchema>;
 export type PayrollRecord = typeof payrollRecords.$inferSelect;
 
 // Attendance Audit Logs for tracking admin changes to attendance data
-export const attendanceAuditLogs = pgTable("attendance_audit_logs", {
+export const attendanceAuditLogs = appSchema.table("attendance_audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   action: text("action").notNull(), // 'add', 'update', 'delete', 'end_clockin'
   tableName: text("table_name").notNull().default("attendance_records"),
@@ -612,7 +614,7 @@ export type InsertAttendanceAuditLog = z.infer<typeof insertAttendanceAuditLogSc
 export type AttendanceAuditLog = typeof attendanceAuditLogs.$inferSelect;
 
 // Leave Audit Logs for tracking admin changes to leave records
-export const leaveAuditLogs = pgTable("leave_audit_logs", {
+export const leaveAuditLogs = appSchema.table("leave_audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   action: text("action").notNull(), // 'import', 'create', 'update', 'delete', 'balance_update', 'application_review'
   tableName: text("table_name").notNull(), // 'leave_history', 'leave_balances', 'leave_applications'
@@ -636,7 +638,7 @@ export type InsertLeaveAuditLog = z.infer<typeof insertLeaveAuditLogSchema>;
 export type LeaveAuditLog = typeof leaveAuditLogs.$inferSelect;
 
 // Payroll Loan Accounts - tracks loans given to employees
-export const payrollLoanAccounts = pgTable("payroll_loan_accounts", {
+export const payrollLoanAccounts = appSchema.table("payroll_loan_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
   employeeCode: text("employee_code").notNull(),
@@ -665,7 +667,7 @@ export type InsertPayrollLoanAccount = z.infer<typeof insertPayrollLoanAccountSc
 export type PayrollLoanAccount = typeof payrollLoanAccounts.$inferSelect;
 
 // Payroll Loan Repayments - tracks individual repayments against loans
-export const payrollLoanRepayments = pgTable("payroll_loan_repayments", {
+export const payrollLoanRepayments = appSchema.table("payroll_loan_repayments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   loanAccountId: varchar("loan_account_id").notNull().references(() => payrollLoanAccounts.id),
   payPeriodYear: integer("pay_period_year").notNull(),
@@ -686,7 +688,7 @@ export type InsertPayrollLoanRepayment = z.infer<typeof insertPayrollLoanRepayme
 export type PayrollLoanRepayment = typeof payrollLoanRepayments.$inferSelect;
 
 // Payroll Audit Logs - tracks all changes to payroll records
-export const payrollAuditLogs = pgTable("payroll_audit_logs", {
+export const payrollAuditLogs = appSchema.table("payroll_audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   payrollRecordId: varchar("payroll_record_id").notNull().references(() => payrollRecords.id),
   fieldName: text("field_name").notNull(), // Which field was changed
@@ -706,7 +708,7 @@ export type InsertPayrollAuditLog = z.infer<typeof insertPayrollAuditLogSchema>;
 export type PayrollAuditLog = typeof payrollAuditLogs.$inferSelect;
 
 // Payroll Adjustments - Admin entries for OT, MC, AL, late hours, advances, claims
-export const payrollAdjustments = pgTable("payroll_adjustments", {
+export const payrollAdjustments = appSchema.table("payroll_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   payPeriodYear: integer("pay_period_year").notNull(), // e.g., 2025
@@ -746,7 +748,7 @@ export type InsertPayrollAdjustment = z.infer<typeof insertPayrollAdjustmentSche
 export type PayrollAdjustment = typeof payrollAdjustments.$inferSelect;
 
 // Payroll Adjustment Audit Logs - tracks all changes to adjustment records
-export const payrollAdjustmentAuditLogs = pgTable("payroll_adjustment_audit_logs", {
+export const payrollAdjustmentAuditLogs = appSchema.table("payroll_adjustment_audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   adjustmentId: varchar("adjustment_id").notNull().references(() => payrollAdjustments.id),
   action: text("action").notNull(), // 'create', 'update', 'approve', 'reject', 'delete'
@@ -767,7 +769,7 @@ export type InsertPayrollAdjustmentAuditLog = z.infer<typeof insertPayrollAdjust
 export type PayrollAdjustmentAuditLog = typeof payrollAdjustmentAuditLogs.$inferSelect;
 
 // Employee Salary Adjustments - Recurring additions/deductions to base salary configuration
-export const employeeSalaryAdjustments = pgTable("employee_salary_adjustments", {
+export const employeeSalaryAdjustments = appSchema.table("employee_salary_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   adjustmentType: text("adjustment_type").notNull(), // 'addition' or 'deduction'
@@ -790,7 +792,7 @@ export type InsertEmployeeSalaryAdjustment = z.infer<typeof insertEmployeeSalary
 export type EmployeeSalaryAdjustment = typeof employeeSalaryAdjustments.$inferSelect;
 
 // Employee Data Audit Logs - Track changes to employee profile fields
-export const employeeDataAuditLogs = pgTable("employee_data_audit_logs", {
+export const employeeDataAuditLogs = appSchema.table("employee_data_audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   action: text("action").notNull(), // 'create', 'update', 'archive', 'unarchive'
@@ -810,7 +812,7 @@ export type InsertEmployeeDataAuditLog = z.infer<typeof insertEmployeeDataAuditL
 export type EmployeeDataAuditLog = typeof employeeDataAuditLogs.$inferSelect;
 
 // Payroll Import Batches - Track historical payroll import sessions
-export const payrollImportBatches = pgTable("payroll_import_batches", {
+export const payrollImportBatches = appSchema.table("payroll_import_batches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   fileName: text("file_name").notNull(),
   fileHash: text("file_hash"), // SHA256 hash to detect duplicate uploads
@@ -836,7 +838,7 @@ export type InsertPayrollImportBatch = z.infer<typeof insertPayrollImportBatchSc
 export type PayrollImportBatch = typeof payrollImportBatches.$inferSelect;
 
 // Manual Payslips - For admin-created payslips via Tools
-export const manualPayslips = pgTable("manual_payslips", {
+export const manualPayslips = appSchema.table("manual_payslips", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   
   // Employee Information
@@ -902,7 +904,7 @@ export type InsertManualPayslip = z.infer<typeof insertManualPayslipSchema>;
 export type ManualPayslip = typeof manualPayslips.$inferSelect;
 
 // Manual Payslip Audit Logs
-export const manualPayslipAuditLogs = pgTable("manual_payslip_audit_logs", {
+export const manualPayslipAuditLogs = appSchema.table("manual_payslip_audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   payslipId: varchar("payslip_id").notNull().references(() => manualPayslips.id),
   action: text("action").notNull(), // 'create', 'update', 'delete', 'pdf_export'
@@ -932,7 +934,7 @@ export const claimTypeLabels: Record<ClaimType, string> = {
   other: "Other",
 };
 
-export const claims = pgTable("claims", {
+export const claims = appSchema.table("claims", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(), // Employee who submitted the claim
   employeeCode: text("employee_code"), // Denormalized for quick reference
@@ -960,7 +962,7 @@ export type InsertClaim = z.infer<typeof insertClaimSchema>;
 export type Claim = typeof claims.$inferSelect;
 
 // Claims Audit Log - tracks all changes to claims (approvals, rejections, deletions)
-export const claimsAuditLog = pgTable("claims_audit_log", {
+export const claimsAuditLog = appSchema.table("claims_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   claimId: varchar("claim_id").notNull(), // Original claim ID (may not exist if deleted)
   userId: varchar("user_id").notNull(), // Employee who submitted the claim
@@ -981,7 +983,7 @@ export const claimsAuditLog = pgTable("claims_audit_log", {
 
 export type ClaimsAuditLog = typeof claimsAuditLog.$inferSelect;
 
-export const employeeDeletionLogs = pgTable("employee_deletion_logs", {
+export const employeeDeletionLogs = appSchema.table("employee_deletion_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull(),
   employeeCode: text("employee_code"),
