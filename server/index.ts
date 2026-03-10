@@ -405,8 +405,8 @@ async function ensureSchemaMigrations(pool: Pool) {
     console.error("Error code:", error.code);
     console.error("Error detail:", error.detail);
     console.error("Full error:", error);
-    // Rethrow to make the failure visible
-    throw error;
+    // Log but don't crash — schema is already migrated on Supabase
+    console.error("Continuing startup despite migration error...");
   }
 }
 
