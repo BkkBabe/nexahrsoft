@@ -15,7 +15,7 @@ import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 
 // Create a pool for raw SQL queries (used by tools API)
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -714,7 +714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const fullSnapshot = JSON.stringify(user);
 
-      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -769,7 +769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/employee-deletion-logs", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
       try {
         const result = await pool.query(`SELECT * FROM employee_deletion_logs ORDER BY deleted_at DESC`);
         res.json(result.rows);

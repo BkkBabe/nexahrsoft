@@ -422,7 +422,7 @@ console.log('Environment check:', {
 
 // Create PostgreSQL session store for persistent sessions in production
 const PgStore = connectPgSimple(session);
-const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
+const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 app.use(
   session({
