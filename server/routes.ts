@@ -10,7 +10,7 @@ import multer from "multer";
 import { registerUserSchema, loginUserSchema, leaveHistory, leaveBalances } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { Resend } from "resend";
-import { Pool } from "@neondatabase/serverless";
+import { Pool } from "pg";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 
