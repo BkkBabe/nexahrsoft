@@ -1919,99 +1919,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get upload URL for logo (admin only)
-  app.post("/api/company/upload-logo", async (req: Request, res: Response) => {
-    // Security: Verify admin session before issuing signed URL
-    // Note: This validates admin session and file metadata (type/size) but the presigned URL
-    // itself cannot enforce these constraints on the actual upload. For production use,
-    // consider server-mediated uploads or signed URLs with content-type/length constraints.
-    // For MVP with trusted admins, this provides reasonable protection.
+  // Upload logo file (admin only)
+  app.post("/api/company/upload-logo", upload.single("file"), async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
-
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    if (!/^image\/(png|jpeg|jpg|gif|svg\+xml|webp)$/i.test(req.file.mimetype)) {
+      return res.status(400).json({ message: "Invalid file. Must be an image (PNG, JPEG, GIF, SVG, WebP) under 5MB" });
+    }
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ message: "File too large. Maximum 5MB" });
+    }
     try {
-      const uploadSchema = z.object({
-        filename: z.string().min(1),
-        contentType: z.string().regex(/^image\/(png|jpeg|jpg|gif|svg\+xml|webp)$/i),
-        size: z.number().max(5 * 1024 * 1024), // 5MB max
-      });
-
-      const validation = uploadSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ 
-          message: "Invalid file. Must be an image (PNG, JPEG, GIF, SVG, WebP) under 5MB" 
-        });
-      }
-
-      const { filename } = validation.data;
       const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
-      res.json({ uploadURL });
+      const fileUrl = await objectStorageService.uploadPublicFile(req.file.buffer, req.file.originalname, req.file.mimetype);
+      res.json({ fileUrl });
     } catch (error) {
-      console.error("Get logo upload URL error:", error);
-      res.status(500).json({ message: "Failed to get upload URL" });
+      console.error("Upload logo error:", error);
+      res.status(500).json({ message: "Failed to upload logo" });
     }
   });
 
-  // Get upload URL for favicon (admin only)
-  app.post("/api/company/upload-favicon", async (req: Request, res: Response) => {
-    // Security: Verify admin session
+  // Upload favicon file (admin only)
+  app.post("/api/company/upload-favicon", upload.single("file"), async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
-
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    if (!/^image\/(x-icon|png|jpeg|jpg|vnd\.microsoft\.icon)$/i.test(req.file.mimetype)) {
+      return res.status(400).json({ message: "Invalid file. Must be an icon or image (ICO, PNG, JPEG) under 1MB" });
+    }
+    if (req.file.size > 1 * 1024 * 1024) {
+      return res.status(400).json({ message: "File too large. Maximum 1MB" });
+    }
     try {
-      const uploadSchema = z.object({
-        filename: z.string().min(1),
-        contentType: z.string().regex(/^image\/(x-icon|png|jpeg|jpg|vnd\.microsoft\.icon)$/i),
-        size: z.number().max(1 * 1024 * 1024), // 1MB max
-      });
-
-      const validation = uploadSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ 
-          message: "Invalid file. Must be an icon or image (ICO, PNG, JPEG) under 1MB" 
-        });
-      }
-
-      const { filename } = validation.data;
       const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
-      res.json({ uploadURL });
+      const fileUrl = await objectStorageService.uploadPublicFile(req.file.buffer, req.file.originalname, req.file.mimetype);
+      res.json({ fileUrl });
     } catch (error) {
-      console.error("Get favicon upload URL error:", error);
-      res.status(500).json({ message: "Failed to get upload URL" });
+      console.error("Upload favicon error:", error);
+      res.status(500).json({ message: "Failed to upload favicon" });
     }
   });
 
-  // Get upload URL for clock-in logo (admin only)
-  app.post("/api/company/upload-clockin-logo", async (req: Request, res: Response) => {
+  // Upload clock-in logo file (admin only)
+  app.post("/api/company/upload-clockin-logo", upload.single("file"), async (req: Request, res: Response) => {
     if (!req.session?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
-
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    if (!/^image\/(png|jpeg|jpg|gif|webp|svg\+xml)$/i.test(req.file.mimetype)) {
+      return res.status(400).json({ message: "Invalid file. Must be an image (PNG, JPEG, GIF, WebP) under 5MB" });
+    }
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ message: "File too large. Maximum 5MB" });
+    }
     try {
-      const uploadSchema = z.object({
-        filename: z.string().min(1),
-        contentType: z.string().regex(/^image\/(png|jpeg|jpg|gif|webp|svg\+xml)$/i),
-        size: z.number().max(5 * 1024 * 1024), // 5MB max
-      });
-
-      const validation = uploadSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ 
-          message: "Invalid file. Must be an image (PNG, JPEG, GIF, WebP) under 5MB" 
-        });
-      }
-
-      const { filename } = validation.data;
       const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getUploadURLForPublicAsset(filename);
-      res.json({ uploadURL });
+      const fileUrl = await objectStorageService.uploadPublicFile(req.file.buffer, req.file.originalname, req.file.mimetype);
+      res.json({ fileUrl });
     } catch (error) {
-      console.error("Get clock-in logo upload URL error:", error);
-      res.status(500).json({ message: "Failed to get upload URL" });
+      console.error("Upload clock-in logo error:", error);
+      res.status(500).json({ message: "Failed to upload clock-in logo" });
     }
   });
 
@@ -7681,20 +7657,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Serve public objects
-  app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
-    const filePath = req.params.filePath;
-    const objectStorageService = new ObjectStorageService();
-    try {
-      const file = await objectStorageService.searchPublicObject(filePath);
-      if (!file) {
-        return res.status(404).json({ error: "File not found" });
-      }
-      objectStorageService.downloadObject(file, res);
-    } catch (error) {
-      console.error("Error searching for public object:", error);
-      return res.status(500).json({ error: "Internal server error" });
-    }
+  // Public uploads are served as static files under /uploads/ — no dynamic route needed.
+  // This route handles legacy /public-objects/ URLs that may still exist in the database.
+  app.get("/public-objects/:filePath(*)", (_req: Request, res: Response) => {
+    return res.status(404).json({ error: "File not found" });
   });
 
   // Serve private objects (authenticated users only - for MC docs, receipts)
@@ -7703,15 +7669,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.session?.userId) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    
+
     const filePath = req.params.filePath;
     const objectStorageService = new ObjectStorageService();
     try {
-      const file = await objectStorageService.getPrivateFile(`/private-objects/${filePath}`);
-      if (!file) {
+      const diskPath = await objectStorageService.getPrivateFilePath(`/private-objects/${filePath}`);
+      if (!diskPath) {
         return res.status(404).json({ error: "File not found" });
       }
-      objectStorageService.downloadObject(file, res);
+      objectStorageService.downloadObject(diskPath, res);
     } catch (error) {
       console.error("Error fetching private object:", error);
       return res.status(500).json({ error: "Internal server error" });
@@ -7910,22 +7876,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const objectStorageService = new ObjectStorageService();
-      const file = await objectStorageService.getPrivateFile(document.fileUrl);
-      
-      if (!file) {
+      const diskPath = await objectStorageService.getPrivateFilePath(document.fileUrl);
+
+      if (!diskPath) {
         return res.status(404).json({ message: "File not found in storage" });
       }
-      
-      // Determine content type from filename
-      const ext = document.fileName.split('.').pop()?.toLowerCase();
-      let contentType = 'application/octet-stream';
-      if (ext === 'pdf') contentType = 'application/pdf';
-      else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
-      else if (ext === 'png') contentType = 'image/png';
-      
-      res.setHeader('Content-Type', contentType);
+
       res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
-      res.send(file);
+      await objectStorageService.downloadObject(diskPath, res);
     } catch (error) {
       console.error("Get employee document file error:", error);
       res.status(500).json({ message: "Failed to get document file" });
@@ -8312,13 +8270,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const objectStorageService = new ObjectStorageService();
-      const file = await objectStorageService.getPrivateFile(claim.receiptUrl);
-      
-      if (!file) {
+      const diskPath = await objectStorageService.getPrivateFilePath(claim.receiptUrl);
+
+      if (!diskPath) {
         return res.status(404).json({ message: "Receipt file not found" });
       }
-      
-      await objectStorageService.downloadObject(file, res);
+
+      await objectStorageService.downloadObject(diskPath, res);
     } catch (error) {
       console.error("Get receipt error:", error);
       res.status(500).json({ message: "Failed to get receipt" });

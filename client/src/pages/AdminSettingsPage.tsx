@@ -333,28 +333,19 @@ export default function AdminSettingsPage() {
 
   const uploadLogoMutation = useMutation({
     mutationFn: async (file: File) => {
-      const uploadUrlRes = await apiRequest("POST", "/api/company/upload-logo", {
-        filename: file.name,
-        contentType: file.type,
-        size: file.size,
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/company/upload-logo", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
-      const { uploadURL } = await uploadUrlRes.json();
-
-      const uploadRes = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
-
       if (!uploadRes.ok) {
-        throw new Error("Failed to upload logo");
+        const err = await uploadRes.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to upload logo");
       }
-
-      await apiRequest("PUT", "/api/company/settings", {
-        logoUrl: uploadURL.split("?")[0],
-      });
+      const { fileUrl } = await uploadRes.json();
+      await apiRequest("PUT", "/api/company/settings", { logoUrl: fileUrl });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });
@@ -376,28 +367,19 @@ export default function AdminSettingsPage() {
 
   const uploadFaviconMutation = useMutation({
     mutationFn: async (file: File) => {
-      const uploadUrlRes = await apiRequest("POST", "/api/company/upload-favicon", {
-        filename: file.name,
-        contentType: file.type,
-        size: file.size,
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/company/upload-favicon", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
-      const { uploadURL } = await uploadUrlRes.json();
-
-      const uploadRes = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
-
       if (!uploadRes.ok) {
-        throw new Error("Failed to upload favicon");
+        const err = await uploadRes.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to upload favicon");
       }
-
-      await apiRequest("PUT", "/api/company/settings", {
-        faviconUrl: uploadURL.split("?")[0],
-      });
+      const { fileUrl } = await uploadRes.json();
+      await apiRequest("PUT", "/api/company/settings", { faviconUrl: fileUrl });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });
@@ -491,28 +473,19 @@ export default function AdminSettingsPage() {
 
   const uploadClockInLogoMutation = useMutation({
     mutationFn: async (file: File) => {
-      const uploadUrlRes = await apiRequest("POST", "/api/company/upload-clockin-logo", {
-        filename: file.name,
-        contentType: file.type,
-        size: file.size,
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/company/upload-clockin-logo", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
-      const { uploadURL } = await uploadUrlRes.json();
-
-      const uploadRes = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
-
       if (!uploadRes.ok) {
-        throw new Error("Failed to upload clock-in logo");
+        const err = await uploadRes.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to upload clock-in logo");
       }
-
-      await apiRequest("PUT", "/api/company/settings", {
-        clockInLogoUrl: uploadURL.split("?")[0],
-      });
+      const { fileUrl } = await uploadRes.json();
+      await apiRequest("PUT", "/api/company/settings", { clockInLogoUrl: fileUrl });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company/settings"] });

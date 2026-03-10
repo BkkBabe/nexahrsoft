@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
@@ -506,9 +507,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Serve uploaded files (logos, favicons, etc.) as static assets
+  const uploadsDir = path.join(process.cwd(), "dist", "public", "uploads");
+  app.use("/uploads", express.static(uploadsDir));
+
   // Run schema migrations before starting the app
   await ensureSchemaMigrations(sessionPool);
-  
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
