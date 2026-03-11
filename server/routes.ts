@@ -7665,7 +7665,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve private objects (authenticated users only - for MC docs, receipts)
   app.get("/private-objects/:filePath(*)", async (req: Request, res: Response) => {
-    // Only authenticated users can view private files
     if (!req.session?.userId) {
       return res.status(401).json({ error: "Authentication required" });
     }
@@ -7673,11 +7672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const filePath = req.params.filePath;
     const objectStorageService = new ObjectStorageService();
     try {
-      const diskPath = await objectStorageService.getPrivateFilePath(`/private-objects/${filePath}`);
-      if (!diskPath) {
-        return res.status(404).json({ error: "File not found" });
-      }
-      objectStorageService.downloadObject(diskPath, res);
+      await objectStorageService.downloadObject(`/private-objects/${filePath}`, res);
     } catch (error) {
       console.error("Error fetching private object:", error);
       return res.status(500).json({ error: "Internal server error" });
@@ -7876,14 +7871,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const objectStorageService = new ObjectStorageService();
-      const diskPath = await objectStorageService.getPrivateFilePath(document.fileUrl);
-
-      if (!diskPath) {
-        return res.status(404).json({ message: "File not found in storage" });
-      }
-
       res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
-      await objectStorageService.downloadObject(diskPath, res);
+      await objectStorageService.downloadObject(document.fileUrl, res);
     } catch (error) {
       console.error("Get employee document file error:", error);
       res.status(500).json({ message: "Failed to get document file" });
@@ -8270,13 +8259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const objectStorageService = new ObjectStorageService();
-      const diskPath = await objectStorageService.getPrivateFilePath(claim.receiptUrl);
-
-      if (!diskPath) {
-        return res.status(404).json({ message: "Receipt file not found" });
-      }
-
-      await objectStorageService.downloadObject(diskPath, res);
+      await objectStorageService.downloadObject(claim.receiptUrl, res);
     } catch (error) {
       console.error("Get receipt error:", error);
       res.status(500).json({ message: "Failed to get receipt" });
