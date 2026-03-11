@@ -5,8 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Shield } from "lucide-react";
+
+interface CompanySettings {
+  logoUrl?: string;
+  companyName?: string;
+}
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState("");
@@ -14,6 +20,9 @@ export default function AdminLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { data: companySettings } = useQuery<CompanySettings>({
+    queryKey: ["/api/company/settings"],
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,9 +55,17 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-center mb-4">
-            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Shield className="h-6 w-6 text-primary" />
-            </div>
+            {companySettings?.logoUrl ? (
+              <img
+                src={companySettings.logoUrl}
+                alt={companySettings.companyName}
+                className="h-20 w-20 object-contain rounded-full"
+              />
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Shield className="h-6 w-6 text-primary" />
+              </div>
+            )}
           </div>
           <CardTitle className="text-2xl text-center">Admin Login</CardTitle>
           <CardDescription className="text-center">
